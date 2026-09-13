@@ -55,7 +55,7 @@ export async function POST(event: { request: Request }) {
 
       await supabase.from('user_progress').insert({
         user_id: userId,
-        coins: 200,
+        coins: 0,
         bond_exp: 0,
         bond_level: 1
       });

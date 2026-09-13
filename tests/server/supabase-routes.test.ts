@@ -227,12 +227,34 @@ function buildFakeClient() {
     return { data: null, error: null };
   };
 
+  // Mirrors public.sync_showcase_items: atomically replace the user's showcase
+  // rows (delete all + re-insert, capped to slots 0-5) inside one call.
+  const syncShowcaseItems = (params: { p_user_id: string; p_items: any[] }) => {
+    const table = db.user_showcase || (db.user_showcase = []);
+    for (let i = table.length - 1; i >= 0; i--) {
+      if (table[i].user_id === params.p_user_id) table.splice(i, 1);
+    }
+    for (const raw of params.p_items || []) {
+      const slot = Number(raw.slot_index);
+      if (!(slot >= 0 && slot <= 5)) continue;
+      if (!raw.item_id) continue;
+      table.push({
+        user_id: params.p_user_id,
+        slot_index: slot,
+        item_id: raw.item_id,
+        updated_at: new Date().toISOString()
+      });
+    }
+    return { data: null, error: null };
+  };
+
   return {
     auth,
     storage,
     from: (table: string) => chains[table]?.() ?? chains[table],
     rpc: vi.fn(async (fn: string, params: any) => {
       if (fn === 'sync_calendar_items') return syncCalendarItems(params);
+      if (fn === 'sync_showcase_items') return syncShowcaseItems(params);
       return { data: null, error: { message: `Unknown RPC: ${fn}` } };
     })
   } as unknown as SupabaseClient;
@@ -276,7 +298,7 @@ describe('Supabase-backed API routes (regression guard)', () => {
       expect(mocks.state.db.profiles[0]).toMatchObject({ id: data.user.id, username: 'CloudKnight', email: 'cloud@waifuspace.moe' });
 
       expect(mocks.state.db.user_progress).toHaveLength(1);
-      expect(mocks.state.db.user_progress[0]).toMatchObject({ user_id: data.user.id, coins: 200, bond_level: 1, bond_exp: 0 });
+      expect(mocks.state.db.user_progress[0]).toMatchObject({ user_id: data.user.id, coins: 0, bond_level: 1, bond_exp: 0 });
     });
 
     it('rejects duplicate usernames with 409 before creating an orphan auth user', async () => {
@@ -526,6 +548,56 @@ describe('Supabase-backed API routes (regression guard)', () => {
       // catalog id so it is preserved.
       const showcase = mocks.state.db.user_showcase.filter(s => s.user_id === userId);
       expect(showcase.map(s => s.item_id)).toEqual(['seifuku', 'none']);
+    });
+
+    it('atomically replaces the showcase instead of racing / wiping items', async () => {
+      // Simulate a user with a showcase already saved in the cloud.
+      mocks.state.db.user_showcase.push(
+        { user_id: userId, slot_index: 0, item_id: 'kimono' },
+        { user_id: userId, slot_index: 1, item_id: 'halo' }
+      );
+
+      // A push relocating the showcase to a single item must leave exactly that
+      // item behind - the old rows are replaced, not accumulated.
+      const res = await syncPOST(
+        req('http://localhost/api/sync/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            waifu: { name: 'Neo', personality: 'kuudere', appearance: {} },
+            rpg: { claimedAffectionMilestones: [], showcaseItems: ['maid'] },
+            settings: {}
+          })
+        })
+      );
+      expect(res.status).toBe(200);
+
+      const showcase = mocks.state.db.user_showcase.filter(s => s.user_id === userId);
+      expect(showcase.map(s => s.item_id)).toEqual(['maid']);
+    });
+
+    it('leaves the showcase untouched when the push carries no showcase list', async () => {
+      mocks.state.db.user_showcase.push(
+        { user_id: userId, slot_index: 0, item_id: 'kimono' },
+        { user_id: userId, slot_index: 1, item_id: 'halo' }
+      );
+
+      // A fresh-device login pushes settings/waifu/calendar before the first
+      // cloud pull finishes; that push must never wipe the saved showcase.
+      const res = await syncPOST(
+        req('http://localhost/api/sync/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            waifu: { name: 'Neo', personality: 'kuudere', appearance: {} },
+            settings: { theme: 'tokyo' }
+          })
+        })
+      );
+      expect(res.status).toBe(200);
+
+      const showcase = mocks.state.db.user_showcase.filter(s => s.user_id === userId);
+      expect(showcase.map(s => s.item_id)).toEqual(['kimono', 'halo']);
     });
 
     it('returns progress + inventory + showcase on GET', async () => {

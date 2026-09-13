@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_profiles_username ON public.profiles(username);
 -- 2. User Progress Table (stores stats, coins, XP, waifu setup)
 CREATE TABLE IF NOT EXISTS public.user_progress (
   user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
-  coins BIGINT DEFAULT 200 NOT NULL CHECK (coins >= 0),
+  coins BIGINT DEFAULT 0 NOT NULL CHECK (coins >= 0),
   bond_exp BIGINT DEFAULT 0 NOT NULL,
   bond_level INT DEFAULT 1 NOT NULL,
   waifu_name TEXT DEFAULT 'Akari' NOT NULL,
@@ -188,6 +188,54 @@ REVOKE ALL ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) FROM
 REVOKE ALL ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) FROM anon;
 REVOKE ALL ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) TO service_role;
+
+-- ==========================================================
+-- Showcase Sync (atomic replace, prevents item-loss races)
+-- ==========================================================
+-- Replaces the user's showcase rows (up to slot 5) in a single transaction.
+-- The previous client flow (DELETE all + INSERT) was not atomic: if the insert
+-- failed, or two pushes interleaved, the showcase silently lost items. This
+-- function keeps the replace atomic so a sync can never wipe the showcase.
+CREATE OR REPLACE FUNCTION public.sync_showcase_items(
+  p_user_id uuid,
+  p_items jsonb
+) RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_count int;
+BEGIN
+  IF jsonb_typeof(p_items) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'p_items must be a JSON array';
+  END IF;
+
+  DELETE FROM public.user_showcase
+   WHERE user_id = p_user_id;
+
+  INSERT INTO public.user_showcase (user_id, slot_index, item_id, updated_at)
+  SELECT
+    p_user_id,
+    x.slot_index,
+    x.item_id,
+    now()
+  FROM jsonb_to_recordset(p_items) AS x(slot_index int, item_id text)
+  WHERE x.item_id IS NOT NULL AND x.item_id <> ''
+    AND x.slot_index BETWEEN 0 AND 5
+  ON CONFLICT (user_id, slot_index) DO UPDATE SET
+    item_id    = EXCLUDED.item_id,
+    updated_at = EXCLUDED.updated_at;
+
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.sync_showcase_items(uuid, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.sync_showcase_items(uuid, jsonb) FROM anon;
+REVOKE ALL ON FUNCTION public.sync_showcase_items(uuid, jsonb) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_showcase_items(uuid, jsonb) TO service_role;
 
 -- 6. Audit & Action Logs (tracks server rolls & anti-cheat records)
 CREATE TABLE IF NOT EXISTS public.action_logs (

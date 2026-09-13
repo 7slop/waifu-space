@@ -101,6 +101,14 @@ export async function POST(event: { request: Request }) {
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseServerClient()!;
 
+      // A push that carries no waifu/settings resources is a pre-pull heartbeat
+      // (e.g. the very first push from a fresh device before the cloud snapshot
+      // was pulled). It must NOT overwrite the saved cloud row with defaults.
+      const hasProfileData =
+        (waifu && typeof waifu === 'object' && !Array.isArray(waifu)) ||
+        (settings && typeof settings === 'object' && !Array.isArray(settings));
+
+      if (hasProfileData) {
       // Fetch existing bond level to securely validate any claimed milestones
       const { data: existing } = await supabase
         .from('user_progress')
@@ -152,21 +160,25 @@ export async function POST(event: { request: Request }) {
           await supabase.from('user_inventory').upsert(cosmeticInserts, { onConflict: 'user_id,item_id', ignoreDuplicates: true });
         }
       }
+      }
 
-      // Update showcase slots from validated inventory items
+      // Update showcase slots from validated inventory items. This runs through
+      // the sync_showcase_items RPC so the delete-and-replace happens inside ONE
+      // transaction - a partial or racing push can never leave the showcase
+      // half-wiped, which previously caused showcase items to disappear.
       const rawShowcase = Array.isArray(showcaseItems) ? showcaseItems : Array.isArray(payload.rpg?.showcaseItems) ? payload.rpg.showcaseItems : null;
       if (Array.isArray(rawShowcase)) {
-        await supabase.from('user_showcase').delete().eq('user_id', session.userId);
         const validIds = new Set(COSMETIC_CATALOG.map(c => c.id));
         const inserts = rawShowcase.slice(0, 6)
           .filter((itemId: unknown) => typeof itemId === 'string' && validIds.has(itemId))
-          .map((itemId: string, slotIndex: number) => ({
-            user_id: session.userId,
-            slot_index: slotIndex,
-            item_id: itemId
-          }));
-        if (inserts.length > 0) {
-          await supabase.from('user_showcase').insert(inserts);
+          .map((itemId: string, slotIndex: number) => ({ slot_index: slotIndex, item_id: itemId }));
+
+        const { error: showcaseErr } = await supabase.rpc('sync_showcase_items', {
+          p_user_id: session.userId,
+          p_items: inserts
+        });
+        if (showcaseErr) {
+          throw new Error(`Showcase sync failed: ${showcaseErr.message}`);
         }
       }
 
