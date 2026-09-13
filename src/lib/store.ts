@@ -219,6 +219,8 @@ export interface AppState {
     llmModel: string;
     countryHolidays: string[];
     showCulturalHolidays: boolean;
+    notificationsEnabled: boolean;
+    timeFormat: '24h' | '12h';
   };
   chat: {
     messages: ChatMessage[];
@@ -301,7 +303,9 @@ export const DEFAULT_STATE: AppState = {
     llmApiKey: '',
     llmModel: 'gemini-1.5-flash',
     countryHolidays: [],
-    showCulturalHolidays: false
+    showCulturalHolidays: false,
+    notificationsEnabled: false,
+    timeFormat: '12h'
   },
   chat: {
     messages: [

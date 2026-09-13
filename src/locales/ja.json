@@ -302,7 +302,24 @@
       "quickTask": "クイックタスクを追加",
       "closeDialog": "ダイアログを閉じる",
       "deleteTask": "{title} を削除"
+    },
+    "viewSettings": {
+      "tooltip": "カレンダー表示設定",
+      "timeFormat": "時刻表示",
+      "timeFormat24h": "24時間表記 (00:00)",
+      "timeFormat12h": "12時間表記 (0 AM)",
+      "notifications": "ブラウザ通知",
+      "notificationsDesc": "予定の30分前とタスクの開始時に通知します"
     }
+  },
+  "notifications": {
+    "upcomingBody": "30分後に開始 — {time}",
+    "eventStartedBody": "予定が {time} に開始しました",
+    "taskStartedBody": "タスクが {time} に開始しました",
+    "allDayTitle": "今日",
+    "allDayBody": "{title} が今日予定されています",
+    "enabledToast": "ブラウザ通知を有効にしました",
+    "permissionDenied": "通知権限が拒否されました。ブラウザの設定を確認してください"
   },
   "rpg": {
     "dashboard": {
