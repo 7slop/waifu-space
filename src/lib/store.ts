@@ -795,7 +795,12 @@ function applyCloudPrivacyState(plain: unknown): void {
       : {};
 
   const tb = sanitizeTimeBudget(data.timebudget ?? {});
-  setState('timebudget', tb);
+  // Guard against the empty-clobber case: an older bug could push an empty
+  // snapshot as the first blob. Never hollow out a device that has real data -
+  // it will repair the cloud copy on the next push instead.
+  if (tb.activities.length > 0 || state.timebudget.activities.length === 0) {
+    setState('timebudget', tb);
+  }
 
   const cal = data.calendar;
   if (cal && typeof cal === 'object' && !Array.isArray(cal)) {
@@ -804,13 +809,17 @@ function applyCloudPrivacyState(plain: unknown): void {
       const sanitized = (c.events as unknown[])
         .map(sanitizeEvent)
         .filter((e): e is CalendarEventItem => e !== null);
-      setState('calendar', 'events', sanitized);
+      if (sanitized.length > 0 || state.calendar.events.length === 0) {
+        setState('calendar', 'events', sanitized);
+      }
     }
     if (Array.isArray(c.occurrenceOverrides)) {
       const sanitizedOverrides = (c.occurrenceOverrides as unknown[])
         .map(sanitizeOccurrenceOverride)
         .filter((o): o is CalendarOccurrenceOverride => o !== null && o.parentId !== '');
-      setState('calendar', 'occurrenceOverrides', sanitizedOverrides);
+      if (sanitizedOverrides.length > 0 || state.calendar.occurrenceOverrides.length === 0) {
+        setState('calendar', 'occurrenceOverrides', sanitizedOverrides);
+      }
     }
   }
 

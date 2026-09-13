@@ -268,4 +268,35 @@ describe('Time Budget encrypted cloud sync (store wiring)', () => {
     expect(state.timebudget.activities.map(a => a.name)).toEqual(['C++']);
     expect(await pushBudgetToCloud()).toBe(true);
   });
+
+  it('never hollows out real local data with an empty cloud blob', async () => {
+    // A leftover empty blob (created by the old clobber bug) must NOT wipe a
+    // device that has actual activities and events.
+    const empty = {
+      timebudget: { activities: [], settings: { resetDay: 1, resetHour: 0, notifications: true, catchUpReminders: true } },
+      calendar: { events: [], occurrenceOverrides: [] }
+    };
+    const { blob } = await buildCloudBlob('pw-keep', empty);
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      return fakeResponse({ success: true, blob });
+    });
+    setState('user', { id: 'u7', username: 'KeepLocal', token: 'tok-7' });
+    addTimeBudgetActivity({ name: 'Keep Me', minHours: 1, targetHours: 2, dangerHours: null, priority: 1, icon: 'heart' });
+    setState('calendar', 'events', [
+      { id: 'keep-ev', title: 'Keep Event', start: new Date().toISOString(), end: new Date().toISOString(), allDay: false, type: 'event', completed: false, color: '#ff6584', recurrence: 'none' }
+    ]);
+
+    await unlockBudgetKey('pw-keep');
+    expect(isBudgetUnlocked()).toBe(true);
+    expect(state.timebudget.activities.map(a => a.name)).toEqual(['Keep Me']);
+    expect(state.calendar.events.map(e => e.title)).toEqual(['Keep Event']);
+
+    // The next push repairs the cloud copy with the real data.
+    expect(await pushBudgetToCloud()).toBe(true);
+    const post = vi.mocked(fetch).mock.calls.find(c => (c[1] as RequestInit | undefined)?.method === 'POST');
+    const body = JSON.parse((post![1] as RequestInit).body as string);
+    expect(body.blob.ciphertext).not.toContain('Keep Me'); // still encrypted
+    expect(body.blob.salt).toBe(blob.salt);
+  });
 });
