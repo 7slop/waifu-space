@@ -94,6 +94,21 @@ export function generateBudgetSalt(): string {
   return bytesToBase64(randomBytes(SALT_BYTES));
 }
 
+/**
+ * Deterministic salt for a (account, password) pair. Used when no cloud copy
+ * exists yet: every device that logs in with the same password derives the
+ * SAME salt and therefore the SAME AES key, so a blob pushed by any device is
+ * readable by every other device with that password. A per-user random salt at
+ * this point is what used to drift keys apart across devices and lock each
+ * other out of the first pushed blob.
+ */
+export async function deriveBudgetSalt(userId: string, password: string): Promise<string> {
+  const c = await getCrypto();
+  const material = new TextEncoder().encode(`${userId}\u0000waifu-space-budget-salt\u0000${password}`);
+  const digest = new Uint8Array(await c.subtle.digest('SHA-256', material));
+  return bytesToBase64(digest);
+}
+
 /** Derives the AES-256-GCM key from the account password + stored salt. */
 export async function deriveBudgetKey(password: string, saltB64: string): Promise<CryptoKey> {
   const c = await getCrypto();

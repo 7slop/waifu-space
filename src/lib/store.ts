@@ -18,6 +18,7 @@ import { validateCalendarEventInput, sanitizeSettings, clampNumber } from './val
 import { sanitizeRawState, sanitizeEvent, sanitizeOccurrenceOverride, sanitizeTimeBudget } from './validate';
 import {
   deriveBudgetKey,
+  deriveBudgetSalt,
   decryptBudgetState,
   encryptBudgetState,
   generateBudgetSalt,
@@ -821,14 +822,17 @@ function applyCloudPrivacyState(plain: unknown): void {
  * device and caches it (persisted to localStorage so later sessions unlock
  * automatically). Must be called while signed in. Returns true on success.
  *
- * - If a cloud blob exists, the password is re-derived with its stored salt
- *   and used to decrypt it (a wrong password fails loudly and never touches
- *   the cloud copy).
- * - If no blob exists yet, a fresh salt is generated and a key cached so the
- *   first scheduled push can create the cloud blob.
+ * - If a cloud blob exists, the password is ALWAYS re-derived with the blob's
+ *   own stored salt and used to decrypt it. This heals a key that was cached
+ *   on this device under a drifted salt (e.g. another device created the first
+ *   blob) and is the only way to clear a previous push-block. A wrong password
+ *   fails loudly and never touches the cloud copy.
+ * - If no blob exists yet, the salt is derived deterministically from the
+ *   (account, password) pair so a second device logged in with the same
+ *   password derives the SAME key and can read the blob the first device
+ *   pushes - no per-device salt drift.
  */
 export async function unlockBudgetKey(password: string): Promise<boolean> {
-  if (budgetKey) return true;
   if (!password || !state.user?.token) return false;
   if (!isOnline()) {
     setBudgetCloudStatus('offline');
@@ -858,8 +862,12 @@ export async function unlockBudgetKey(password: string): Promise<boolean> {
       return true;
     }
 
-    // No cloud copy yet: seed a fresh salt and cache a derived key.
-    const salt = generateBudgetSalt();
+    // No cloud copy yet. Keep a key that is already valid in this tab; a
+    // restored/derived key is interchangeable with the deterministic one.
+    if (budgetKey) return true;
+
+    // Deterministic per-(account, password) salt (see deriveBudgetSalt).
+    const salt = state.user.id ? await deriveBudgetSalt(state.user.id, password) : generateBudgetSalt();
     budgetKey = await deriveBudgetKey(password, salt);
     budgetSalt = salt;
     budgetBlobSynced = false;
@@ -870,6 +878,7 @@ export async function unlockBudgetKey(password: string): Promise<boolean> {
     return true;
   } catch {
     setBudgetCloudStatus(isOnline() ? 'error' : 'offline');
+    budgetSalt = '';
     return false;
   }
 }
@@ -909,11 +918,12 @@ export async function loadBudgetFromCloud(token?: string): Promise<void> {
 
   const blob = await fetchBudgetBlob(authToken);
   if (!blob) {
-    // Nothing uploaded yet. If a key exists on this device, seed the cloud copy.
-    if (budgetKey && !budgetPushBlocked) {
-      budgetBlobSynced = false;
-      scheduleBudgetCloudSync();
-    }
+    // No cloud copy yet. Deliberately do NOT seed a push here: a plain boot
+    // carries no new data, and auto-pushing the (usually empty) local snapshot
+    // during a first load is what used to let a second device clobber the real
+    // blob. Genuine changes push themselves via saveState() ->
+    // scheduleBudgetCloudSync().
+    budgetBlobSynced = false;
     return;
   }
 

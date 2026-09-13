@@ -196,4 +196,76 @@ describe('Time Budget encrypted cloud sync (store wiring)', () => {
     expect(body.blob.ciphertext).not.toContain('Secret Appointment');
     expect(body.blob.ciphertext.length).toBeGreaterThan(20);
   });
+
+  it('a second device with the same password can decrypt what the first device pushed', async () => {
+    // Device A: first ever login for this account -> deterministic salt, push.
+    let cloud: any = null;
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') {
+        cloud = JSON.parse(init.body as string).blob;
+        return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      }
+      return fakeResponse({ success: true, blob: cloud });
+    });
+    setState('user', { id: 'u5', username: 'CrossDevice', token: 'tok-5' });
+    addTimeBudgetActivity({ name: 'Cross', minHours: 1, targetHours: 2, dangerHours: null, priority: 1, icon: 'globe' });
+
+    expect(await unlockBudgetKey('shared-pw')).toBe(true);
+    expect(await pushBudgetToCloud()).toBe(true);
+    expect(cloud).toBeTruthy();
+
+    // Device B: brand-new tab, same account + password, no persisted key.
+    localStorage.clear();
+    forgetBudgetKey();
+    setState(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+    setState('user', { id: 'u5', username: 'CrossDevice', token: 'tok-5' });
+
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      return fakeResponse({ success: true, blob: cloud });
+    });
+
+    expect(await unlockBudgetKey('shared-pw')).toBe(true);
+    expect(isBudgetUnlocked()).toBe(true);
+    expect(budgetCloudStatus()).toBe('synced');
+    // The first device's activity was pulled from the cloud and merged.
+    expect(state.timebudget.activities.map(a => a.name)).toEqual(['Cross']);
+    // And the second device re-encrypts under the SAME salt (no drift).
+    expect(await pushBudgetToCloud()).toBe(true);
+    const B = JSON.parse((vi.mocked(fetch).mock.calls.find(c => (c[1] as RequestInit | undefined)?.method === 'POST')![1] as RequestInit).body as string).blob;
+    expect(B.salt).toBe(cloud.salt);
+  });
+
+  it('re-derives against the cloud salt when the local cached salt drifted (heal)', async () => {
+    // A blob was created on another device with its own (random) salt.
+    const { blob } = await buildCloudBlob('pw-heal', CLOUD_PRIVACY);
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      return fakeResponse({ success: true, blob: null });
+    });
+    setState('user', { id: 'u6', username: 'Heal', token: 'tok-6' });
+
+    // This device unlocked BEFORE the cloud copy existed, so it cached a key
+    // under a locally-derived salt.
+    expect(await unlockBudgetKey('pw-heal')).toBe(true);
+
+    // Now the cloud copy (with a different salt) shows up: the cached key
+    // cannot decrypt it -> it must stay locked, never overwrite it.
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      return fakeResponse({ success: true, blob });
+    });
+    await loadBudgetFromCloud('tok-6');
+    expect(budgetCloudStatus()).toBe('locked');
+    expect(state.timebudget.activities.length).toBe(0);
+
+    // A correct-password login must re-derive against the blob's OWN salt and
+    // recover - this was previously impossible because the cached key made
+    // unlockBudgetKey return early (permanent lockout).
+    expect(await unlockBudgetKey('pw-heal')).toBe(true);
+    expect(budgetCloudStatus()).toBe('synced');
+    expect(isBudgetUnlocked()).toBe(true);
+    expect(state.timebudget.activities.map(a => a.name)).toEqual(['C++']);
+    expect(await pushBudgetToCloud()).toBe(true);
+  });
 });
