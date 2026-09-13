@@ -1,4 +1,4 @@
-import { createMemo } from 'solid-js';
+import { createMemo, createSignal } from 'solid-js';
 import {
   state,
   pokeAvatar,
@@ -22,10 +22,12 @@ import {
   PhHandPointing,
   PhCalendar,
   PhHeart,
+  PhPaperPlaneRight,
   GlyphText
 } from './icons';
 
 export function CompanionStage() {
+  const [mobileTab, setMobileTab] = createSignal<'waifu' | 'chat'>('waifu');
   const persona = createMemo(() => getPersonality(state.waifu.personality));
 
   const bondProgress = createMemo(() => {
@@ -42,8 +44,26 @@ export function CompanionStage() {
 
   return (
     <div class="main-stage-layout">
+      {/* MOBILE SEGMENTED VIEW SWITCHER (Hidden on desktop) */}
+      <div class="companion-mobile-switcher">
+        <button
+          type="button"
+          class={`companion-switcher-btn ${mobileTab() === 'waifu' ? 'active' : ''}`}
+          onClick={() => setMobileTab('waifu')}
+        >
+          <PhFlowerLotus /> {state.waifu.name}
+        </button>
+        <button
+          type="button"
+          class={`companion-switcher-btn ${mobileTab() === 'chat' ? 'active' : ''}`}
+          onClick={() => setMobileTab('chat')}
+        >
+          <PhPaperPlaneRight /> {t('nav.companion') || 'Chat'}
+        </button>
+      </div>
+
       {/* LEFT: WAIFU AVATAR STAGE */}
-      <div class="waifu-stage-panel">
+      <div class={`waifu-stage-panel ${mobileTab() !== 'waifu' ? 'mobile-hidden' : ''}`}>
         <div class="stage-header-card">
           <div class="waifu-identity">
             <h2 class="waifu-display-name">{state.waifu.name}</h2>
@@ -119,22 +139,37 @@ export function CompanionStage() {
           <button
             type="button"
             class="stage-action-chip"
-            onClick={() => sendUserMessage(t('chat.schedulePrompt'))}
+            onClick={() => {
+              sendUserMessage(t('chat.schedulePrompt'));
+              setMobileTab('chat');
+            }}
           >
             <PhCalendar /> {t('companion.reviewSchedule')}
           </button>
           <button
             type="button"
             class="stage-action-chip"
-            onClick={() => sendUserMessage(t('chat.cutePrompt'))}
+            onClick={() => {
+              sendUserMessage(t('chat.cutePrompt'));
+              setMobileTab('chat');
+            }}
           >
             <PhHeart /> {t('companion.cute')}
+          </button>
+          <button
+            type="button"
+            class="stage-action-chip mobile-only-chip"
+            onClick={() => setMobileTab('chat')}
+          >
+            <PhPaperPlaneRight /> {t('nav.companion') || 'Chat'}
           </button>
         </div>
       </div>
 
       {/* RIGHT: CHAT PANEL */}
-      <ChatStage />
+      <div class={`chat-stage-wrapper ${mobileTab() !== 'chat' ? 'mobile-hidden' : ''}`}>
+        <ChatStage />
+      </div>
     </div>
   );
 }

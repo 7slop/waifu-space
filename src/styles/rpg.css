@@ -1684,3 +1684,100 @@
   }
 }
 
+@media (max-width: 768px) {
+  .rpg-hub-container {
+    padding: 10px 8px 30px;
+    gap: 14px;
+  }
+
+  .rpg-dashboard-header {
+    padding: 14px 12px;
+    gap: 14px;
+  }
+
+  .rpg-navigation-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 6px;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .rpg-tab-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .gamemode-selector-bar {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 6px 8px;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .gamemode-chip-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .hud-stats-row {
+    padding: 8px 10px;
+    gap: 8px;
+    justify-content: space-between;
+  }
+
+  .hud-stat {
+    gap: 4px;
+  }
+
+  .hud-value {
+    font-size: 13px;
+  }
+
+  .hud-hp-bar {
+    width: 90px;
+  }
+
+  .tower-types-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .btn-build-tower {
+    padding: 8px 10px;
+  }
+
+  .affection-road-container {
+    padding: 12px 8px;
+  }
+
+  .milestones-list {
+    gap: 10px;
+  }
+
+  .milestone-card {
+    padding: 12px 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .milestone-reward-action {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .gacha-boxes-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .lootbox-modal-card {
+    padding: 16px 12px;
+  }
+}
+

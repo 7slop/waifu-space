@@ -272,6 +272,30 @@ function AppLayout(props: { children: any }) {
         <Suspense>{props.children}</Suspense>
       </main>
 
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <nav class="mobile-bottom-nav" aria-label="Mobile Navigation">
+        <A href="/" class="mobile-nav-item" activeClass="active" end={true} onClick={e => handleNavClick(e, '/')}>
+          <span class="mobile-nav-icon"><PhFlowerLotus /></span>
+          <span class="mobile-nav-label">{t('nav.companion')}</span>
+        </A>
+        <A href="/calendar" class="mobile-nav-item" activeClass="active" onClick={e => handleNavClick(e, '/calendar')}>
+          <span class="mobile-nav-icon"><PhCalendar /></span>
+          <span class="mobile-nav-label">{t('nav.calendar')}</span>
+        </A>
+        <A href="/minigames" class="mobile-nav-item" activeClass="active" onClick={e => handleNavClick(e, '/minigames')}>
+          <span class="mobile-nav-icon"><PhGameController /></span>
+          <span class="mobile-nav-label">{t('nav.minigames')}</span>
+        </A>
+        <A href="/timebudget" class="mobile-nav-item" activeClass="active" onClick={e => handleNavClick(e, '/timebudget')}>
+          <span class="mobile-nav-icon"><PhTimer /></span>
+          <span class="mobile-nav-label">{t('timebudget.nav')}</span>
+        </A>
+        <A href="/profile" class="mobile-nav-item" activeClass="active" onClick={e => handleNavClick(e, '/profile')}>
+          <span class="mobile-nav-icon"><PhUserCircle /></span>
+          <span class="mobile-nav-label">{t('nav.profile')}</span>
+        </A>
+      </nav>
+
       {/* MODALS */}
       <AuthModal
         isOpen={authModalOpen()}

@@ -79,6 +79,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -193,7 +194,13 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   height: calc(100vh - var(--header-height));
+  height: calc(100dvh - var(--header-height));
   scroll-behavior: smooth;
+}
+
+/* Mobile bottom nav: hidden by default on desktop */
+.mobile-bottom-nav {
+  display: none;
 }
 
 /* Pages that manage their own internal scrolling (e.g. the calendar) should
@@ -1346,4 +1353,188 @@ a span:has(> svg:only-child),
 svg {
   vertical-align: -0.125em;
   flex-shrink: 0;
+}
+
+/* ---------------- MOBILE OPTIMIZATIONS (<= 768px) ---------------- */
+@media (max-width: 768px) {
+  :root {
+    --header-height: 52px;
+  }
+
+  .app-header {
+    height: 52px;
+    padding: 0 12px;
+  }
+
+  .app-brand {
+    gap: 6px;
+  }
+
+  .brand-icon {
+    font-size: 20px;
+  }
+
+  .brand-name {
+    font-size: 16px;
+  }
+
+  .brand-tag {
+    display: none;
+  }
+
+  /* Hide top navigation tabs on mobile (relocated to bottom nav) */
+  .app-header .nav-tabs {
+    display: none;
+  }
+
+  .header-right {
+    gap: 8px;
+  }
+
+  .header-coin-pill {
+    padding: 4px 8px;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .btn-login-pill {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .user-badge-name {
+    display: none;
+  }
+
+  .user-profile-badge {
+    padding: 2px 4px;
+    gap: 2px;
+  }
+
+  .user-badge-link {
+    padding: 2px;
+  }
+
+  /* Fixed Mobile Bottom Navigation Bar */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--surface-1);
+    border-top: 1px solid var(--border-color);
+    z-index: 1000;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.35);
+  }
+
+  .mobile-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 100%;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 4px 0;
+    transition: color 0.15s ease, transform 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-nav-icon {
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .mobile-nav-item.active {
+    color: var(--primary-accent);
+    font-weight: 700;
+  }
+
+  .mobile-nav-item.active .mobile-nav-icon {
+    transform: scale(1.1);
+  }
+
+  /* Adjust app-content height so scrolling contents are not hidden beneath bottom nav */
+  .app-content {
+    height: calc(100vh - 52px - 56px - env(safe-area-inset-bottom, 0px));
+    height: calc(100dvh - 52px - 56px - env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Modals on Mobile */
+  .auth-modal-backdrop,
+  .leaderboard-modal-backdrop {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .auth-modal-card,
+  .leaderboard-modal-card {
+    padding: 20px 16px;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    max-height: 85dvh;
+    overflow-y: auto;
+  }
+
+  /* Profile page on Mobile */
+  .profile-showcase-container {
+    padding: 12px 10px 24px;
+    gap: 16px;
+  }
+
+  .profile-hero-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 18px 14px;
+    gap: 16px;
+  }
+
+  .profile-avatar-wrapper {
+    margin: 0 auto;
+  }
+
+  .profile-name-row {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .profile-stats-row {
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .p-stat {
+    padding: 6px 10px;
+  }
+
+  .p-stat-val {
+    font-size: 14px;
+  }
+
+  .profile-content-columns {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .profile-showcase-box,
+  .profile-companion-box {
+    padding: 16px 12px;
+  }
+
+  .profile-pedestals-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
 }

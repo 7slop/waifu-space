@@ -118,6 +118,8 @@ import PhFloppyDisk from '~icons/ph/floppy-disk';
 export { PhFloppyDisk };
 import PhTreeEvergreen from '~icons/ph/tree-evergreen';
 export { PhTreeEvergreen };
+import PhList from '~icons/ph/list';
+export { PhList };
 import PhDiceFive from '~icons/ph/dice-five';
 export { PhDiceFive };
 import PhMapTrifold from '~icons/ph/map-trifold';
