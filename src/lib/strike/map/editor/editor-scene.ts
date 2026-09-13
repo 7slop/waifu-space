@@ -34,6 +34,7 @@ export interface EditorObjectInfo {
   name: string;
   kind: 'box' | 'ground' | 'component';
   component?: string;
+  locked: boolean;
 }
 
 export interface EditorSelectionInfo {
@@ -46,6 +47,7 @@ export interface EditorSelectionInfo {
   scale?: [number, number, number];
   material?: string;
   collidable: boolean;
+  locked: boolean;
   params: Record<string, number | string | boolean>;
 }
 
@@ -157,6 +159,8 @@ export class StrikeMapEditorController {
   private editorLights: Array<HemisphericLight | DirectionalLight> = [];
   private spawnMarkers: AbstractMesh[] = [];
   private pressedKeys: Set<string> = new Set();
+  /** Object selected from the list while locked (scene clicks are ignored). */
+  private lockedSel: string | null = null;
 
   onGizmoMode: 'translate' | 'rotate' | 'scale' = 'translate';
 
@@ -259,6 +263,10 @@ export class StrikeMapEditorController {
           return;
         }
         if (typeof meta.editorId === 'string') {
+          // Locked objects are not selectable from the viewport — only via
+          // the object list (so they can be unlocked deliberately).
+          const obj = this.layout.objects.find((o) => o.id === meta.editorId);
+          if (obj?.locked) return;
           this.selectById(meta.editorId);
           return;
         }
@@ -487,6 +495,7 @@ export class StrikeMapEditorController {
   // ── Selection & gizmos ───────────────────────────────────────────────────
 
   getSelectionKind(): EditorSelectionKind {
+    if (this.lockedSel) return 'object';
     const control = this.gizmo.attachedMesh;
     if (!control) return 'none';
     const meta = control.metadata as { spawnIndex?: number; editorId?: string } | undefined;
@@ -498,6 +507,7 @@ export class StrikeMapEditorController {
   }
 
   get selectedId(): string | null {
+    if (this.lockedSel) return this.lockedSel;
     const control = this.gizmo.attachedMesh;
     if (!control) return null;
     const meta = control.metadata as { editorId?: string } | undefined;
@@ -543,12 +553,25 @@ export class StrikeMapEditorController {
   }
 
   select(control: AbstractMesh | null): void {
+    this.lockedSel = null;
     if (control) {
+      const id = this.resolveIdOf(control);
+      if (id) {
+        const obj = this.layout.objects.find((o) => o.id === id);
+        if (obj?.locked) {
+          // Locked objects keep their selection (for the inspector) but
+          // never get an editable gizmo.
+          this.lockedSel = id;
+          if (this.gizmo.attachedMesh) this.gizmo.attachToMesh(null);
+          this.onChange?.();
+          return;
+        }
+      }
       // Only components take a scale gizmo; drop out of scale mode otherwise.
       if (this.onGizmoMode === 'scale') {
-        const id = this.resolveIdOf(control);
+        const cid = this.resolveIdOf(control);
         const component =
-          !!id && this.layout.objects.some((o) => o.id === id && o.kind === 'component');
+          !!cid && this.layout.objects.some((o) => o.id === cid && o.kind === 'component');
         if (!component) this.setGizmoMode('translate');
       }
       this.gizmo.attachToMesh(control);
@@ -576,6 +599,7 @@ export class StrikeMapEditorController {
       name: obj.name,
       kind: obj.kind,
       collidable: obj.kind === 'box' || obj.kind === 'ground' ? obj.collidable : true,
+      locked: !!obj.locked,
       position: [control.position.x, control.position.y, control.position.z],
       rotation: [control.rotation.x, control.rotation.y, control.rotation.z],
       params: obj.kind === 'component' ? obj.params : {}
@@ -622,7 +646,8 @@ export class StrikeMapEditorController {
       id: o.id,
       name: o.name,
       kind: o.kind,
-      component: o.kind === 'component' ? o.component : undefined
+      component: o.kind === 'component' ? o.component : undefined,
+      locked: !!o.locked
     }));
   }
 
@@ -827,6 +852,7 @@ export class StrikeMapEditorController {
   }
 
   deleteSelected(): void {
+    if (this.isSelectedLocked()) return;
     this.recordHistory();
     const kind = this.getSelectionKind();
     if (kind === 'light') {
@@ -977,8 +1003,40 @@ export class StrikeMapEditorController {
   }
 
   duplicateSelected(): void {
+    if (this.isSelectedLocked()) return;
     if (!this.captureSelectedToClipboard()) return;
     this.pasteSelected();
+  }
+
+  /** True when the current object selection is locked (edits are blocked). */
+  private isSelectedLocked(): boolean {
+    const id = this.selectedObjectId;
+    if (!id) return false;
+    const obj = this.layout.objects.find((o) => o.id === id);
+    return !!obj?.locked;
+  }
+
+  /**
+   * Toggles editor protection for an object. Locked objects can't be picked
+   * from the scene or edited until explicitly unlocked from the list/
+   * inspector.
+   */
+  setLocked(id: string, locked: boolean): void {
+    const obj = this.layout.objects.find((o) => o.id === id);
+    if (!obj) return;
+    this.recordHistory();
+    obj.locked = locked;
+    this.dirty = true;
+    if (locked) {
+      // Keep the object selected for its inspector, but drop the gizmo.
+      this.lockedSel = id;
+      if (this.gizmo.attachedMesh) this.gizmo.attachToMesh(null);
+    } else if (this.lockedSel === id) {
+      this.lockedSel = null;
+      const control = this.controlOf.get(id);
+      if (control) this.gizmo.attachToMesh(control);
+    }
+    this.onChange?.();
   }
 
   updateSpawn(index: number, partial: { position?: [number, number, number]; yaw?: number }): void {
@@ -1037,7 +1095,7 @@ export class StrikeMapEditorController {
     const control = this.controlOf.get(id);
     if (!control) return;
     const obj = this.layout.objects.find((o) => o.id === id);
-    if (!obj) return;
+    if (!obj || obj.locked) return;
     this.recordHistory();
 
     if (axis === 'position') {
@@ -1063,6 +1121,7 @@ export class StrikeMapEditorController {
   renameSelected(name: string): void {
     const cleaned = name.trim();
     if (!cleaned) return;
+    if (this.isSelectedLocked()) return;
     this.recordHistory();
     if (this.selectedObjectId) {
       const obj = this.layout.objects.find((o) => o.id === this.selectedObjectId);
@@ -1083,7 +1142,7 @@ export class StrikeMapEditorController {
     const id = this.selectedObjectId;
     if (!id) return;
     const obj = this.layout.objects.find((o) => o.id === id);
-    if (!obj || (obj.kind !== 'box' && obj.kind !== 'ground')) return;
+    if (!obj || (obj.kind !== 'box' && obj.kind !== 'ground') || obj.locked) return;
     const mat = (this.b.mats as unknown as Record<string, StandardMaterial>)[key];
     if (!mat) return;
     this.recordHistory();
@@ -1097,7 +1156,7 @@ export class StrikeMapEditorController {
     const id = this.selectedObjectId;
     if (!id) return;
     const obj = this.layout.objects.find((o) => o.id === id);
-    if (!obj || (obj.kind !== 'box' && obj.kind !== 'ground')) return;
+    if (!obj || (obj.kind !== 'box' && obj.kind !== 'ground') || obj.locked) return;
     this.recordHistory();
     obj.collidable = collidable;
     const control = this.controlOf.get(id);
@@ -1109,7 +1168,7 @@ export class StrikeMapEditorController {
     const id = this.selectedObjectId;
     if (!id) return;
     const obj = this.layout.objects.find((o) => o.id === id);
-    if (!obj || obj.kind !== 'component') return;
+    if (!obj || obj.kind !== 'component' || obj.locked) return;
     this.recordHistory();
     obj.params = { ...obj.params, [key]: value };
     // Rebuild this component from its params.

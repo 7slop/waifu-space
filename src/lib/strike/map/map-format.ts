@@ -24,6 +24,8 @@ export interface MapObjectBase {
   name: string;
   position: [number, number, number];
   rotation: [number, number, number];
+  /** Editor safety: locked objects are ignored for scene picking/editing. */
+  locked?: boolean;
 }
 
 export interface MapBoxObject extends MapObjectBase {
@@ -251,7 +253,8 @@ export function parseLayout(json: string): MapLayout {
             id: String(o.id ?? ''),
             name: String(o.name ?? 'unnamed'),
             position: toVec3Array(o.position),
-            rotation: toVec3Array(o.rotation)
+            rotation: toVec3Array(o.rotation),
+            ...(o.locked === true ? { locked: true } : {})
           };
           const mat = String(o.material ?? 'plaster');
           if (o.kind === 'box') {
@@ -325,7 +328,10 @@ export function parseLayout(json: string): MapLayout {
   };
 }
 
-/** Serializes a layout to the pretty-printed .wsmap JSON document. */
+/**
+ * Serializes a layout to the compact .wsmap JSON document (single line —
+ * the layout is machine-authored and edited from the in-browser editor).
+ */
 export function serializeLayout(layout: MapLayout): string {
-  return JSON.stringify(layout, null, 2);
+  return JSON.stringify(layout);
 }

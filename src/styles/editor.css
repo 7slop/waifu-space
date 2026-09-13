@@ -238,6 +238,21 @@
   background: rgba(255, 117, 151, 0.16);
   border-color: rgba(255, 117, 151, 0.45);
 }
+.edi-list-item.locked { opacity: 0.86; }
+.edi-list-item.locked .edi-list-name { color: #8899b3; }
+.edi-lock-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #5f7290;
+  border-radius: 5px;
+  padding: 1px 5px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  flex: 0 0 auto;
+}
+.edi-lock-btn:hover { background: rgba(255, 255, 255, 0.1); }
+.edi-lock-btn.on { border-color: rgba(255, 211, 42, 0.5); background: rgba(255, 211, 42, 0.12); color: #ffd32a; }
 .edi-kind-badge { width: 16px; text-align: center; }
 .edi-kind-box .edi-kind-badge { color: #74d7fe; }
 .edi-kind-ground .edi-kind-badge { color: #9ff08a; }
@@ -293,6 +308,13 @@
 .edi-inspector-row select:focus {
   outline: none;
   border-color: #ff7597;
+}
+.edi-field input:disabled,
+.edi-inspector-row input[type='text']:disabled,
+.edi-inspector-row input[type='number']:disabled,
+.edi-inspector-row select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .edi-axis-hdr { font-size: 0.6rem; color: #6b7f9c; text-transform: uppercase; text-align: center; }

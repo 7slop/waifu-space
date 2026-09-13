@@ -17,6 +17,7 @@ function Field(props: {
   label: string;
   value: number;
   step?: number;
+  disabled?: boolean;
   onChange: (v: number) => void;
 }) {
   return (
@@ -26,6 +27,7 @@ function Field(props: {
         type="number"
         step={props.step ?? 0.5}
         value={props.value.toFixed(3)}
+        disabled={props.disabled}
         onChange={(e) => props.onChange(parseFloat(e.currentTarget.value) || 0)}
       />
     </label>
@@ -35,6 +37,7 @@ function Field(props: {
 function CheckRow(props: {
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
@@ -43,6 +46,7 @@ function CheckRow(props: {
       <input
         type="checkbox"
         checked={props.checked}
+        disabled={props.disabled}
         onChange={(e) => props.onChange(e.currentTarget.checked)}
       />
     </label>
@@ -174,6 +178,13 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
 
   const handleSelectObject = (index: number) => {
     controller?.selectByIndex(index);
+    refresh();
+  };
+
+  const handleToggleLock = (id: string) => {
+    const obj = objects().find((o) => o.id === id);
+    if (!obj || !controller) return;
+    controller.setLocked(id, !obj.locked);
     refresh();
   };
 
@@ -411,12 +422,22 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                 <For each={objects()}>
                   {(obj, i) => (
                     <div
-                      class={`edi-list-item ${objectSel()?.id === obj.id ? 'active' : ''} edi-kind-${obj.kind}`}
+                      class={`edi-list-item ${objectSel()?.id === obj.id ? 'active' : ''} edi-kind-${obj.kind}${obj.locked ? ' locked' : ''}`}
                       onClick={() => handleSelectObject(i())}
                     >
                       <span class="edi-kind-badge">{obj.kind === 'component' ? '◆' : obj.kind === 'ground' ? '▦' : '▢'}</span>
                       <span class="edi-list-name">{obj.name}</span>
                       <span class="edi-list-id">{obj.id}</span>
+                      <button
+                        class={`edi-lock-btn${obj.locked ? ' on' : ''}`}
+                        title={obj.locked ? 'Unlock (editing disabled while locked)' : 'Lock (protect from accidental edits)'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleLock(obj.id);
+                        }}
+                      >
+                        {obj.locked ? '🔒' : '🔓'}
+                      </button>
                     </div>
                   )}
                 </For>
@@ -445,20 +466,32 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                 <>
                   <section class="edi-panel-section">
                     <header class="edi-panel-head"><span>Transform</span></header>
+                    <Show when={s.locked}>
+                      <div class="edi-inspector-row edi-inspector-note">
+                        🔒 Locked — can't be selected or edited from the scene. Uncheck to edit.
+                      </div>
+                    </Show>
+                    <div class="edi-inspector-row">
+                      <CheckRow
+                        label="Locked (protects from accidental edits)"
+                        checked={s.locked}
+                        onChange={(v) => { controller?.setLocked(s.id, v); refresh(); }}
+                      />
+                    </div>
                     <div class="edi-field-grid">
                       <span class="edi-axis-hdr">Pos X</span>
                       <span class="edi-axis-hdr">Pos Y</span>
                       <span class="edi-axis-hdr">Pos Z</span>
-                      <Field label="X" value={s.position[0]} step={snapStep()} onChange={(v) => { controller?.applyTransform('x', 'position', v); refresh(); }} />
-                      <Field label="Y" value={s.position[1]} step={snapStep()} onChange={(v) => { controller?.applyTransform('y', 'position', v); refresh(); }} />
-                      <Field label="Z" value={s.position[2]} step={snapStep()} onChange={(v) => { controller?.applyTransform('z', 'position', v); refresh(); }} />
-                      <Field label="RX°" value={s.rotation[0] * DEG} step={15} onChange={(v) => { controller?.applyTransform('x', 'rotation', v * RAD); refresh(); }} />
-                      <Field label="RY°" value={s.rotation[1] * DEG} step={15} onChange={(v) => { controller?.applyTransform('y', 'rotation', v * RAD); refresh(); }} />
-                      <Field label="RZ°" value={s.rotation[2] * DEG} step={15} onChange={(v) => { controller?.applyTransform('z', 'rotation', v * RAD); refresh(); }} />
+                      <Field label="X" value={s.position[0]} step={snapStep()} disabled={s.locked} onChange={(v) => { controller?.applyTransform('x', 'position', v); refresh(); }} />
+                      <Field label="Y" value={s.position[1]} step={snapStep()} disabled={s.locked} onChange={(v) => { controller?.applyTransform('y', 'position', v); refresh(); }} />
+                      <Field label="Z" value={s.position[2]} step={snapStep()} disabled={s.locked} onChange={(v) => { controller?.applyTransform('z', 'position', v); refresh(); }} />
+                      <Field label="RX°" value={s.rotation[0] * DEG} step={15} disabled={s.locked} onChange={(v) => { controller?.applyTransform('x', 'rotation', v * RAD); refresh(); }} />
+                      <Field label="RY°" value={s.rotation[1] * DEG} step={15} disabled={s.locked} onChange={(v) => { controller?.applyTransform('y', 'rotation', v * RAD); refresh(); }} />
+                      <Field label="RZ°" value={s.rotation[2] * DEG} step={15} disabled={s.locked} onChange={(v) => { controller?.applyTransform('z', 'rotation', v * RAD); refresh(); }} />
                       <Show when={s.kind === 'component' && s.scale}>
-                        <Field label="SX" value={s.scale![0]} step={0.1} onChange={(v) => { controller?.applyTransform('x', 'scale', v); refresh(); }} />
-                        <Field label="SY" value={s.scale![1]} step={0.1} onChange={(v) => { controller?.applyTransform('y', 'scale', v); refresh(); }} />
-                        <Field label="SZ" value={s.scale![2]} step={0.1} onChange={(v) => { controller?.applyTransform('z', 'scale', v); refresh(); }} />
+                        <Field label="SX" value={s.scale![0]} step={0.1} disabled={s.locked} onChange={(v) => { controller?.applyTransform('x', 'scale', v); refresh(); }} />
+                        <Field label="SY" value={s.scale![1]} step={0.1} disabled={s.locked} onChange={(v) => { controller?.applyTransform('y', 'scale', v); refresh(); }} />
+                        <Field label="SZ" value={s.scale![2]} step={0.1} disabled={s.locked} onChange={(v) => { controller?.applyTransform('z', 'scale', v); refresh(); }} />
                       </Show>
                     </div>
 
@@ -467,6 +500,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                       <input
                         type="text"
                         value={s.name}
+                        disabled={s.locked}
                         onBlur={(e) => { controller?.renameSelected(e.currentTarget.value); refresh(); }}
                       />
                     </div>
@@ -476,6 +510,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                         <label class="edi-insp-label">Material</label>
                         <select
                           value={s.material}
+                          disabled={s.locked}
                           onChange={(e) => { controller?.applyMaterial(e.currentTarget.value); refresh(); }}
                         >
                           <For each={controller?.materialKeys ?? []}>
@@ -487,6 +522,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                         <CheckRow
                           label="Collidable"
                           checked={s.collidable}
+                          disabled={s.locked}
                           onChange={(v) => { controller?.applyCollidable(v); refresh(); }}
                         />
                       </div>
@@ -506,6 +542,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                                 <CheckRow
                                   label={spec.label ?? key}
                                   checked={Boolean(value ?? spec.default)}
+                                  disabled={s.locked}
                                   onChange={(v) => { controller?.updateComponentParam(key, v); refresh(); }}
                                 />
                               </div>
@@ -517,6 +554,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                                 <label class="edi-insp-label">{spec.label ?? key}</label>
                                 <select
                                   value={String(value ?? spec.default)}
+                                  disabled={s.locked}
                                   onChange={(e) => { controller?.updateComponentParam(key, e.currentTarget.value); refresh(); }}
                                 >
                                   <For each={spec.choices ?? []}>
@@ -533,6 +571,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                                 type="number"
                                 step={1}
                                 value={String(value ?? spec.default)}
+                                disabled={s.locked}
                                 onChange={(e) => { controller?.updateComponentParam(key, parseFloat(e.currentTarget.value) || 0); refresh(); }}
                               />
                             </div>
@@ -648,12 +687,12 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
           <section class="edi-panel-section">
             <header class="edi-panel-head"><span>Gizmo</span></header>
             <div class="edi-gizmo-row">
-              <button class={`edi-btn ${gizmoMode() === 'translate' ? 'active' : ''}`} onClick={() => handleSetGizmo('translate')}>Move</button>
+              <button class={`edi-btn ${gizmoMode() === 'translate' ? 'active' : ''}`} disabled={selKind() === 'object' && !!objectSel()?.locked} onClick={() => handleSetGizmo('translate')}>Move</button>
               <Show when={selKind() !== 'light'}>
-                <button class={`edi-btn ${gizmoMode() === 'rotate' ? 'active' : ''}`} onClick={() => handleSetGizmo('rotate')}>Rotate</button>
+                <button class={`edi-btn ${gizmoMode() === 'rotate' ? 'active' : ''}`} disabled={selKind() === 'object' && !!objectSel()?.locked} onClick={() => handleSetGizmo('rotate')}>Rotate</button>
               </Show>
               <Show when={selKind() === 'object' && objectSel()?.kind === 'component'}>
-                <button class={`edi-btn ${gizmoMode() === 'scale' ? 'active' : ''}`} onClick={() => handleSetGizmo('scale')}>Scale</button>
+                <button class={`edi-btn ${gizmoMode() === 'scale' ? 'active' : ''}`} disabled={selKind() === 'object' && !!objectSel()?.locked} onClick={() => handleSetGizmo('scale')}>Scale</button>
               </Show>
             </div>
             <div class="edi-gizmo-row">
