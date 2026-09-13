@@ -1,0 +1,7129 @@
+{
+  "format": "waifu-space-map",
+  "version": 1,
+  "name": "kyoto",
+  "spawns": [
+    {
+      "position": [
+        -4,
+        1,
+        46
+      ],
+      "yaw": 0
+    },
+    {
+      "position": [
+        4,
+        1,
+        46
+      ],
+      "yaw": 0
+    },
+    {
+      "position": [
+        -10,
+        1,
+        44
+      ],
+      "yaw": 0
+    },
+    {
+      "position": [
+        10,
+        1,
+        44
+      ],
+      "yaw": 0
+    },
+    {
+      "position": [
+        -2,
+        1,
+        43
+      ],
+      "yaw": 0
+    },
+    {
+      "position": [
+        2,
+        1,
+        43
+      ],
+      "yaw": 0
+    },
+    {
+      "position": [
+        -4,
+        1,
+        -46
+      ],
+      "yaw": 3.141592653589793
+    },
+    {
+      "position": [
+        4,
+        1,
+        -46
+      ],
+      "yaw": 3.141592653589793
+    },
+    {
+      "position": [
+        -10,
+        1,
+        -44
+      ],
+      "yaw": 3.141592653589793
+    },
+    {
+      "position": [
+        10,
+        1,
+        -44
+      ],
+      "yaw": 3.141592653589793
+    },
+    {
+      "position": [
+        -2,
+        1,
+        -43
+      ],
+      "yaw": 3.141592653589793
+    },
+    {
+      "position": [
+        2,
+        1,
+        -43
+      ],
+      "yaw": 3.141592653589793
+    }
+  ],
+  "objects": [
+    {
+      "id": "o_0001",
+      "name": "mainGround",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "ground",
+      "width": 104,
+      "height": 104,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0002",
+      "name": "wallN",
+      "position": [
+        0,
+        3.75,
+        -52
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 104,
+      "h": 7.5,
+      "d": 1.4,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0003",
+      "name": "wallS",
+      "position": [
+        0,
+        3.75,
+        52
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 104,
+      "h": 7.5,
+      "d": 1.4,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0004",
+      "name": "wallW",
+      "position": [
+        -52,
+        3.75,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.4,
+      "h": 7.5,
+      "d": 104,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0005",
+      "name": "wallE",
+      "position": [
+        52,
+        3.75,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.4,
+      "h": 7.5,
+      "d": 104,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0006",
+      "name": "copN",
+      "position": [
+        0,
+        7.6,
+        -52
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 104,
+      "h": 0.4,
+      "d": 1.8,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0007",
+      "name": "copS",
+      "position": [
+        0,
+        7.6,
+        52
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 104,
+      "h": 0.4,
+      "d": 1.8,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0008",
+      "name": "copW",
+      "position": [
+        -52,
+        7.6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.8,
+      "h": 0.4,
+      "d": 104,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0009",
+      "name": "copE",
+      "position": [
+        52,
+        7.6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.8,
+      "h": 0.4,
+      "d": 104,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0010",
+      "name": "nN",
+      "position": [
+        0,
+        7.2,
+        -51.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 104,
+      "h": 0.14,
+      "d": 0.14,
+      "material": "neonPink",
+      "collidable": false
+    },
+    {
+      "id": "o_0011",
+      "name": "nS",
+      "position": [
+        0,
+        7.2,
+        51.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 104,
+      "h": 0.14,
+      "d": 0.14,
+      "material": "neonCyan",
+      "collidable": false
+    },
+    {
+      "id": "o_0012",
+      "name": "nW",
+      "position": [
+        -51.2,
+        7.2,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.14,
+      "h": 0.14,
+      "d": 104,
+      "material": "neonCyan",
+      "collidable": false
+    },
+    {
+      "id": "o_0013",
+      "name": "nE",
+      "position": [
+        51.2,
+        7.2,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.14,
+      "h": 0.14,
+      "d": 104,
+      "material": "neonPink",
+      "collidable": false
+    },
+    {
+      "id": "o_0014",
+      "name": "t1Floor",
+      "position": [
+        0,
+        0.075,
+        44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 42,
+      "h": 0.15,
+      "d": 12,
+      "material": "ground",
+      "collidable": false
+    },
+    {
+      "id": "o_0015",
+      "name": "t1CoverL",
+      "position": [
+        -8,
+        0.675,
+        40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6,
+      "h": 1.35,
+      "d": 0.8,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0016",
+      "name": "t1CoverR",
+      "position": [
+        8,
+        0.675,
+        40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6,
+      "h": 1.35,
+      "d": 0.8,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0017",
+      "name": "t1WallWL",
+      "position": [
+        -18,
+        2.25,
+        40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 8,
+      "h": 4.5,
+      "d": 0.8,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0018",
+      "name": "t1WallWR",
+      "position": [
+        18,
+        2.25,
+        40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 8,
+      "h": 4.5,
+      "d": 0.8,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0019",
+      "name": "sakuraT1L",
+      "position": [
+        -12,
+        0,
+        45
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0020",
+      "name": "sakuraT1R",
+      "position": [
+        12,
+        0,
+        45
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0021",
+      "name": "bushT1L",
+      "position": [
+        -8,
+        0,
+        43
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 1.1
+      }
+    },
+    {
+      "id": "o_0022",
+      "name": "bushT1R",
+      "position": [
+        8,
+        0,
+        43
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 1.1
+      }
+    },
+    {
+      "id": "o_0023",
+      "name": "lanT1L",
+      "position": [
+        -3,
+        0,
+        40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0024",
+      "name": "lanT1R",
+      "position": [
+        3,
+        0,
+        40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0025",
+      "name": "t2Floor",
+      "position": [
+        0,
+        0.075,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 42,
+      "h": 0.15,
+      "d": 12,
+      "material": "ground",
+      "collidable": false
+    },
+    {
+      "id": "o_0026",
+      "name": "t2CoverL",
+      "position": [
+        -8,
+        0.675,
+        -40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6,
+      "h": 1.35,
+      "d": 0.8,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0027",
+      "name": "t2CoverR",
+      "position": [
+        8,
+        0.675,
+        -40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6,
+      "h": 1.35,
+      "d": 0.8,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0028",
+      "name": "t2WallWL",
+      "position": [
+        -18,
+        2.25,
+        -40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 8,
+      "h": 4.5,
+      "d": 0.8,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0029",
+      "name": "t2WallWR",
+      "position": [
+        18,
+        2.25,
+        -40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 8,
+      "h": 4.5,
+      "d": 0.8,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0030",
+      "name": "bambooT2L",
+      "position": [
+        -12,
+        0,
+        -46
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 6,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0031",
+      "name": "bambooT2R",
+      "position": [
+        12,
+        0,
+        -46
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 6,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0032",
+      "name": "sakuraT2L",
+      "position": [
+        -15,
+        0,
+        -45
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0033",
+      "name": "sakuraT2R",
+      "position": [
+        15,
+        0,
+        -45
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0034",
+      "name": "bushT2L",
+      "position": [
+        -8,
+        0,
+        -43
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 1.1
+      }
+    },
+    {
+      "id": "o_0035",
+      "name": "bushT2R",
+      "position": [
+        8,
+        0,
+        -43
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 1.1
+      }
+    },
+    {
+      "id": "o_0036",
+      "name": "lanT2L",
+      "position": [
+        -3,
+        0,
+        -40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0037",
+      "name": "lanT2R",
+      "position": [
+        3,
+        0,
+        -40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0038",
+      "name": "mchAW1",
+      "position": [
+        -38,
+        0,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 9,
+        "h": 6.2,
+        "d": 10,
+        "hasVeranda": true,
+        "verandaSide": "east",
+        "hasShoji": true
+      }
+    },
+    {
+      "id": "o_0039",
+      "name": "mchAW2",
+      "position": [
+        -38,
+        0,
+        -10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 9,
+        "h": 6.5,
+        "d": 10,
+        "hasVeranda": true,
+        "verandaSide": "east",
+        "hasShoji": true
+      }
+    },
+    {
+      "id": "o_0040",
+      "name": "mchAW3",
+      "position": [
+        -38,
+        0,
+        10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 9,
+        "h": 6.2,
+        "d": 10,
+        "hasVeranda": true,
+        "verandaSide": "east",
+        "hasShoji": true
+      }
+    },
+    {
+      "id": "o_0041",
+      "name": "mchAW4",
+      "position": [
+        -38,
+        0,
+        26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 9,
+        "h": 6.2,
+        "d": 10,
+        "hasVeranda": true,
+        "verandaSide": "east",
+        "hasShoji": true
+      }
+    },
+    {
+      "id": "o_0042",
+      "name": "mchAWF1",
+      "position": [
+        -38,
+        0,
+        -18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 9,
+        "h": 6.3,
+        "d": 6.6,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": false
+      }
+    },
+    {
+      "id": "o_0043",
+      "name": "mchAWF2",
+      "position": [
+        -38,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 9,
+        "h": 6.4,
+        "d": 10.6,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": false
+      }
+    },
+    {
+      "id": "o_0044",
+      "name": "mchAWF3",
+      "position": [
+        -38,
+        0,
+        18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 9,
+        "h": 6.3,
+        "d": 6.6,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": false
+      }
+    },
+    {
+      "id": "o_0045",
+      "name": "aBackWall",
+      "position": [
+        -42.5,
+        3.75,
+        -1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.2,
+      "h": 7.5,
+      "d": 74,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0046",
+      "name": "mchAE1",
+      "position": [
+        -22,
+        0,
+        -24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6,
+        "d": 8,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": true
+      }
+    },
+    {
+      "id": "o_0047",
+      "name": "mchAE2",
+      "position": [
+        -22,
+        0,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6,
+        "d": 8,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": true
+      }
+    },
+    {
+      "id": "o_0048",
+      "name": "mchAE3",
+      "position": [
+        -22,
+        0,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6,
+        "d": 8,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": true
+      }
+    },
+    {
+      "id": "o_0049",
+      "name": "mchAE4",
+      "position": [
+        -22,
+        0,
+        24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6,
+        "d": 8,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": true
+      }
+    },
+    {
+      "id": "o_0050",
+      "name": "mchAEF1",
+      "position": [
+        -22,
+        0,
+        -16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6,
+        "d": 8.6,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": false
+      }
+    },
+    {
+      "id": "o_0051",
+      "name": "mchAEF2",
+      "position": [
+        -22,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6.2,
+        "d": 8.6,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": false
+      }
+    },
+    {
+      "id": "o_0052",
+      "name": "mchAEF3",
+      "position": [
+        -22,
+        0,
+        16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "machia",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6,
+        "d": 8.6,
+        "hasVeranda": false,
+        "verandaSide": "south",
+        "hasShoji": false
+      }
+    },
+    {
+      "id": "o_0053",
+      "name": "ishimonL",
+      "position": [
+        -32.5,
+        2.25,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 4.5,
+      "h": 4.5,
+      "d": 1.8,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0054",
+      "name": "ishimonR",
+      "position": [
+        -24.5,
+        2.25,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 4.5,
+      "h": 4.5,
+      "d": 1.8,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0055",
+      "name": "ishimonTop",
+      "position": [
+        -28.5,
+        5,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 13,
+      "h": 1,
+      "d": 2.2,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0056",
+      "name": "cartA1",
+      "position": [
+        -28,
+        0.65,
+        -16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 2.8,
+      "h": 1.3,
+      "d": 1.6,
+      "material": "darkWood",
+      "collidable": true
+    },
+    {
+      "id": "o_0057",
+      "name": "cartA2",
+      "position": [
+        -28,
+        0.65,
+        16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 2.8,
+      "h": 1.3,
+      "d": 1.6,
+      "material": "darkWood",
+      "collidable": true
+    },
+    {
+      "id": "o_0058",
+      "name": "crateALong1",
+      "position": [
+        -30,
+        0,
+        28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": true
+      }
+    },
+    {
+      "id": "o_0059",
+      "name": "crateALong2",
+      "position": [
+        -30,
+        0,
+        -28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": false
+      }
+    },
+    {
+      "id": "o_0060",
+      "name": "engawaA",
+      "position": [
+        -25.5,
+        0.22,
+        -16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 2,
+      "h": 0.45,
+      "d": 5,
+      "material": "woodDeck",
+      "collidable": true
+    },
+    {
+      "id": "o_0061",
+      "name": "lanA_S",
+      "position": [
+        -32,
+        0,
+        24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0062",
+      "name": "lanA_GateL",
+      "position": [
+        -31,
+        0,
+        2.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0063",
+      "name": "lanA_GateR",
+      "position": [
+        -26,
+        0,
+        2.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0064",
+      "name": "lanA_N",
+      "position": [
+        -32,
+        0,
+        -18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0065",
+      "name": "sakeBackAlley",
+      "position": [
+        -40.5,
+        0,
+        -27
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": false
+      }
+    },
+    {
+      "id": "o_0066",
+      "name": "stallB1",
+      "position": [
+        26,
+        0,
+        -16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "merchantStall",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 5,
+        "d": 4,
+        "openSide": "south"
+      }
+    },
+    {
+      "id": "o_0067",
+      "name": "stallB5",
+      "position": [
+        26,
+        0,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "merchantStall",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 4.5,
+        "d": 3.8,
+        "openSide": "north"
+      }
+    },
+    {
+      "id": "o_0068",
+      "name": "stallB2",
+      "position": [
+        30,
+        0,
+        -2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "merchantStall",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 4,
+        "d": 4.5,
+        "openSide": "south"
+      }
+    },
+    {
+      "id": "o_0069",
+      "name": "stallB6",
+      "position": [
+        30,
+        0,
+        7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "merchantStall",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 4.5,
+        "d": 4,
+        "openSide": "south"
+      }
+    },
+    {
+      "id": "o_0070",
+      "name": "stallB3",
+      "position": [
+        26,
+        0,
+        13
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "merchantStall",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 5,
+        "d": 4,
+        "openSide": "north"
+      }
+    },
+    {
+      "id": "o_0071",
+      "name": "stallB4",
+      "position": [
+        30,
+        0,
+        24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "merchantStall",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 4,
+        "d": 4,
+        "openSide": "south"
+      }
+    },
+    {
+      "id": "o_0072",
+      "name": "bShortWallW1",
+      "position": [
+        22,
+        2,
+        -15.9
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 10.8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0073",
+      "name": "bShortWallW1b",
+      "position": [
+        22,
+        2,
+        -7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 7,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0074",
+      "name": "bShortWallW2",
+      "position": [
+        22,
+        2,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 7,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0075",
+      "name": "bambooMidB",
+      "position": [
+        22,
+        0,
+        6.75
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 7,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0076",
+      "name": "bShortWallW3",
+      "position": [
+        22,
+        2,
+        16.25
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0077",
+      "name": "bShortWallE0",
+      "position": [
+        34,
+        2,
+        -17.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 7,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0078",
+      "name": "bShortWallE1",
+      "position": [
+        34,
+        2,
+        -10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 6,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0079",
+      "name": "bambooShortSec",
+      "position": [
+        34,
+        0,
+        -3.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 4,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0080",
+      "name": "bShortWallE2",
+      "position": [
+        34,
+        2,
+        6.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 11,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0081",
+      "name": "bShortWallE2b",
+      "position": [
+        34,
+        2,
+        16.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 5,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0082",
+      "name": "bShortWallE3",
+      "position": [
+        34,
+        2,
+        24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0083",
+      "name": "sakeB1",
+      "position": [
+        25,
+        0,
+        -11
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": true
+      }
+    },
+    {
+      "id": "o_0084",
+      "name": "sakeB2",
+      "position": [
+        31,
+        0,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": false
+      }
+    },
+    {
+      "id": "o_0085",
+      "name": "sakeB3",
+      "position": [
+        25,
+        0,
+        16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": true
+      }
+    },
+    {
+      "id": "o_0086",
+      "name": "cartB1",
+      "position": [
+        29,
+        0,
+        -10
+      ],
+      "rotation": [
+        0,
+        0.12,
+        0
+      ],
+      "kind": "component",
+      "component": "woodenCart",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0087",
+      "name": "cartB2",
+      "position": [
+        26,
+        0,
+        19.5
+      ],
+      "rotation": [
+        0,
+        -0.2617993877991494,
+        0
+      ],
+      "kind": "component",
+      "component": "woodenCart",
+      "scale": [
+        1.000000002313488,
+        1,
+        1.000000002313488
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0088",
+      "name": "barrelB1",
+      "position": [
+        28,
+        0.6,
+        -7.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.4,
+      "h": 1.2,
+      "d": 1.4,
+      "material": "crate",
+      "collidable": true
+    },
+    {
+      "id": "o_0089",
+      "name": "barrelB2",
+      "position": [
+        24,
+        0.6,
+        6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.4,
+      "h": 1.2,
+      "d": 1.4,
+      "material": "crate",
+      "collidable": true
+    },
+    {
+      "id": "o_0090",
+      "name": "norenB1",
+      "position": [
+        28,
+        2.9,
+        -5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3.5,
+      "h": 2.2,
+      "d": 0.12,
+      "material": "shoji",
+      "collidable": false
+    },
+    {
+      "id": "o_0091",
+      "name": "norenB2",
+      "position": [
+        28,
+        2.9,
+        15
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3.5,
+      "h": 2.2,
+      "d": 0.12,
+      "material": "shoji",
+      "collidable": false
+    },
+    {
+      "id": "o_0092",
+      "name": "bArc1_Rf",
+      "position": [
+        28,
+        3.85,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6.6,
+      "h": 0.45,
+      "d": 7.5,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0093",
+      "name": "bArc1_P1",
+      "position": [
+        25.2,
+        1.92,
+        -11.35
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0094",
+      "name": "bArc1_P2",
+      "position": [
+        30.8,
+        1.92,
+        -11.35
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0095",
+      "name": "bArc1_P3",
+      "position": [
+        25.2,
+        1.92,
+        -4.65
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0096",
+      "name": "bArc1_P4",
+      "position": [
+        30.8,
+        1.92,
+        -4.65
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0097",
+      "name": "bArc1_Lant",
+      "position": [
+        28,
+        3.1,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0098",
+      "name": "bArc2_Rf",
+      "position": [
+        28,
+        3.85,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6.6,
+      "h": 0.45,
+      "d": 7.5,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0099",
+      "name": "bArc2_P1",
+      "position": [
+        25.2,
+        1.92,
+        4.65
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0100",
+      "name": "bArc2_P2",
+      "position": [
+        30.8,
+        1.92,
+        4.65
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0101",
+      "name": "bArc2_P3",
+      "position": [
+        25.2,
+        1.92,
+        11.35
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0102",
+      "name": "bArc2_P4",
+      "position": [
+        30.8,
+        1.92,
+        11.35
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0103",
+      "name": "bArc2_Lant",
+      "position": [
+        28,
+        3.1,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0104",
+      "name": "bArc3_Rf",
+      "position": [
+        28,
+        3.85,
+        23
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6.6,
+      "h": 0.45,
+      "d": 7,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0105",
+      "name": "bArc3_P1",
+      "position": [
+        25.2,
+        1.92,
+        19.9
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0106",
+      "name": "bArc3_P2",
+      "position": [
+        30.8,
+        1.92,
+        19.9
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0107",
+      "name": "bArc3_P3",
+      "position": [
+        25.2,
+        1.92,
+        26.1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0108",
+      "name": "bArc3_P4",
+      "position": [
+        30.8,
+        1.92,
+        26.1
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.38,
+      "h": 3.85,
+      "d": 0.38,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0109",
+      "name": "bArc3_Lant",
+      "position": [
+        28,
+        3.1,
+        23
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0110",
+      "name": "lanB_S",
+      "position": [
+        31,
+        0,
+        21
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0111",
+      "name": "lanB_Mid",
+      "position": [
+        25,
+        0,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0112",
+      "name": "lanB_N",
+      "position": [
+        25,
+        0,
+        -19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0113",
+      "name": "toriiMid",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "torii",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "scale": 1.15
+      }
+    },
+    {
+      "id": "o_0114",
+      "name": "midAltar",
+      "position": [
+        0,
+        1.4,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 4.4,
+      "h": 2.8,
+      "d": 4.4,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0115",
+      "name": "midAltarOrn",
+      "position": [
+        0,
+        3.35,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.2,
+      "h": 1.1,
+      "d": 1.2,
+      "material": "gold",
+      "collidable": false
+    },
+    {
+      "id": "o_0116",
+      "name": "midPlanterN",
+      "position": [
+        -4.5,
+        1.3,
+        7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6,
+      "h": 2.6,
+      "d": 1.4,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0117",
+      "name": "midPlanterS",
+      "position": [
+        4.5,
+        1.3,
+        -7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6,
+      "h": 2.6,
+      "d": 1.4,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0118",
+      "name": "bushPlanterN",
+      "position": [
+        -4.5,
+        2.6,
+        7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 1.2
+      }
+    },
+    {
+      "id": "o_0119",
+      "name": "bushPlanterS",
+      "position": [
+        4.5,
+        0,
+        -9.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 1.2
+      }
+    },
+    {
+      "id": "o_0120",
+      "name": "sakuraMid",
+      "position": [
+        0,
+        0,
+        9.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0121",
+      "name": "bushMid1",
+      "position": [
+        -6.5,
+        0,
+        3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 0.95
+      }
+    },
+    {
+      "id": "o_0122",
+      "name": "bushMid2",
+      "position": [
+        6,
+        0,
+        -3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 0.95
+      }
+    },
+    {
+      "id": "o_0123",
+      "name": "bushMid3",
+      "position": [
+        -6.5,
+        0,
+        -11
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 0.95
+      }
+    },
+    {
+      "id": "o_0124",
+      "name": "bushMid4",
+      "position": [
+        6.5,
+        0,
+        11
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 0.95
+      }
+    },
+    {
+      "id": "o_0127",
+      "name": "benchMidL",
+      "position": [
+        -5,
+        0.55,
+        -4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 1.1,
+      "d": 1.2,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0128",
+      "name": "benchMidR",
+      "position": [
+        5,
+        0.55,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 1.1,
+      "d": 1.2,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0129",
+      "name": "crateMidA",
+      "position": [
+        -3,
+        0,
+        -7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": true
+      }
+    },
+    {
+      "id": "o_0130",
+      "name": "crateMidB",
+      "position": [
+        3,
+        0,
+        7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": false
+      }
+    },
+    {
+      "id": "o_0131",
+      "name": "crateMidS",
+      "position": [
+        4,
+        0.65,
+        12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 2,
+      "h": 1.3,
+      "d": 2,
+      "material": "crate",
+      "collidable": true
+    },
+    {
+      "id": "o_0132",
+      "name": "crateMidN",
+      "position": [
+        -2,
+        0.5,
+        -9.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 2,
+      "h": 1.3,
+      "d": 2,
+      "material": "crate",
+      "collidable": true
+    },
+    {
+      "id": "o_0133",
+      "name": "lanMidL",
+      "position": [
+        -6,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0134",
+      "name": "lanMidR",
+      "position": [
+        6,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0135",
+      "name": "lanMid_S",
+      "position": [
+        -5,
+        0,
+        14
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0136",
+      "name": "lanMid_S2",
+      "position": [
+        5,
+        0,
+        14
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0137",
+      "name": "lanMid_N",
+      "position": [
+        -4,
+        0,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0138",
+      "name": "lanMid_N2",
+      "position": [
+        4,
+        0,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0139",
+      "name": "lanToriiL",
+      "position": [
+        -2.8,
+        7,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0140",
+      "name": "lanToriiR",
+      "position": [
+        2.8,
+        7,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0141",
+      "name": "midWallW1",
+      "position": [
+        -8,
+        2,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0142",
+      "name": "midWallW2",
+      "position": [
+        -8,
+        2,
+        10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 10,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0143",
+      "name": "midWallWFill",
+      "position": [
+        -8,
+        2,
+        1.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 7.4,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0144",
+      "name": "midWallE1",
+      "position": [
+        8,
+        2,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0145",
+      "name": "midWallE2",
+      "position": [
+        8,
+        2,
+        10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 10,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0146",
+      "name": "midWallEFill",
+      "position": [
+        8,
+        2,
+        1.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 7.4,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0147",
+      "name": "midWallNL",
+      "position": [
+        -5.5,
+        2,
+        -14
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5,
+      "h": 4,
+      "d": 0.8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0148",
+      "name": "midWallNR",
+      "position": [
+        5.5,
+        2,
+        -14
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5,
+      "h": 4,
+      "d": 0.8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0149",
+      "name": "nwBlock",
+      "position": [
+        -37.3,
+        3.75,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 29.4,
+      "h": 7.5,
+      "d": 16.5,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0150",
+      "name": "nwBlockRoof",
+      "position": [
+        -37.3,
+        7.8,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 30.4,
+      "h": 0.6,
+      "d": 17.5,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0151",
+      "name": "t2SpawnWestWall",
+      "position": [
+        -22,
+        2.75,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.2,
+      "h": 5.5,
+      "d": 16,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0152",
+      "name": "swBlock",
+      "position": [
+        -37.3,
+        3.75,
+        44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 29.4,
+      "h": 7.5,
+      "d": 16.5,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0153",
+      "name": "swBlockRoof",
+      "position": [
+        -37.3,
+        7.8,
+        44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 30.4,
+      "h": 0.6,
+      "d": 17.5,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0154",
+      "name": "t1SpawnWestWall",
+      "position": [
+        -22,
+        2.75,
+        44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.2,
+      "h": 5.5,
+      "d": 16,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0155",
+      "name": "aSiteFloor",
+      "position": [
+        -27,
+        0.2,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 20,
+      "h": 0.4,
+      "d": 12,
+      "material": "woodDeck",
+      "collidable": true
+    },
+    {
+      "id": "o_0156",
+      "name": "zenGrdA",
+      "position": [
+        -24,
+        0.42,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "ground",
+      "width": 14,
+      "height": 10,
+      "material": "zenSand",
+      "collidable": false
+    },
+    {
+      "id": "o_0157",
+      "name": "teaBody",
+      "position": [
+        -33,
+        2.5,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 5,
+      "d": 8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0158",
+      "name": "teaPFL",
+      "position": [
+        -38.04,
+        2.5,
+        -24.96
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.62,
+      "h": 5,
+      "d": 0.62,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0159",
+      "name": "teaPFR",
+      "position": [
+        -27.96,
+        2.5,
+        -24.96
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.62,
+      "h": 5,
+      "d": 0.62,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0160",
+      "name": "teaPBL",
+      "position": [
+        -38.04,
+        2.5,
+        -33.04
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.62,
+      "h": 5,
+      "d": 0.62,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0161",
+      "name": "teaPBR",
+      "position": [
+        -27.96,
+        2.5,
+        -33.04
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.62,
+      "h": 5,
+      "d": 0.62,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0162",
+      "name": "teaRoof",
+      "position": [
+        -33,
+        5.3,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 12.5,
+      "h": 0.55,
+      "d": 10.5,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0163",
+      "name": "teaRoofPk",
+      "position": [
+        -33,
+        5.85,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 8,
+      "h": 0.5,
+      "d": 7,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0164",
+      "name": "teaVeranda",
+      "position": [
+        -33,
+        0.6,
+        -24.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 0.4,
+      "d": 2,
+      "material": "woodDeck",
+      "collidable": true
+    },
+    {
+      "id": "o_0165",
+      "name": "teaWinL",
+      "position": [
+        -36,
+        3.3,
+        -24.88
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.9,
+      "h": 1.6,
+      "d": 0.12,
+      "material": "windowGlow",
+      "collidable": false
+    },
+    {
+      "id": "o_0166",
+      "name": "teaWinR",
+      "position": [
+        -30,
+        3.3,
+        -24.88
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.9,
+      "h": 1.6,
+      "d": 0.12,
+      "material": "windowGlow",
+      "collidable": false
+    },
+    {
+      "id": "o_0167",
+      "name": "aPlanter",
+      "position": [
+        -23,
+        0.825,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3.5,
+      "h": 1.25,
+      "d": 1.2,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0168",
+      "name": "crateASite",
+      "position": [
+        -27,
+        0,
+        -34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": false
+      }
+    },
+    {
+      "id": "o_0169",
+      "name": "sakuraASite",
+      "position": [
+        -20,
+        0,
+        -34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0170",
+      "name": "bushA1",
+      "position": [
+        -24,
+        0,
+        -25
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 1.15
+      }
+    },
+    {
+      "id": "o_0171",
+      "name": "bushA2",
+      "position": [
+        -32,
+        0,
+        -34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 0.95
+      }
+    },
+    {
+      "id": "o_0172",
+      "name": "lanAL",
+      "position": [
+        -20,
+        0,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0173",
+      "name": "lanAR",
+      "position": [
+        -35,
+        0,
+        -33
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0174",
+      "name": "lanTeaHang1",
+      "position": [
+        -30,
+        2.6,
+        -24.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0175",
+      "name": "lanTeaHang2",
+      "position": [
+        -36,
+        2.6,
+        -24.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0176",
+      "name": "bambooAShort",
+      "position": [
+        -17,
+        0,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 5,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0177",
+      "name": "aWallN",
+      "position": [
+        -31,
+        2.25,
+        -36
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 30,
+      "h": 4.5,
+      "d": 2.4,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0178",
+      "name": "aWallW",
+      "position": [
+        -38,
+        2.25,
+        -27
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4.5,
+      "d": 12,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0179",
+      "name": "aWallSL",
+      "position": [
+        -36.5,
+        2.25,
+        -22
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 11,
+      "h": 4.5,
+      "d": 0.8,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0180",
+      "name": "aWallSR",
+      "position": [
+        -20,
+        2.25,
+        -22
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6,
+      "h": 4.5,
+      "d": 0.8,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0181",
+      "name": "seBlock",
+      "position": [
+        37.3,
+        3.75,
+        44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 29.4,
+      "h": 7.5,
+      "d": 16.5,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0182",
+      "name": "seBlockRoof",
+      "position": [
+        37.3,
+        7.8,
+        44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 30.4,
+      "h": 0.6,
+      "d": 17.5,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0183",
+      "name": "t1SpawnEastWall",
+      "position": [
+        22,
+        2.75,
+        44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.2,
+      "h": 5.5,
+      "d": 16,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0184",
+      "name": "bPlatform",
+      "position": [
+        27,
+        0.45,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 20,
+      "h": 0.9,
+      "d": 12,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0185",
+      "name": "bStep1",
+      "position": [
+        27,
+        0.225,
+        -22.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 0.45,
+      "d": 2,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0186",
+      "name": "bStep2",
+      "position": [
+        27,
+        0.675,
+        -24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 0.45,
+      "d": 2,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0187",
+      "name": "toriiBSite",
+      "position": [
+        27,
+        0,
+        -22
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "torii",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "scale": 1
+      }
+    },
+    {
+      "id": "o_0188",
+      "name": "bellBody",
+      "position": [
+        35,
+        3.7,
+        -32
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 4,
+      "h": 6.5,
+      "d": 4,
+      "material": "timber",
+      "collidable": true
+    },
+    {
+      "id": "o_0189",
+      "name": "bellRoof",
+      "position": [
+        35,
+        7.2,
+        -32
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 6,
+      "h": 0.55,
+      "d": 6,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0190",
+      "name": "bellRoofPk",
+      "position": [
+        35,
+        7.75,
+        -32
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 4,
+      "h": 0.5,
+      "d": 4,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0191",
+      "name": "bellGold",
+      "position": [
+        35,
+        5.5,
+        -32
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.2,
+      "h": 1.5,
+      "d": 1.2,
+      "material": "gold",
+      "collidable": false
+    },
+    {
+      "id": "o_0192",
+      "name": "bAltar",
+      "position": [
+        27,
+        1.5,
+        -30
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 1.2,
+      "d": 2,
+      "material": "gold",
+      "collidable": true
+    },
+    {
+      "id": "o_0193",
+      "name": "bBarrierL",
+      "position": [
+        21,
+        1.075,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3.5,
+      "h": 1.25,
+      "d": 0.8,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0194",
+      "name": "bBarrierR",
+      "position": [
+        33,
+        1.075,
+        -29
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3.5,
+      "h": 1.25,
+      "d": 0.8,
+      "material": "stone",
+      "collidable": true
+    },
+    {
+      "id": "o_0195",
+      "name": "sakuraBSite",
+      "position": [
+        34,
+        0,
+        -25
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0196",
+      "name": "bushB1",
+      "position": [
+        21,
+        0,
+        -25
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 1.15
+      }
+    },
+    {
+      "id": "o_0197",
+      "name": "bushB2",
+      "position": [
+        31,
+        0,
+        -34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bush",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "radius": 0.95
+      }
+    },
+    {
+      "id": "o_0198",
+      "name": "crateBSite",
+      "position": [
+        30,
+        0.9,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": false
+      }
+    },
+    {
+      "id": "o_0199",
+      "name": "sakeBSiteAltar",
+      "position": [
+        23,
+        0.9,
+        -27
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": true
+      }
+    },
+    {
+      "id": "o_0200",
+      "name": "sakeBSiteSouth",
+      "position": [
+        23,
+        0,
+        -22.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": false
+      }
+    },
+    {
+      "id": "o_0201",
+      "name": "lanBL",
+      "position": [
+        20,
+        0,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0202",
+      "name": "lanBR",
+      "position": [
+        34,
+        0,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0203",
+      "name": "lanShrineHondoL",
+      "position": [
+        20,
+        0,
+        -37
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0204",
+      "name": "lanShrineHondoR",
+      "position": [
+        34,
+        0,
+        -37
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0205",
+      "name": "lanHondoHangL",
+      "position": [
+        23,
+        4.2,
+        -37.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0206",
+      "name": "lanHondoHangR",
+      "position": [
+        31,
+        4.2,
+        -37.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0207",
+      "name": "shrineHondoBody",
+      "position": [
+        27,
+        3.75,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 24,
+      "h": 7.5,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0208",
+      "name": "shrineCol1",
+      "position": [
+        17,
+        3.75,
+        -38
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 7.5,
+      "d": 0.8,
+      "material": "timber",
+      "collidable": true
+    },
+    {
+      "id": "o_0209",
+      "name": "shrineCol2",
+      "position": [
+        23,
+        3.75,
+        -38
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 7.5,
+      "d": 0.8,
+      "material": "timber",
+      "collidable": true
+    },
+    {
+      "id": "o_0210",
+      "name": "shrineCol3",
+      "position": [
+        31,
+        3.75,
+        -38
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 7.5,
+      "d": 0.8,
+      "material": "timber",
+      "collidable": true
+    },
+    {
+      "id": "o_0211",
+      "name": "shrineCol4",
+      "position": [
+        37,
+        3.75,
+        -38
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 7.5,
+      "d": 0.8,
+      "material": "timber",
+      "collidable": true
+    },
+    {
+      "id": "o_0212",
+      "name": "shrineShoji",
+      "position": [
+        27,
+        2.25,
+        -37.9
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 4.5,
+      "d": 0.2,
+      "material": "shoji",
+      "collidable": false
+    },
+    {
+      "id": "o_0213",
+      "name": "shrineGoldTrim",
+      "position": [
+        27,
+        4.6,
+        -37.8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10.4,
+      "h": 0.3,
+      "d": 0.3,
+      "material": "gold",
+      "collidable": false
+    },
+    {
+      "id": "o_0214",
+      "name": "shrineShimenawa",
+      "position": [
+        27,
+        6.2,
+        -37.8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 12,
+      "h": 0.45,
+      "d": 0.45,
+      "material": "straw",
+      "collidable": false
+    },
+    {
+      "id": "o_0215",
+      "name": "shrineEaves",
+      "position": [
+        27,
+        7.8,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 28,
+      "h": 0.8,
+      "d": 15,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0216",
+      "name": "shrineRidge",
+      "position": [
+        27,
+        8.6,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 20,
+      "h": 0.9,
+      "d": 10,
+      "material": "tileRoof",
+      "collidable": true
+    },
+    {
+      "id": "o_0217",
+      "name": "shrineRidgePeak",
+      "position": [
+        27,
+        9.3,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 14,
+      "h": 0.6,
+      "d": 6,
+      "material": "timber",
+      "collidable": true
+    },
+    {
+      "id": "o_0218",
+      "name": "shrineFlankW",
+      "position": [
+        15,
+        3.75,
+        -44
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 7.5,
+      "d": 12,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0219",
+      "name": "shrineFlankE",
+      "position": [
+        39,
+        3.75,
+        -42
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 7.5,
+      "d": 16,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0220",
+      "name": "bWallN",
+      "position": [
+        27,
+        2.25,
+        -36
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 22,
+      "h": 4.5,
+      "d": 0.8,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0221",
+      "name": "bWallE1",
+      "position": [
+        38,
+        2.25,
+        -34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4.5,
+      "d": 4,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0222",
+      "name": "bWallE2",
+      "position": [
+        38,
+        2.25,
+        -23.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4.5,
+      "d": 3,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0223",
+      "name": "bWallW_South",
+      "position": [
+        16.5,
+        2.25,
+        -25
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4.5,
+      "d": 6,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0224",
+      "name": "bWallW_North",
+      "position": [
+        16.5,
+        2.25,
+        -33
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4.5,
+      "d": 6,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0225",
+      "name": "toriiSecApproach",
+      "position": [
+        39,
+        0,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "torii",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "scale": 0.85
+      }
+    },
+    {
+      "id": "o_0226",
+      "name": "lanSecApproach1",
+      "position": [
+        38,
+        0,
+        -22
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0227",
+      "name": "lanSecApproach2",
+      "position": [
+        41,
+        0,
+        -28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0228",
+      "name": "bambooBSiteFlank",
+      "position": [
+        43,
+        0,
+        -28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 8,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0229",
+      "name": "secCapNorth",
+      "position": [
+        45,
+        3.75,
+        -32.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 14,
+      "h": 7.5,
+      "d": 1.6,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0230",
+      "name": "secCapSouth",
+      "position": [
+        45,
+        3.75,
+        32
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 14,
+      "h": 7.5,
+      "d": 1.6,
+      "material": "wall",
+      "collidable": true
+    },
+    {
+      "id": "o_0231",
+      "name": "secretWW1",
+      "position": [
+        38,
+        1.75,
+        -18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 3.5,
+      "d": 22,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0232",
+      "name": "secretWW_Mid",
+      "position": [
+        38,
+        1.75,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 3.5,
+      "d": 6,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0233",
+      "name": "secretWW2",
+      "position": [
+        38,
+        1.75,
+        18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 3.5,
+      "d": 22,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0234",
+      "name": "secWallEastN",
+      "position": [
+        43,
+        2,
+        -18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 22,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0235",
+      "name": "secWallEastMid",
+      "position": [
+        43,
+        2,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 10,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0236",
+      "name": "secWallEastS",
+      "position": [
+        43,
+        2,
+        18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 22,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0237",
+      "name": "secCopingN",
+      "position": [
+        43,
+        4.15,
+        -18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.4,
+      "h": 0.35,
+      "d": 22,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0238",
+      "name": "secCopingMid",
+      "position": [
+        43,
+        4.15,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.4,
+      "h": 0.35,
+      "d": 10,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0239",
+      "name": "secCopingS",
+      "position": [
+        43,
+        4.15,
+        18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.4,
+      "h": 0.35,
+      "d": 22,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0240",
+      "name": "kuraE1",
+      "position": [
+        47.5,
+        0,
+        -20
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "kura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6.5,
+        "d": 12
+      }
+    },
+    {
+      "id": "o_0241",
+      "name": "kuraE2",
+      "position": [
+        47.5,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "kura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6.8,
+        "d": 12
+      }
+    },
+    {
+      "id": "o_0242",
+      "name": "kuraE3",
+      "position": [
+        47.5,
+        0,
+        20
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "kura",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "w": 7,
+        "h": 6.5,
+        "d": 12
+      }
+    },
+    {
+      "id": "o_0243",
+      "name": "kuraCapN",
+      "position": [
+        47.5,
+        2.75,
+        -31
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 9.5,
+      "h": 5.5,
+      "d": 0.8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0244",
+      "name": "kuraCapS",
+      "position": [
+        47.5,
+        2.75,
+        31
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 9.5,
+      "h": 5.5,
+      "d": 0.8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0245",
+      "name": "secBeam0",
+      "position": [
+        40.5,
+        3.2,
+        -24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5.2,
+      "h": 0.3,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0246",
+      "name": "secPostW0",
+      "position": [
+        38.3,
+        1.6,
+        -24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0247",
+      "name": "secPostE0",
+      "position": [
+        42.7,
+        1.6,
+        -24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0248",
+      "name": "secLant0",
+      "position": [
+        40.5,
+        2.65,
+        -24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0249",
+      "name": "secBeam1",
+      "position": [
+        40.5,
+        3.2,
+        -16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5.2,
+      "h": 0.3,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0250",
+      "name": "secPostW1",
+      "position": [
+        38.3,
+        1.6,
+        -16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0251",
+      "name": "secPostE1",
+      "position": [
+        42.7,
+        1.6,
+        -16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0252",
+      "name": "secLant1",
+      "position": [
+        40.5,
+        2.65,
+        -16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0253",
+      "name": "secBeam2",
+      "position": [
+        40.5,
+        3.2,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5.2,
+      "h": 0.3,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0254",
+      "name": "secPostW2",
+      "position": [
+        38.3,
+        1.6,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0255",
+      "name": "secPostE2",
+      "position": [
+        42.7,
+        1.6,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0256",
+      "name": "secLant2",
+      "position": [
+        40.5,
+        2.65,
+        -8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0257",
+      "name": "secBeam3",
+      "position": [
+        40.5,
+        3.2,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5.2,
+      "h": 0.3,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0258",
+      "name": "secPostW3",
+      "position": [
+        38.3,
+        1.6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0259",
+      "name": "secPostE3",
+      "position": [
+        42.7,
+        1.6,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0260",
+      "name": "secLant3",
+      "position": [
+        40.5,
+        2.65,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0261",
+      "name": "secBeam4",
+      "position": [
+        40.5,
+        3.2,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5.2,
+      "h": 0.3,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0262",
+      "name": "secPostW4",
+      "position": [
+        38.3,
+        1.6,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0263",
+      "name": "secPostE4",
+      "position": [
+        42.7,
+        1.6,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0264",
+      "name": "secLant4",
+      "position": [
+        40.5,
+        2.65,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0265",
+      "name": "secBeam5",
+      "position": [
+        40.5,
+        3.2,
+        16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5.2,
+      "h": 0.3,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0266",
+      "name": "secPostW5",
+      "position": [
+        38.3,
+        1.6,
+        16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0267",
+      "name": "secPostE5",
+      "position": [
+        42.7,
+        1.6,
+        16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0268",
+      "name": "secLant5",
+      "position": [
+        40.5,
+        2.65,
+        16
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0269",
+      "name": "secBeam6",
+      "position": [
+        40.5,
+        3.2,
+        24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 5.2,
+      "h": 0.3,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0270",
+      "name": "secPostW6",
+      "position": [
+        38.3,
+        1.6,
+        24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0271",
+      "name": "secPostE6",
+      "position": [
+        42.7,
+        1.6,
+        24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.3,
+      "h": 3.2,
+      "d": 0.3,
+      "material": "timber",
+      "collidable": false
+    },
+    {
+      "id": "o_0272",
+      "name": "secLant6",
+      "position": [
+        40.5,
+        2.65,
+        24
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "hangingLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0273",
+      "name": "bambooSecS",
+      "position": [
+        40.5,
+        0,
+        30.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 4,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0274",
+      "name": "bambooSecN",
+      "position": [
+        40.5,
+        0,
+        -30.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 4,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0275",
+      "name": "norenSecN",
+      "position": [
+        38.6,
+        2.4,
+        -5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3.4,
+      "h": 2.4,
+      "d": 0.12,
+      "material": "shoji",
+      "collidable": false
+    },
+    {
+      "id": "o_0276",
+      "name": "norenSecS",
+      "position": [
+        38.6,
+        2.4,
+        5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3.4,
+      "h": 2.4,
+      "d": 0.12,
+      "material": "shoji",
+      "collidable": false
+    },
+    {
+      "id": "o_0277",
+      "name": "secCrate",
+      "position": [
+        40.5,
+        0,
+        -3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": false
+      }
+    },
+    {
+      "id": "o_0278",
+      "name": "secSake",
+      "position": [
+        40.5,
+        0,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": true
+      }
+    },
+    {
+      "id": "o_0279",
+      "name": "secLanMid",
+      "position": [
+        40.5,
+        0,
+        0.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0280",
+      "name": "secLanNorth",
+      "position": [
+        40.5,
+        0,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0281",
+      "name": "secLanSouth",
+      "position": [
+        40.5,
+        0,
+        26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0282",
+      "name": "aShortWW",
+      "position": [
+        -17.5,
+        2,
+        -19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.7,
+      "h": 4,
+      "d": 6,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0283",
+      "name": "aShortWE",
+      "position": [
+        -13.5,
+        2,
+        -19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.7,
+      "h": 4,
+      "d": 6,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0284",
+      "name": "aShortRf",
+      "position": [
+        -15.5,
+        4.1,
+        -19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 4.7,
+      "h": 0.35,
+      "d": 6.5,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0285",
+      "name": "aShortSt1",
+      "position": [
+        -15.5,
+        0.1,
+        -16.6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 0.2,
+      "d": 0.8,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0286",
+      "name": "aShortSt2",
+      "position": [
+        -15.5,
+        0.3,
+        -17.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 0.2,
+      "d": 0.8,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0287",
+      "name": "aShortSt3",
+      "position": [
+        -15.5,
+        0.5,
+        -18.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 0.2,
+      "d": 0.8,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0288",
+      "name": "midToAWN",
+      "position": [
+        -13,
+        1.75,
+        -14.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 3.5,
+      "d": 0.7,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0289",
+      "name": "midToAS",
+      "position": [
+        -13,
+        1.75,
+        -18.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 3.5,
+      "d": 0.7,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0290",
+      "name": "midToAWS_N",
+      "position": [
+        -8.5,
+        1.75,
+        -14.6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.7,
+      "h": 3.5,
+      "d": 1.2,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0291",
+      "name": "midToAWS_S",
+      "position": [
+        -8.5,
+        1.75,
+        -17.7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.7,
+      "h": 3.5,
+      "d": 1.4,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0292",
+      "name": "midToACrate",
+      "position": [
+        -11.5,
+        0.65,
+        -15
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.8,
+      "h": 1.3,
+      "d": 1.8,
+      "material": "crate",
+      "collidable": true
+    },
+    {
+      "id": "o_0293",
+      "name": "bShortWW",
+      "position": [
+        13.5,
+        2,
+        -19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.7,
+      "h": 4,
+      "d": 6,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0294",
+      "name": "bShortWE",
+      "position": [
+        17.5,
+        2,
+        -19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.7,
+      "h": 4,
+      "d": 6,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0295",
+      "name": "bShortRf",
+      "position": [
+        15.5,
+        4.1,
+        -19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 4.7,
+      "h": 0.35,
+      "d": 6.5,
+      "material": "tileRoof",
+      "collidable": false
+    },
+    {
+      "id": "o_0296",
+      "name": "bShortSt1",
+      "position": [
+        15.5,
+        0.1,
+        -16.6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 0.2,
+      "d": 0.8,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0297",
+      "name": "bShortSt2",
+      "position": [
+        15.5,
+        0.3,
+        -17.4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 0.2,
+      "d": 0.8,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0298",
+      "name": "bShortSt3",
+      "position": [
+        15.5,
+        0.5,
+        -18.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 3,
+      "h": 0.2,
+      "d": 0.8,
+      "material": "ground",
+      "collidable": true
+    },
+    {
+      "id": "o_0299",
+      "name": "bShortPeek",
+      "position": [
+        14.5,
+        0.5,
+        -19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.2,
+      "h": 1,
+      "d": 0.5,
+      "material": "crate",
+      "collidable": true
+    },
+    {
+      "id": "o_0300",
+      "name": "midToBWN",
+      "position": [
+        13,
+        1.75,
+        -14.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 3.5,
+      "d": 0.7,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0301",
+      "name": "midToBS",
+      "position": [
+        13,
+        1.75,
+        -18.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 10,
+      "h": 3.5,
+      "d": 0.7,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0302",
+      "name": "midToBWS_N",
+      "position": [
+        8.5,
+        1.75,
+        -14.6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.7,
+      "h": 3.5,
+      "d": 1.2,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0303",
+      "name": "midToBWS_S",
+      "position": [
+        8.5,
+        1.75,
+        -17.7
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.7,
+      "h": 3.5,
+      "d": 1.4,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0304",
+      "name": "midToBCrate",
+      "position": [
+        11.5,
+        0.65,
+        -15
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 1.8,
+      "h": 1.3,
+      "d": 1.8,
+      "material": "crate",
+      "collidable": true
+    },
+    {
+      "id": "o_0305",
+      "name": "t1toAWall",
+      "position": [
+        -14,
+        2,
+        34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0306",
+      "name": "t1toBWall",
+      "position": [
+        14,
+        2,
+        34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0307",
+      "name": "t2toAWall",
+      "position": [
+        -14,
+        2,
+        -34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0308",
+      "name": "t2toBWall",
+      "position": [
+        14,
+        2,
+        -34
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 8,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0309",
+      "name": "appALongW1",
+      "position": [
+        -18,
+        2,
+        28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0310",
+      "name": "appALongW2",
+      "position": [
+        -18,
+        2,
+        -28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0311",
+      "name": "appBShortE1",
+      "position": [
+        18,
+        2,
+        28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0312",
+      "name": "appBShortE2",
+      "position": [
+        18,
+        2,
+        -28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 4,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0313",
+      "name": "midAppSWL",
+      "position": [
+        -8,
+        1.75,
+        28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 3.5,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0314",
+      "name": "midAppSWR",
+      "position": [
+        8,
+        1.75,
+        28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 3.5,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0315",
+      "name": "midAppNWL",
+      "position": [
+        -8,
+        1.75,
+        -28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 3.5,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0316",
+      "name": "midAppNWR",
+      "position": [
+        8,
+        1.75,
+        -28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "box",
+      "w": 0.8,
+      "h": 3.5,
+      "d": 12,
+      "material": "plaster",
+      "collidable": true
+    },
+    {
+      "id": "o_0317",
+      "name": "cartAStreet",
+      "position": [
+        -12,
+        0,
+        6
+      ],
+      "rotation": [
+        0,
+        0.4,
+        0
+      ],
+      "kind": "component",
+      "component": "woodenCart",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0318",
+      "name": "crateAStreet",
+      "position": [
+        -10.5,
+        0,
+        -4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": false
+      }
+    },
+    {
+      "id": "o_0319",
+      "name": "sakeAStreet",
+      "position": [
+        -16,
+        0,
+        -10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": true
+      }
+    },
+    {
+      "id": "o_0320",
+      "name": "bambooAStreet",
+      "position": [
+        -16.5,
+        0,
+        10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 5,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0321",
+      "name": "lanAStreetS",
+      "position": [
+        -10,
+        0,
+        14
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0322",
+      "name": "lanAStreetN",
+      "position": [
+        -10,
+        0,
+        -11
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0323",
+      "name": "cartBStreet",
+      "position": [
+        12,
+        0,
+        -6
+      ],
+      "rotation": [
+        0,
+        -0.4,
+        0
+      ],
+      "kind": "component",
+      "component": "woodenCart",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0324",
+      "name": "crateBStreet",
+      "position": [
+        10.5,
+        0,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "crateCluster",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "withStack": false
+      }
+    },
+    {
+      "id": "o_0325",
+      "name": "sakeBStreet",
+      "position": [
+        16,
+        0,
+        10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "sakeBarrels",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "isLarge": true
+      }
+    },
+    {
+      "id": "o_0326",
+      "name": "bambooBStreet",
+      "position": [
+        16.5,
+        0,
+        -10
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "bamboo",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {
+        "length": 5,
+        "alongZ": true
+      }
+    },
+    {
+      "id": "o_0327",
+      "name": "lanBStreetS",
+      "position": [
+        10,
+        0,
+        12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    },
+    {
+      "id": "o_0328",
+      "name": "lanBStreetN",
+      "position": [
+        10,
+        0,
+        -11
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "kind": "component",
+      "component": "stoneLantern",
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "params": {}
+    }
+  ],
+  "lights": [
+    {
+      "id": "o_0329",
+      "name": "Light_o_0329",
+      "position": [
+        -5,
+        2,
+        14
+      ],
+      "color": [
+        1,
+        0.8,
+        0.45
+      ],
+      "intensity": 1.2,
+      "range": 12
+    }
+  ]
+}
