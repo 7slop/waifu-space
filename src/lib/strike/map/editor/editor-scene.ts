@@ -160,6 +160,12 @@ export class StrikeMapEditorController {
 
   onGizmoMode: 'translate' | 'rotate' | 'scale' = 'translate';
 
+  // History snapshots are serialized layouts captured *before* each mutation,
+  // so undo() can cold-swap the working layout and rebuild the scene.
+  private history: string[] = [];
+  private readonly historyLimit = 100;
+  private clipboard: { kind: 'object' | 'light' | 'spawn'; data: MapObject | MapLight | MapSpawn } | null = null;
+
   constructor(canvas: HTMLCanvasElement, onChange?: () => void) {
     this.canvas = canvas;
     this.onChange = onChange;
@@ -676,6 +682,7 @@ export class StrikeMapEditorController {
   private afterGizmoDrag(): void {
     const control = this.gizmo.attachedMesh;
     if (!control) return;
+    this.recordHistory();
 
     const kind = this.getSelectionKind();
 
@@ -743,6 +750,7 @@ export class StrikeMapEditorController {
   }
 
   addBox(): void {
+    this.recordHistory();
     const id = nextEditorId(this.layout);
     const box: MapBoxObject = {
       id,
@@ -765,6 +773,7 @@ export class StrikeMapEditorController {
   addComponent(componentId: string): void {
     const def = COMPONENTS.find((c) => c.id === componentId);
     if (!def) return;
+    this.recordHistory();
     const position: [number, number, number] = [0, 0, 0];
     const projected = this.projectOnGround();
     position[0] = projected.x;
@@ -777,6 +786,7 @@ export class StrikeMapEditorController {
   }
 
   addLight(): void {
+    this.recordHistory();
     const id = nextEditorId(this.layout);
     const projected = this.projectOnGround();
     const light: MapLight = {
@@ -796,6 +806,7 @@ export class StrikeMapEditorController {
   }
 
   addSpawn(): void {
+    this.recordHistory();
     const projected = this.projectOnGround();
     const spawn: MapSpawn = { position: [projected.x, 1, projected.z], yaw: 0 };
     this.layout.spawns.push(spawn);
@@ -816,6 +827,7 @@ export class StrikeMapEditorController {
   }
 
   deleteSelected(): void {
+    this.recordHistory();
     const kind = this.getSelectionKind();
     if (kind === 'light') {
       this.deleteLight();
@@ -861,24 +873,118 @@ export class StrikeMapEditorController {
     this.onChange?.();
   }
 
+  // ── History (undo) ───────────────────────────────────────────────────────
+
+  /** Snapshots the current layout so the next mutation can be undone. */
+  private recordHistory(): void {
+    this.history.push(this.serialize());
+    if (this.history.length > this.historyLimit) this.history.shift();
+  }
+
+  /** Reverts the last edit by swapping in its pre-change layout snapshot. */
+  undo(): void {
+    const prev = this.history.pop();
+    if (prev === undefined) return;
+    try {
+      this.layout = parseLayout(prev);
+      const reselect = this.selectedId;
+      this.rebuildWorld();
+      this.buildSpawnMarkers();
+      this.dirty = true;
+      if (reselect && this.controlOf.has(reselect)) this.selectById(reselect);
+      this.onChange?.();
+    } catch {
+      /* malformed snapshot — ignore */
+    }
+  }
+
+  get canUndo(): boolean {
+    return this.history.length > 0;
+  }
+
+  // ── Clipboard (copy / cut / paste) ───────────────────────────────────────
+
+  copySelected(): boolean {
+    const done = this.captureSelectedToClipboard();
+    if (done) this.onChange?.();
+    return done;
+  }
+
+  cutSelected(): boolean {
+    if (!this.copySelected()) return false;
+    this.deleteSelected();
+    return true;
+  }
+
+  pasteSelected(): void {
+    if (!this.clipboard) return;
+    this.recordHistory();
+    const data = JSON.parse(JSON.stringify(this.clipboard.data)) as MapObject | MapLight | MapSpawn;
+
+    if (this.clipboard.kind === 'spawn') {
+      const spawn = data as MapSpawn;
+      spawn.position = [spawn.position[0], spawn.position[1], spawn.position[2] + 1];
+      this.layout.spawns.push(spawn);
+      this.buildSpawnMarkers();
+      this.dirty = true;
+      this.selectSpawn(this.layout.spawns.length - 1);
+    } else if (this.clipboard.kind === 'light') {
+      const copy = data as MapLight;
+      copy.id = nextEditorId(this.layout);
+      copy.name = `Light_${copy.id}`;
+      copy.position = [copy.position[0], copy.position[1], copy.position[2] + 1];
+      this.layout.lights.push(copy);
+      buildLayoutLight(this.b, copy, true);
+      const marker = this.findControlMesh(copy.id);
+      if (marker) this.controlOf.set(copy.id, marker);
+      this.dirty = true;
+      this.selectById(copy.id);
+    } else {
+      const copy = data as MapObject;
+      copy.id = nextEditorId(this.layout);
+      copy.name = `${copy.name} (copy)`;
+      copy.position = [copy.position[0], copy.position[1], copy.position[2] + 1];
+      this.layout.objects.push(copy);
+      this.buildMapObjectNow(copy);
+      this.dirty = true;
+      this.selectByObject(copy);
+    }
+    this.onChange?.();
+  }
+
+  private captureSelectedToClipboard(): boolean {
+    const kind = this.getSelectionKind();
+    if (kind === 'spawn') {
+      const i = this.selectedSpawnIndex;
+      if (i === null || i === undefined) return false;
+      const s = this.layout.spawns[i];
+      if (!s) return false;
+      this.clipboard = { kind: 'spawn', data: JSON.parse(JSON.stringify(s)) as MapSpawn };
+      return true;
+    }
+    const id = this.selectedId;
+    if (!id) return false;
+    if (kind === 'light') {
+      const l = this.layout.lights.find((o) => o.id === id);
+      if (!l) return false;
+      this.clipboard = { kind: 'light', data: JSON.parse(JSON.stringify(l)) as MapLight };
+      return true;
+    }
+    const o = this.layout.objects.find((obj) => obj.id === id);
+    if (!o) return false;
+    this.clipboard = { kind: 'object', data: JSON.parse(JSON.stringify(o)) as MapObject };
+    return true;
+  }
+
   duplicateSelected(): void {
-    const id = this.selectedObjectId;
-    if (!id) return;
-    const src = this.layout.objects.find((o) => o.id === id);
-    if (!src) return;
-    const copy = JSON.parse(JSON.stringify(src)) as MapObject;
-    copy.id = nextEditorId(this.layout);
-    copy.name = `${src.name} (copy)`;
-    copy.position = [src.position[0], src.position[1], src.position[2] + 1];
-    this.layout.objects.push(copy);
-    this.buildMapObjectNow(copy);
-    this.dirty = true;
-    this.selectByObject(copy);
+    if (!this.captureSelectedToClipboard()) return;
+    this.pasteSelected();
   }
 
   updateSpawn(index: number, partial: { position?: [number, number, number]; yaw?: number }): void {
     const s = this.layout.spawns[index];
     if (!s) return;
+    this.recordHistory();
     if (partial.position) s.position = [...partial.position];
     if (typeof partial.yaw === 'number') s.yaw = partial.yaw;
     const base = this.spawnMarkers[index];
@@ -901,6 +1007,7 @@ export class StrikeMapEditorController {
   ): void {
     const l = this.layout.lights.find((o) => o.id === id);
     if (!l) return;
+    this.recordHistory();
     if (partial.position) l.position = [...partial.position];
     if (partial.color) {
       l.color = [
@@ -931,6 +1038,7 @@ export class StrikeMapEditorController {
     if (!control) return;
     const obj = this.layout.objects.find((o) => o.id === id);
     if (!obj) return;
+    this.recordHistory();
 
     if (axis === 'position') {
       control.position[field] = value;
@@ -955,6 +1063,7 @@ export class StrikeMapEditorController {
   renameSelected(name: string): void {
     const cleaned = name.trim();
     if (!cleaned) return;
+    this.recordHistory();
     if (this.selectedObjectId) {
       const obj = this.layout.objects.find((o) => o.id === this.selectedObjectId);
       if (obj) {
@@ -977,6 +1086,7 @@ export class StrikeMapEditorController {
     if (!obj || (obj.kind !== 'box' && obj.kind !== 'ground')) return;
     const mat = (this.b.mats as unknown as Record<string, StandardMaterial>)[key];
     if (!mat) return;
+    this.recordHistory();
     const control = this.controlOf.get(id);
     if (control) control.material = mat;
     obj.material = key;
@@ -988,6 +1098,7 @@ export class StrikeMapEditorController {
     if (!id) return;
     const obj = this.layout.objects.find((o) => o.id === id);
     if (!obj || (obj.kind !== 'box' && obj.kind !== 'ground')) return;
+    this.recordHistory();
     obj.collidable = collidable;
     const control = this.controlOf.get(id);
     if (control) control.checkCollisions = collidable;
@@ -999,6 +1110,7 @@ export class StrikeMapEditorController {
     if (!id) return;
     const obj = this.layout.objects.find((o) => o.id === id);
     if (!obj || obj.kind !== 'component') return;
+    this.recordHistory();
     obj.params = { ...obj.params, [key]: value };
     // Rebuild this component from its params.
     disposeObjectMeshes(this.b, id);
@@ -1034,6 +1146,7 @@ export class StrikeMapEditorController {
   importJSON(json: string): { ok: boolean; error?: string; count?: number } {
     try {
       const parsed = parseLayout(json);
+      this.recordHistory();
       this.layout = parsed;
       this.rebuildWorld();
       this.buildSpawnMarkers();
@@ -1046,6 +1159,7 @@ export class StrikeMapEditorController {
   }
 
   resetToDefault(): void {
+    this.recordHistory();
     this.layout = cloneLayout(loadDefaultLayout() ?? emptyLayout('kyoto'));
     this.rebuildWorld();
     this.buildSpawnMarkers();

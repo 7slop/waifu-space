@@ -384,41 +384,6 @@
 }
 .edi-palette-icon { color: #ffd32a; }
 
-/* ── Toast ── */
-.edi-toast {
-  position: absolute;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: 9px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  z-index: 40;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
-  animation: edi-toast-in 0.2s ease;
-}
-@keyframes edi-toast-in {
-  from { opacity: 0; transform: translate(-50%, -8px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-.edi-toast-ok { background: rgba(26, 199, 132, 0.16); border: 1px solid #1ac784; color: #6ff2bd; }
-.edi-toast-err { background: rgba(255, 70, 90, 0.16); border: 1px solid #ff465a; color: #ff97a6; }
-.edi-toast-info { background: rgba(88, 140, 240, 0.16); border: 1px solid #588cf0; color: #a8c4ff; }
-
-.edi-toast-close {
-  background: transparent;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: 0.9rem;
-  opacity: 0.7;
-}
-.edi-toast-close:hover { opacity: 1; }
-
 /* ── Fullscreen ── */
 .edi-btn-fullscreen {
   background: rgba(88, 140, 240, 0.14);

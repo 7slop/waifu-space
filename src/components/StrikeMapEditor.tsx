@@ -67,7 +67,6 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
   const [gizmoMode, setGizmoMode] = createSignal<'translate' | 'rotate' | 'scale'>('translate');
   const [snap, setSnap] = createSignal(true);
   const [snapStep, setSnapStep] = createSignal(0.5);
-  const [status, setStatus] = createSignal<{ kind: 'ok' | 'err' | 'info'; text: string } | null>(null);
   const [isFullscreen, setIsFullscreen] = createSignal(false);
 
   const refresh = () => {
@@ -81,10 +80,6 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
     setLightSel(kind === 'light' ? controller.getLightSelectionInfo() : null);
     setSpawnSel(kind === 'spawn' ? controller.getSpawnSelectionInfo() : null);
     setDirty(controller.dirty);
-  };
-
-  const notify = (kind: 'ok' | 'err' | 'info', text: string) => {
-    setStatus({ kind, text });
   };
 
   onMount(() => {
@@ -111,16 +106,32 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
         return;
       }
       const kind = controller.getSelectionKind();
-      if ((e.key === 'Delete' || e.key === 'Backspace') && kind !== 'none') {
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+
+      if (mod && key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        controller.undo();
+        refresh();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && kind !== 'none') {
         e.preventDefault();
         controller.deleteSelected();
         refresh();
-        notify('info', kind === 'spawn' ? 'Spawn deleted' : kind === 'light' ? 'Light deleted' : 'Object deleted');
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && kind === 'object') {
+      } else if (mod && key === 'c' && kind !== 'none') {
+        e.preventDefault();
+        controller.copySelected();
+      } else if (mod && key === 'x' && kind !== 'none') {
+        e.preventDefault();
+        controller.cutSelected();
+        refresh();
+      } else if (mod && key === 'v') {
+        e.preventDefault();
+        controller.pasteSelected();
+        refresh();
+      } else if (mod && key === 'd' && kind !== 'none') {
         e.preventDefault();
         controller.duplicateSelected();
         refresh();
-        notify('info', 'Duplicated');
       }
     };
 
@@ -130,7 +141,6 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
     containerRef.addEventListener('wheel', handleWheel, { passive: false });
 
     refresh();
-    notify('info', 'Editor ready — LMB orbit · RMB drag to pan · wheel zoom · WASD/QE fly · F focus · Shift = fast');
 
     onCleanup(() => {
       window.removeEventListener('resize', handleResize);
@@ -145,7 +155,6 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
   const handleAddBox = () => {
     controller?.addBox();
     refresh();
-    notify('info', 'Added box — move it with the translate gizmo');
   };
 
   const handleAddComponent = (componentId: string) => {
@@ -156,13 +165,11 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
   const handleAddLight = () => {
     controller?.addLight();
     refresh();
-    notify('info', 'Added light — pick color/intensity in the inspector');
   };
 
   const handleAddSpawn = () => {
     controller?.addSpawn();
     refresh();
-    notify('info', 'Added spawn point — rotate it to re-aim');
   };
 
   const handleSelectObject = (index: number) => {
@@ -208,7 +215,6 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
     if (controller?.dirty && !window.confirm('Discard unsaved changes and reset to the default map?')) return;
     controller?.resetToDefault();
     refresh();
-    notify('info', 'Reset to default map');
   };
 
   const handleSave = async () => {
@@ -225,12 +231,11 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
       if (res.ok && data?.success) {
         controller.dirty = false;
         setDirty(false);
-        notify('ok', `Saved to repo (${data.objects} objects → kyoto.wsmap)`);
       } else {
-        notify('err', `Repo save failed: ${data?.error || res.status}`);
+        window.alert(`Repo save failed: ${data?.error || res.status}`);
       }
     } catch {
-      notify('err', 'Repo save failed (network error)');
+      window.alert('Repo save failed (network error)');
     }
 
     // Always offer a manual download of the wsmap file too.
@@ -256,9 +261,8 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
       const result = controller!.importJSON(String(reader.result ?? ''));
       if (result.ok) {
         refresh();
-        notify('ok', `Opened ${file.name} (${result.count} objects)`);
       } else {
-        notify('err', `Open failed: ${result.error}`);
+        window.alert(`Open failed: ${result.error}`);
       }
     };
     reader.readAsText(file);
@@ -274,7 +278,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
         setIsFullscreen(true);
       }
     } catch (err) {
-      notify('err', 'Fullscreen is not available here');
+      window.alert('Fullscreen is not available here');
     }
     // Let the browser settle before resizing the engine.
     setTimeout(() => controller?.handleResize(), 100);
@@ -586,7 +590,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                     />
                   </div>
                   <div class="edi-inspector-row">
-                    <button class="edi-btn edi-btn-danger" onClick={() => { controller?.deleteSelected(); refresh(); notify('info', 'Light deleted'); }}>Delete light</button>
+                    <button class="edi-btn edi-btn-danger" onClick={() => { controller?.deleteSelected(); refresh(); }}>Delete light</button>
                   </div>
                 </section>
               );
@@ -627,7 +631,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
                     <button
                       class="edi-btn edi-btn-danger"
                       disabled={spawns().length <= 1}
-                      onClick={() => { controller?.deleteSelected(); refresh(); notify('info', 'Spawn deleted'); }}
+                      onClick={() => { controller?.deleteSelected(); refresh(); }}
                     >Delete spawn</button>
                   </div>
                 </section>
@@ -697,14 +701,6 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
           </For>
         </div>
       </div>
-
-      {/* ── Status toast ── */}
-      <Show when={status()}>
-        <div class={`edi-toast edi-toast-${status()?.kind}`}>
-          {status()?.text}
-          <button class="edi-toast-close" onClick={() => setStatus(null)}>×</button>
-        </div>
-      </Show>
     </div>
   );
 }
