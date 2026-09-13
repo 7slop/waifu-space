@@ -1,0 +1,427 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Waifu Strike Map Editor
+   ═══════════════════════════════════════════════════════════════════ */
+
+.map-editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: calc(100vh - 64px);
+  min-height: 560px;
+  background: #0b0f16;
+  color: #dfe6f0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+  border: 1px solid rgba(255, 117, 151, 0.35);
+  border-radius: 14px;
+}
+
+/* ── Toolbar ── */
+.edi-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(20, 24, 36, 0.98), rgba(30, 26, 44, 0.98));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex: 0 0 auto;
+}
+
+.edi-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-weight: 700;
+  color: #ff7597;
+  font-size: 0.95rem;
+}
+
+.edi-logo { font-size: 1.2rem; }
+
+.edi-dirty-dot {
+  color: #ffd32a;
+  font-size: 0.8rem;
+  animation: edi-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes edi-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.edi-toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.edi-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #e6ecf5;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.edi-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.edi-btn.active {
+  background: rgba(255, 117, 151, 0.28);
+  border-color: #ff7597;
+  color: #fff;
+}
+.edi-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.edi-btn-save {
+  background: linear-gradient(135deg, #ff7597, #ff5e7e);
+  border-color: #ff7597;
+  color: #fff;
+}
+.edi-btn-save:hover { background: linear-gradient(135deg, #ff8aa8, #ff7597); }
+
+/* ── Body layout ── */
+.edi-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.edi-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #111827;
+}
+
+.edi-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+  touch-action: none;
+}
+
+.edi-hud {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(10, 14, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  padding: 5px 11px;
+  font-size: 0.75rem;
+  color: #bcd;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.edi-hud code { color: #ff7597; }
+
+.edi-cam-hint {
+  margin-top: 5px;
+  color: #5f7290;
+  font-size: 0.64rem;
+  letter-spacing: 0.02em;
+}
+
+/* ── Panels ── */
+.edi-panel {
+  background: rgba(13, 17, 26, 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.edi-left { width: 250px; overflow: hidden; }
+.edi-right { width: 272px; border-left: 1px solid rgba(255, 255, 255, 0.07); border-right: none; }
+
+.edi-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8ba0bd;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.edi-icon-btn {
+  background: rgba(255, 70, 90, 0.12);
+  border: 1px solid rgba(255, 70, 90, 0.25);
+  color: #ff7a8f;
+  border-radius: 5px;
+  padding: 2px 7px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.edi-icon-btn:hover:not(:disabled) { background: rgba(255, 70, 90, 0.3); }
+.edi-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.edi-list {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 6px;
+}
+
+.edi-list-section { display: flex; flex-direction: column; border-bottom: 1px solid rgba(255, 255, 255, 0.07); flex: 0 0 auto; }
+.edi-list-section-grow { flex: 1 1 0%; min-height: 0; }
+.edi-list-tight { flex: 0 1 auto; max-height: 210px; overflow-y: auto; }
+.edi-list-section .edi-list-section-grow { flex: 1 1 0%; }
+
+.edi-head-actions { display: flex; gap: 6px; }
+
+.edi-icon-add {
+  background: rgba(26, 199, 132, 0.14);
+  border-color: rgba(26, 199, 132, 0.35);
+  color: #6ff2bd;
+  font-weight: 800;
+}
+.edi-icon-add:hover:not(:disabled) { background: rgba(26, 199, 132, 0.34); }
+
+.edi-spawn-disc {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+.edi-team-a { background: rgba(26, 199, 132, 0.28); border: 1px solid #1ac784; color: #8df2c8; }
+.edi-team-b { background: rgba(255, 140, 50, 0.24); border: 1px solid #ff8c32; color: #ffc58f; }
+.edi-list-spawn .edi-list-id { color: #5f7290; }
+
+.edi-team-chip {
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.edi-btn-danger {
+  background: rgba(255, 70, 90, 0.14);
+  border-color: rgba(255, 70, 90, 0.4);
+  color: #ff97a6;
+  width: 100%;
+  text-align: center;
+}
+.edi-btn-danger:hover:not(:disabled) { background: rgba(255, 70, 90, 0.32); }
+
+.edi-inspector-note { color: #6b7f9c; font-size: 0.7rem; justify-content: flex-start; }
+
+.edi-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  border: 1px solid transparent;
+  transition: background 0.12s ease;
+}
+.edi-list-item:hover { background: rgba(255, 255, 255, 0.06); }
+.edi-list-item.active {
+  background: rgba(255, 117, 151, 0.16);
+  border-color: rgba(255, 117, 151, 0.45);
+}
+.edi-list-item.locked { opacity: 0.86; }
+.edi-list-item.locked .edi-list-name { color: #8899b3; }
+.edi-lock-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #5f7290;
+  border-radius: 5px;
+  padding: 1px 5px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  flex: 0 0 auto;
+}
+.edi-lock-btn:hover { background: rgba(255, 255, 255, 0.1); }
+.edi-lock-btn.on { border-color: rgba(255, 211, 42, 0.5); background: rgba(255, 211, 42, 0.12); color: #ffd32a; }
+.edi-kind-badge { width: 16px; text-align: center; }
+.edi-kind-box .edi-kind-badge { color: #74d7fe; }
+.edi-kind-ground .edi-kind-badge { color: #9ff08a; }
+.edi-kind-component .edi-kind-badge { color: #ffd32a; }
+.edi-list-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edi-list-id { font-size: 0.66rem; color: #5f7290; font-family: monospace; }
+
+.edi-empty-state {
+  padding: 14px;
+  color: #6b7f9c;
+  font-size: 0.8rem;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ── Right panel sections ── */
+.edi-panel-section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  padding-bottom: 10px;
+}
+.edi-panel-section .edi-panel-head { border-bottom: none; padding-bottom: 4px; }
+
+.edi-field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 0 11px 10px;
+}
+
+.edi-field { display: flex; flex-direction: column; gap: 2px; }
+.edi-field-label {
+  font-size: 0.62rem;
+  color: #7892b4;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.edi-field input,
+.edi-inspector-row input[type='text'],
+.edi-inspector-row input[type='number'],
+.edi-inspector-row select {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e6ecf5;
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-size: 0.75rem;
+  font-family: monospace;
+}
+.edi-field input:focus,
+.edi-inspector-row input:focus,
+.edi-inspector-row select:focus {
+  outline: none;
+  border-color: #ff7597;
+}
+.edi-field input:disabled,
+.edi-inspector-row input[type='text']:disabled,
+.edi-inspector-row input[type='number']:disabled,
+.edi-inspector-row select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.edi-axis-hdr { font-size: 0.6rem; color: #6b7f9c; text-transform: uppercase; text-align: center; }
+
+.edi-inspector-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 11px;
+  font-size: 0.78rem;
+}
+.edi-inspector-row input[type='text'],
+.edi-inspector-row input[type='number'],
+.edi-inspector-row select { width: 58%; }
+.edi-insp-label { color: #9fb4d0; font-weight: 600; }
+
+.edi-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.edi-check-row input { accent-color: #ff7597; }
+
+.edi-component-chip {
+  background: rgba(255, 211, 42, 0.14);
+  border: 1px solid rgba(255, 211, 42, 0.35);
+  color: #ffd32a;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+}
+
+/* Gizmo buttons */
+.edi-gizmo-row {
+  display: flex;
+  gap: 6px;
+  padding: 6px 11px;
+}
+.edi-gizmo-row .edi-btn { flex: 1 1 0; padding: 6px 0; text-align: center; }
+
+.edi-snap-steps {
+  display: flex;
+  gap: 5px;
+  padding: 4px 11px 8px;
+}
+.edi-snap-steps .edi-btn { flex: 1 1 0; padding: 4px 0; font-size: 0.72rem; }
+
+/* ── Palette ── */
+.edi-palette {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: rgba(16, 20, 30, 0.97);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex: 0 0 auto;
+}
+
+.edi-palette-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.edi-palette-label {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7892b4;
+  margin-right: 4px;
+}
+
+.edi-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e6ecf5;
+  padding: 5px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.76rem;
+  transition: all 0.14s ease;
+}
+.edi-palette-item:hover {
+  background: rgba(255, 117, 151, 0.18);
+  border-color: rgba(255, 117, 151, 0.5);
+}
+.edi-palette-icon { color: #ffd32a; }
+
+/* ── Fullscreen ── */
+.edi-btn-fullscreen {
+  background: rgba(88, 140, 240, 0.14);
+  border-color: rgba(88, 140, 240, 0.45);
+}
+.edi-btn-fullscreen:hover { background: rgba(88, 140, 240, 0.3); }
+
+.map-editor:fullscreen {
+  width: 100%;
+  height: 100%;
+  max-height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+
+@media (max-width: 900px) {
+  .edi-left { display: none; }
+  .edi-right { width: 240px; }
+}

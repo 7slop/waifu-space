@@ -3,11 +3,13 @@
   "type": "module",
   "version": "2.0.0",
   "scripts": {
-    "dev": "vinxi dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:edit": "node scripts/dev.mjs --edit",
     "build": "vinxi build",
     "start": "vinxi start",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "map:export": "bun scripts/convert-kyoto-map.ts"
   },
   "dependencies": {
     "@babylonjs/core": "^9.26.0",
