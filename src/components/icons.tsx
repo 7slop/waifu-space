@@ -387,6 +387,10 @@ const EMOJI_ICONS: Record<string, Component<{ class?: string; children?: JSX.Ele
   '👑✨': PhCrown,
   '⭐': PhStar,
   '🪜': PhLadder,
+  '✦': PhStar,
+  '🔪': PhSword,
+  '⏸': PhPause,
+  '🌍': PhGlobe,
 };
 
 const GLYPH_RE =

@@ -38,8 +38,6 @@
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 20px;
   background: var(--surface-1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 20px 24px;
@@ -226,7 +224,6 @@
 
 .future-games-card {
   background: var(--surface-1);
-  backdrop-filter: blur(16px);
   border: 1px dashed var(--border-color);
   border-radius: 16px;
   padding: 48px 24px;
@@ -288,8 +285,6 @@
 /* 1. WAIFU DEFENSE */
 .waifu-defense-wrapper {
   background: var(--surface-1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 20px;
@@ -456,7 +451,6 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: rgba(18, 20, 32, 0.94);
-  backdrop-filter: blur(12px);
   padding: 24px 36px;
   border-radius: 16px;
   text-align: center;
@@ -665,8 +659,6 @@
 /* 2. GACHA & LOOTBOX SYSTEM */
 .lootbox-system-card {
   background: var(--surface-1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 28px;
@@ -832,16 +824,17 @@
 }
 
 /* REVEALED MODAL */
+/* REVEALED ITEM MODAL */
 .revealed-item-modal {
   position: relative;
-  background: rgba(20, 22, 36, 0.95);
-  border: 2px solid;
-  border-radius: 18px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   padding: 28px;
   text-align: center;
   max-width: 420px;
   margin: 0 auto;
-  animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  animation: centerScaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.175);
 }
 
 .revealed-header {
@@ -1007,8 +1000,6 @@
 /* 3. AFFECTION ROAD */
 .affection-road-container {
   background: var(--surface-1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 24px;
@@ -1251,8 +1242,6 @@
 
 .wardrobe-preview-panel {
   background: var(--surface-1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 20px;
@@ -1282,9 +1271,22 @@
 }
 
 /* KEYFRAMES */
+@keyframes centerScaleIn {
+  0% { transform: scale(0.94); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 @keyframes popIn {
   0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0; }
   100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+/* Center-anchored scale pop for flex/margin-auto-centered overlays
+   (no translate(-50%,-50%) bakes in — that keyframe offsets origin modals,
+    snapping them from up-left to center at animation end). */
+@keyframes centerPop {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 @keyframes bounce {
@@ -1312,8 +1314,6 @@
   flex-wrap: wrap;
   gap: 16px;
   background: var(--surface-1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 20px 24px;
@@ -1618,7 +1618,6 @@
   inset: 0;
   z-index: 1000;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;

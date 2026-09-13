@@ -127,6 +127,7 @@ export interface CleanSettings {
   wallpaperDim?: number;
   sakuraParticles?: boolean;
   theme?: string;
+  themeMode?: 'auto' | 'dark' | 'light';
   customAccent?: string;
   soundEffects?: boolean;
   ttsEnabled?: boolean;
@@ -165,7 +166,8 @@ export function sanitizeSettings(input: Record<string, unknown>, fallback: Clean
   if (has('wallpaperBlur')) out.wallpaperBlur = clampNumber(Number(input.wallpaperBlur), SETTINGS_BLUR_MIN, SETTINGS_BLUR_MAX);
   if (has('wallpaperDim')) out.wallpaperDim = clampNumber(Number(input.wallpaperDim), SETTINGS_DIM_MIN, SETTINGS_DIM_MAX);
   if (has('sakuraParticles')) out.sakuraParticles = toBool(input.sakuraParticles, fallback.sakuraParticles ?? true);
-  if (has('theme')) out.theme = toStr(input.theme, fallback.theme ?? 'sakura');
+  if (has('theme')) out.theme = toStr(input.theme, fallback.theme ?? 'catppuccin');
+  if (has('themeMode')) out.themeMode = input.themeMode === 'auto' || input.themeMode === 'light' ? input.themeMode : 'dark';
   if (has('customAccent')) out.customAccent = isHexColor(input.customAccent) ? (input.customAccent as string) : fallback.customAccent ?? '#ff6584';
   if (has('soundEffects')) out.soundEffects = toBool(input.soundEffects, fallback.soundEffects ?? true);
   if (has('ttsEnabled')) out.ttsEnabled = toBool(input.ttsEnabled, fallback.ttsEnabled ?? false);

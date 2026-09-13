@@ -14,7 +14,22 @@ import { PERSONALITIES } from '../lib/personality';
 import { STOCK_WALLPAPERS } from '../lib/wallpapers';
 import { exportToICS, importFromICS } from '../lib/ical';
 import { WaifuAvatar } from './WaifuAvatar';
-import { PhGearSix } from './icons';
+import {
+  PhGearSix,
+  PhUser,
+  PhFlowerLotus,
+  PhDress,
+  PhMountains,
+  PhPalette,
+  PhMicrophone,
+  PhFloppyDisk,
+  PhGlobe,
+  PhSun,
+  PhMoonStars,
+  PhMonitorPlay,
+  PhSpeakerHigh,
+  PhCheck
+} from './icons';
 import { t, SUPPORTED_LANGUAGES, setLanguage, SupportedLanguage, getPersonalityName, getCosmeticName, getMoodName } from '../lib/i18n';
 
 import { compressImage } from '../lib/image-compress';
@@ -187,56 +202,56 @@ export function SettingsStudio() {
           class={`settings-tab-btn ${activeTab() === 'profile' ? 'active' : ''}`}
           onClick={() => setActiveTab('profile')}
         >
-          👤 {t('settings.tabs.profile')}
+          <PhUser /> {t('settings.tabs.profile')}
         </button>
         <button
           type="button"
           class={`settings-tab-btn ${activeTab() === 'personality' ? 'active' : ''}`}
           onClick={() => setActiveTab('personality')}
         >
-          🌸 {t('settings.tabs.personality')}
+          <PhFlowerLotus /> {t('settings.tabs.personality')}
         </button>
         <button
           type="button"
           class={`settings-tab-btn ${activeTab() === 'appearance' ? 'active' : ''}`}
           onClick={() => setActiveTab('appearance')}
         >
-          👗 {t('settings.tabs.appearance')}
+          <PhDress /> {t('settings.tabs.appearance')}
         </button>
         <button
           type="button"
           class={`settings-tab-btn ${activeTab() === 'wallpapers' ? 'active' : ''}`}
           onClick={() => setActiveTab('wallpapers')}
         >
-          🗾 {t('settings.tabs.wallpapers')}
+          <PhMountains /> {t('settings.tabs.wallpapers')}
         </button>
         <button
           type="button"
           class={`settings-tab-btn ${activeTab() === 'themes' ? 'active' : ''}`}
           onClick={() => setActiveTab('themes')}
         >
-          🎨 {t('settings.tabs.themes')}
+          <PhPalette /> {t('settings.tabs.themes')}
         </button>
         <button
           type="button"
           class={`settings-tab-btn ${activeTab() === 'voice' ? 'active' : ''}`}
           onClick={() => setActiveTab('voice')}
         >
-          🎙️ {t('settings.tabs.voice')}
+          <PhMicrophone /> {t('settings.tabs.voice')}
         </button>
         <button
           type="button"
           class={`settings-tab-btn ${activeTab() === 'data' ? 'active' : ''}`}
           onClick={() => setActiveTab('data')}
         >
-          💾 {t('settings.tabs.data')}
+          <PhFloppyDisk /> {t('settings.tabs.data')}
         </button>
         <button
           type="button"
           class={`settings-tab-btn ${activeTab() === 'language' ? 'active' : ''}`}
           onClick={() => setActiveTab('language')}
         >
-          🌐 {t('settings.tabs.language')}
+          <PhGlobe /> {t('settings.tabs.language')}
         </button>
       </nav>
 
@@ -302,7 +317,7 @@ export function SettingsStudio() {
                       'flex-shrink': 0
                     }}
                   >
-                    <Show when={editAvatarUrl()} fallback={<span style={{ 'font-size': '28px' }}>👤</span>}>
+                    <Show when={editAvatarUrl()} fallback={<span class="avatar-placeholder-icon"><PhUser /></span>}>
                       <img
                         src={editAvatarUrl()}
                         alt="Avatar Preview"
@@ -332,7 +347,7 @@ export function SettingsStudio() {
 
               <div class="profile-edit-actions" style={{ 'margin-top': '24px' }}>
                 <button class="btn-save-profile" onClick={handleSaveProfileSettings}>
-                  💾 {t('profile.saveChanges')}
+                  <PhFloppyDisk /> {t('profile.saveChanges')}
                 </button>
               </div>
             </div>
@@ -384,7 +399,7 @@ export function SettingsStudio() {
                       >
                         <div class="persona-card-header">
                           <span class="persona-name">{getPersonalityName(p.id)}</span>
-                          {isActive() && <span class="persona-check">✔</span>}
+                          {isActive() && <span class="persona-check"><PhCheck /></span>}
                         </div>
                         <p class="persona-tagline">{p.tagline}</p>
                       </div>
@@ -809,12 +824,11 @@ export function SettingsStudio() {
               <div class="themes-grid">
                 <For
                   each={[
-                    { id: 'sakura', name: '🌸 Sakura Blossom', color: '#ff6584' },
-                    { id: 'cyberpunk', name: '⚡ Cyberpunk Tokyo', color: '#00f2fe' },
-                    { id: 'midnight', name: '🌌 Midnight Lavender', color: '#6c5ce7' },
-                    { id: 'matcha', name: '🍵 Matcha Zen', color: '#00b894' },
-                    { id: 'sunset', name: '🌇 Sunset Amber', color: '#e17055' },
-                    { id: 'amoled', name: '🖤 AMOLED Dark', color: '#ff6584' }
+                    { id: 'catppuccin', name: 'Catppuccin', color: '#89b4fa' },
+                    { id: 'rose-pine', name: 'Rose Pine', color: '#eb6f92' },
+                    { id: 'nord', name: 'Nord', color: '#88c0d0' },
+                    { id: 'dracula', name: 'Dracula', color: '#bd93f9' },
+                    { id: 'gruvbox', name: 'Gruvbox', color: '#fabd2f' }
                   ]}
                 >
                   {thm => {
@@ -841,6 +855,45 @@ export function SettingsStudio() {
                     );
                   }}
                 </For>
+              </div>
+
+              <div class="setting-row" style={{ 'margin-top': '24px' }}>
+                <div>
+                  <strong>{t('settings.themes.mode')}</strong>
+                  <p class="setting-desc">{t('settings.themes.modeDesc')}</p>
+                </div>
+                <div class="mode-toggle-row mode-toggle-row-3" data-testid="theme-mode-toggle">
+                  <button
+                    type="button"
+                    class={`mode-toggle-btn ${state.settings.themeMode === 'auto' ? 'active' : ''}`}
+                    onClick={() => {
+                      updateSettings({ themeMode: 'auto' as const });
+                      saveState();
+                    }}
+                  >
+                    <PhMonitorPlay /> {t('settings.themes.modeAuto')}
+                  </button>
+                  <button
+                    type="button"
+                    class={`mode-toggle-btn ${state.settings.themeMode === 'dark' ? 'active' : ''}`}
+                    onClick={() => {
+                      updateSettings({ themeMode: 'dark' as const });
+                      saveState();
+                    }}
+                  >
+                    <PhMoonStars /> {t('settings.themes.modeDark')}
+                  </button>
+                  <button
+                    type="button"
+                    class={`mode-toggle-btn ${state.settings.themeMode === 'light' ? 'active' : ''}`}
+                    onClick={() => {
+                      updateSettings({ themeMode: 'light' as const });
+                      saveState();
+                    }}
+                  >
+                    <PhSun /> {t('settings.themes.modeLight')}
+                  </button>
+                </div>
               </div>
 
               <div class="setting-row" style={{ 'margin-top': '24px' }}>
@@ -949,7 +1002,7 @@ export function SettingsStudio() {
                 style={{ 'margin-top': '10px' }}
                 onClick={testVoice}
               >
-                🔊 {t('settings.voice.testVoice')}
+                <PhSpeakerHigh /> {t('settings.voice.testVoice')}
               </button>
 
               <hr style={{ margin: '24px 0', opacity: 0.15 }} />
@@ -1068,7 +1121,7 @@ export function SettingsStudio() {
         <Show when={activeTab() === 'language'}>
           <div class="settings-section active" data-testid="language-settings-section">
             <div class="section-card">
-              <h3 class="section-title">🌐 {t('settings.language.title')}</h3>
+              <h3 class="section-title"><PhGlobe /> {t('settings.language.title')}</h3>
               <p class="section-subtitle">
                 {t('settings.language.subtitle')}
               </p>
@@ -1113,7 +1166,7 @@ export function SettingsStudio() {
                             <span>{lang.flag}</span>
                             <strong>{lang.nativeName}</strong>
                           </span>
-                          {isSelected() && <span class="persona-check">✔</span>}
+                          {isSelected() && <span class="persona-check"><PhCheck /></span>}
                         </div>
                         <p class="persona-tagline" style={{ margin: 0, opacity: 0.8 }}>
                           {lang.name} {isSelected() ? `(${t('common.active')})` : ''}

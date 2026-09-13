@@ -11,6 +11,21 @@ import { WaifuDefenseGame } from './WaifuDefenseGame';
 import { LootboxModal } from './LootboxModal';
 import { t, getMilestoneTitle, getMilestoneDesc, getMilestoneRewardLabel } from '../lib/i18n';
 import { defenseGameActive, pendingDefenseTab, setPendingDefenseTab } from '../lib/defense-bridge';
+import {
+  PhGameController,
+  PhGift,
+  PhHeart,
+  PhSword,
+  PhLightning,
+  PhSparkle,
+  PhBuildings,
+  PhDiceFive,
+  PhCoins,
+  PhCheckCircle,
+  PhLock,
+  PhWarningCircle,
+  PhRunning
+} from './icons';
 
 const WaifuStrikeGame = lazy(() =>
   import('./WaifuStrikeGame').then((m) => ({ default: m.WaifuStrikeGame }))
@@ -47,7 +62,7 @@ export function RpgHub() {
           class={`rpg-tab-btn ${activeTab() === 'games' ? 'active' : ''}`}
           onClick={() => handleTabSwitch('games')}
         >
-          <span>🎮</span>
+          <span><PhGameController /></span>
           <span>{t('rpg.tabs.games')}</span>
         </button>
 
@@ -55,7 +70,7 @@ export function RpgHub() {
           class={`rpg-tab-btn ${activeTab() === 'gacha' ? 'active' : ''}`}
           onClick={() => handleTabSwitch('gacha')}
         >
-          <span>🎁</span>
+          <span><PhGift /></span>
           <span>{t('rpg.tabs.gacha')}</span>
         </button>
 
@@ -63,7 +78,7 @@ export function RpgHub() {
           class={`rpg-tab-btn ${activeTab() === 'affection' ? 'active' : ''}`}
           onClick={() => handleTabSwitch('affection')}
         >
-          <span>💖</span>
+          <span><PhHeart /></span>
           <span>{t('rpg.tabs.affection')}</span>
         </button>
       </div>
@@ -79,7 +94,7 @@ export function RpgHub() {
                 class={`gamemode-chip-btn ${selectedGame() === 'defense' ? 'active' : ''}`}
                 onClick={() => setSelectedGame('defense')}
               >
-                <span>⚔️</span>
+                <span><PhSword /></span>
                 <span>{t('rpg.tabs.defense')}</span>
                 <span class="gamemode-badge">Live</span>
               </button>
@@ -88,7 +103,7 @@ export function RpgHub() {
                 class={`gamemode-chip-btn ${selectedGame() === 'strike' ? 'active' : ''}`}
                 onClick={() => setSelectedGame('strike')}
               >
-                <span>⚡</span>
+                <span><PhLightning /></span>
                 <span>{t('strike.title') || 'Waifu Strike 3D'}</span>
                 <span class="gamemode-badge" style={{ background: '#ff7597' }}>New</span>
               </button>
@@ -97,7 +112,7 @@ export function RpgHub() {
                 class={`gamemode-chip-btn coming-soon ${selectedGame() === 'future' ? 'active' : ''}`}
                 onClick={() => setSelectedGame('future')}
               >
-                <span>✨</span>
+                <span><PhSparkle /></span>
                 <span>{t('rpg.tabs.moreModes')}</span>
                 <span class="gamemode-badge soon">{t('rpg.gamemodes.soon')}</span>
               </button>
@@ -124,7 +139,7 @@ export function RpgHub() {
                       gap: '12px'
                     }}
                   >
-                    <div style={{ 'font-size': '2.5rem' }}>⛩️</div>
+                    <div style={{ 'font-size': '2.5rem' }}><PhBuildings /></div>
                     <div style={{ 'font-weight': 'bold', 'font-size': '1.1rem' }}>Loading Cyber Shrine Arena...</div>
                   </div>
                 }
@@ -135,11 +150,11 @@ export function RpgHub() {
 
             <Show when={selectedGame() === 'future'}>
               <div class="future-games-card">
-                <div class="future-icon">🎲</div>
+                <div class="future-icon"><PhDiceFive /></div>
                 <h3>{t('rpg.gamemodes.newModesTitle')}</h3>
                 <p>{t('rpg.gamemodes.newModesDesc')}</p>
                 <button class="btn-primary" onClick={() => setSelectedGame('defense')}>
-                  ⚔️ {t('rpg.gamemodes.playDefense')}
+                  <PhSword /> {t('rpg.gamemodes.playDefense')}
                 </button>
               </div>
             </Show>
@@ -158,7 +173,7 @@ export function RpgHub() {
           <div class="tab-pane">
             <div class="affection-road-container">
               <div class="road-header">
-                <h2>💖 {t('rpg.affectionRoad.title')}</h2>
+                <h2><PhHeart /> {t('rpg.affectionRoad.title')}</h2>
                 <p>
                   {t('rpg.affectionRoad.subtitle', { name: state.waifu?.name || 'your companion' })}
                 </p>
@@ -183,11 +198,11 @@ export function RpgHub() {
                           <p class="milestone-desc">{getMilestoneDesc(milestone.level, { name: state.waifu?.name || 'Waifu' }, milestone.description)}</p>
                           <div class="milestone-reward-tags">
                             <Show when={milestone.rewardType === 'coins'}>
-                              <span class="tag-coin">🪙 +{milestone.rewardValue} {t('rpg.dashboard.goldCoins')}</span>
+                              <span class="tag-coin"><PhCoins /> +{milestone.rewardValue} {t('rpg.dashboard.goldCoins')}</span>
                             </Show>
                             <Show when={milestone.rewardType === 'cosmetic'}>
                               <span class="tag-cosmetic">
-                                ✨ {getMilestoneRewardLabel(milestone.level, milestone.rewardLabel)}
+                                <PhSparkle /> {getMilestoneRewardLabel(milestone.level, milestone.rewardLabel)}
                               </span>
                             </Show>
                           </div>
@@ -195,18 +210,18 @@ export function RpgHub() {
 
                         <div class="milestone-actions">
                           <Show when={isClaimed()}>
-                            <span class="status-claimed">✅ {t('rpg.affectionRoad.claimed')}</span>
+                            <span class="status-claimed"><PhCheckCircle /> {t('rpg.affectionRoad.claimed')}</span>
                           </Show>
                           <Show when={canClaim()}>
                             <button
                               class="btn-claim"
                               onClick={() => claimAffectionReward(milestone.level)}
                             >
-                              🎁 {t('rpg.affectionRoad.claimBtn')}
+                              <PhGift /> {t('rpg.affectionRoad.claimBtn')}
                             </button>
                           </Show>
                           <Show when={isLocked()}>
-                            <span class="status-locked">🔒 {t('rpg.affectionRoad.needsLevel', { level: milestone.level })}</span>
+                            <span class="status-locked"><PhLock /> {t('rpg.affectionRoad.needsLevel', { level: milestone.level })}</span>
                           </Show>
                         </div>
                       </div>
@@ -223,14 +238,14 @@ export function RpgHub() {
       <Show when={pendingDefenseTab()}>
         <div class="defense-leave-overlay" data-testid="defense-leave-modal">
           <div class="defense-leave-modal">
-            <h3>⚠️ {t('defense.confirmLeaveTitle')}</h3>
+            <h3><PhWarningCircle /> {t('defense.confirmLeaveTitle')}</h3>
             <p>{t('defense.confirmLeaveDesc')}</p>
             <div class="defense-leave-actions">
               <button class="btn-stay" onClick={() => setPendingDefenseTab(null)}>
-                🎮 {t('defense.stayInGame')}
+                <PhGameController /> {t('defense.stayInGame')}
               </button>
               <button class="btn-leave" onClick={confirmLeaveDefense}>
-                🏃 {t('defense.leaveAnyway')}
+                <PhRunning /> {t('defense.leaveAnyway')}
               </button>
             </div>
           </div>

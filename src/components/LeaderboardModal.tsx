@@ -110,29 +110,29 @@ export function LeaderboardModal(props: { isOpen: boolean; onClose: () => void }
         <div class="leaderboard-modal-card" onClick={e => e.stopPropagation()}>
           <button class="modal-close-btn" onClick={props.onClose} aria-label={t('common.close')}><PhX /></button>
 
-          <div class="leaderboard-modal-header">
-            <span class="hall-icon"><PhTrophy /></span>
+          <div class="leaderboard-header">
+            <span class="leaderboard-icon"><PhTrophy /></span>
             <h2 id="leaderboard-modal-title">{t('leaderboard.title')}</h2>
             <p>{t('leaderboard.subtitle')}</p>
           </div>
 
-          <div class="leaderboard-filter-tabs">
+          <div class="leaderboard-tabs">
             <button
-              class={`board-tab ${filter() === 'wave' ? 'active' : ''}`}
+              class={`lb-tab-btn ${filter() === 'wave' ? 'active' : ''}`}
               data-testid="leaderboard-tab-wave"
               onClick={() => handleTabChange('wave')}
             >
               <PhShieldCheck /> {t('leaderboard.tabDefenseWave')}
             </button>
             <button
-              class={`board-tab ${filter() === 'bond' ? 'active' : ''}`}
+              class={`lb-tab-btn ${filter() === 'bond' ? 'active' : ''}`}
               data-testid="leaderboard-tab-bond"
               onClick={() => handleTabChange('bond')}
             >
               <PhHeart /> {t('leaderboard.tabBondLevel')}
             </button>
             <button
-              class={`board-tab ${filter() === 'goblins' ? 'active' : ''}`}
+              class={`lb-tab-btn ${filter() === 'goblins' ? 'active' : ''}`}
               data-testid="leaderboard-tab-goblins"
               onClick={() => handleTabChange('goblins')}
             >
@@ -140,7 +140,7 @@ export function LeaderboardModal(props: { isOpen: boolean; onClose: () => void }
             </button>
           </div>
 
-          <div class="leaderboard-table-container">
+          <div class="leaderboard-table-wrap">
             <Show when={!loading()} fallback={<div class="leaderboard-loading">{t('leaderboard.loading')}</div>}>
               <table class="leaderboard-table">
                 <thead>
@@ -164,39 +164,42 @@ export function LeaderboardModal(props: { isOpen: boolean; onClose: () => void }
                     {entry => {
                       const isMe = entry.username === (state.user?.username || 'You');
                       return (
-                        <tr class={`leaderboard-row ${isMe ? 'is-self' : ''} rank-${entry.rank}`}>
+                        <tr class={`lb-row ${isMe ? 'self-row' : ''} rank-${entry.rank}`}>
                           <td class="rank-col">
-                            {entry.rank === 1 ? <PhMedal /> : entry.rank === 2 ? <PhMedal /> : entry.rank === 3 ? <PhMedal /> : `#${entry.rank}`}
+                            {entry.rank <= 3 ? <PhMedal class={`medal rank-${entry.rank}`} /> : <span class="rank-num">#{entry.rank}</span>}
                           </td>
-                          <td class="user-col">
-                            <span class="user-avatar-tiny-wrap">
-                              <Show when={entry.avatarUrl} fallback={<span class="user-avatar-tiny"><PhFlowerLotus /></span>}>
-                                <img
-                                  src={entry.avatarUrl}
-                                  alt=""
-                                  class="user-avatar-tiny-img"
-                                  loading="lazy"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                  }}
-                                />
+                          <td>
+                            <span class="player-cell">
+                              <span class="user-avatar-tiny-wrap">
+                                <Show when={entry.avatarUrl} fallback={<span class="user-avatar-tiny"><PhFlowerLotus /></span>}>
+                                  <img
+                                    src={entry.avatarUrl}
+                                    alt=""
+                                    class="user-avatar-tiny-img"
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                </Show>
+                                <AvatarFrameOverlay frameId={entry.avatarFrame} class="user-avatar-tiny-frame" />
+                              </span>
+                              <span class="user-name">{entry.username}</span>
+                              <Show when={isMe}>
+                                <span class="badge-self">{t('leaderboard.you')}</span>
                               </Show>
-                              <AvatarFrameOverlay frameId={entry.avatarFrame} class="user-avatar-tiny-frame" />
                             </span>
-                            <Show when={isMe}>
-                              <span class="badge-self">{t('leaderboard.you')}</span>
-                            </Show>
                           </td>
                           <Show when={filter() === 'wave'}>
-                            <td class="stat-col text-right font-bold">Wave {entry.defenseHighWave}</td>
+                            <td class="text-right font-bold">Wave {entry.defenseHighWave}</td>
                           </Show>
                           <Show when={filter() === 'bond'}>
-                            <td class="stat-col text-right font-bold">Lv. {entry.bondLevel}</td>
+                            <td class="text-right font-bold">Lv. {entry.bondLevel}</td>
                           </Show>
                           <Show when={filter() === 'goblins'}>
-                            <td class="stat-col text-right font-bold">{entry.goblinsDefeated} <PhSkull /></td>
+                            <td class="text-right font-bold">{entry.goblinsDefeated} <PhSkull /></td>
                           </Show>
-                          <td class="coins-col text-right">{entry.coins.toLocaleString()}</td>
+                          <td class="text-right">{entry.coins.toLocaleString()}</td>
                         </tr>
                       );
                     }}
