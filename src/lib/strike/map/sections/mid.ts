@@ -66,13 +66,15 @@ export function buildMid(b: MapBuilder) {
   createHangingLantern(b, 'lanToriiR', new Vector3(2.8, 7.0, 0));
 
   // --- Mid flanking walls (channel players, separate from lanes) ---
-  // West: gap at Z = -14..-18 for Mid-to-A connector, gap at Z = 15..20 for south approach
+  // West: gap at Z = -18..-14 for the Mid-to-A passage mouth; sealed below
   b.addBox('midWallW1', 0.8, 4, 12, new Vector3(-8, 2, -8), mats.plaster);   // West upper segment
   b.addBox('midWallW2', 0.8, 4, 10, new Vector3(-8, 2, 10), mats.plaster);   // West lower segment
+  b.addBox('midWallWFill', 0.8, 4, 7.4, new Vector3(-8, 2, 1.5), mats.plaster); // Seals the old side gap
 
-  // East: gap at Z = -14..-18 for Mid-to-B connector, gap at Z = 15..20 for south approach
+  // East: mirror of the west side
   b.addBox('midWallE1', 0.8, 4, 12, new Vector3(8, 2, -8), mats.plaster);    // East upper segment
   b.addBox('midWallE2', 0.8, 4, 10, new Vector3(8, 2, 10), mats.plaster);    // East lower segment
+  b.addBox('midWallEFill', 0.8, 4, 7.4, new Vector3(8, 2, 1.5), mats.plaster); // Seals the old side gap
 
   // North: wall closing off mid from sites area (gap at center for passage)
   b.addBox('midWallNL', 5, 4, 0.8, new Vector3(-5.5, 2, -14), mats.plaster);
