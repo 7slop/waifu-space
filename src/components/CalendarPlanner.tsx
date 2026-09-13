@@ -110,6 +110,12 @@ export function CalendarPlanner() {
     }
   };
 
+  const setTimeFormat = (format: '24h' | '12h') => {
+    if (state.settings.timeFormat === format) return;
+    setState('settings', 'timeFormat', format);
+    saveState();
+  };
+
   // Filtered events
   const filteredEvents = createMemo(() => {
     return state.calendar.events.filter(e => {
@@ -532,6 +538,26 @@ const sidebarTasks = createMemo(() => {
             </button>
             <Show when={viewSettingsOpen()}>
               <div class="view-settings-dropdown" role="menu">
+                <div class="vs-group">
+                  <span class="vs-title">{t('calendar.viewSettings.timeFormat')}</span>
+                  <div class="vs-options">
+                    <button
+                      type="button"
+                      class={`vs-option ${state.settings.timeFormat === '12h' ? 'active' : ''}`}
+                      onClick={() => setTimeFormat('12h')}
+                    >
+                      {t('calendar.viewSettings.timeFormat12h')}
+                    </button>
+                    <button
+                      type="button"
+                      class={`vs-option ${state.settings.timeFormat === '24h' ? 'active' : ''}`}
+                      onClick={() => setTimeFormat('24h')}
+                    >
+                      {t('calendar.viewSettings.timeFormat24h')}
+                    </button>
+                  </div>
+                </div>
+                <div class="vs-divider" />
                 <div class="vs-group">
                   <div class="vs-toggle-row">
                     <div>

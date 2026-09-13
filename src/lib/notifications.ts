@@ -15,7 +15,7 @@
 import { state } from './store';
 import { CalendarEventItem } from './ical';
 import { getOccurrenceForDate, dateKeyOf, isEventOnDate } from './store';
-import { t } from './i18n';
+import { t, formatClock } from './i18n';
 
 const SENT_STORAGE_KEY = 'waifu_space_notif_sent_v1';
 const CHECK_INTERVAL_MS = 30 * 1000;
@@ -96,11 +96,6 @@ function sendNotification(title: string, body: string): void {
   }
 }
 
-/** Formatted start time used inside notification bodies. */
-function formatStartTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 /** Today's or a given day's occurrence of an event, or null when it does not fall on that day. */
 function occurrenceForDay(ev: CalendarEventItem, day: Date): CalendarEventItem | null {
   if (!isEventOnDate(ev, day)) return null;
@@ -161,7 +156,7 @@ export function runNotificationCheck(): void {
         const upKey = `upcoming:${ev.id}:${dayKey}`;
         if (!wasSent(upKey) && nowMs >= start - UPCOMING_MS && nowMs < start) {
           markSent(upKey);
-          sendNotification(occ.title, t('notifications.upcomingBody', { time: formatStartTime(start) }));
+          sendNotification(occ.title, t('notifications.upcomingBody', { time: formatClock(start) }));
         }
       }
 
@@ -170,8 +165,8 @@ export function runNotificationCheck(): void {
         markSent(startedKey);
         const body =
           ev.type === 'task'
-            ? t('notifications.taskStartedBody', { time: formatStartTime(start) })
-            : t('notifications.eventStartedBody', { time: formatStartTime(start) });
+            ? t('notifications.taskStartedBody', { time: formatClock(start) })
+            : t('notifications.eventStartedBody', { time: formatClock(start) });
         sendNotification(occ.title, body);
       }
     }

@@ -1,7 +1,7 @@
 import { For } from 'solid-js';
 import { CalendarEventItem } from '../lib/ical';
 import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate } from '../lib/store';
-import { t, formatDate, holidayTooltip } from '../lib/i18n';
+import { t, formatDate, holidayTooltip, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
 import { PhCake, PhArrowsClockwise, GlyphText } from './icons';
@@ -145,10 +145,7 @@ export function CalendarMonthView(props: {
                     {ev => {
                       const startTime = ev.allDay
                         ? ''
-                        : new Date(ev.start).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          });
+                        : formatClock(ev.start);
 
                       return (
                         <div

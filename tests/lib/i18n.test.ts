@@ -5,6 +5,8 @@ import {
   setLanguage,
   formatDate,
   formatTime,
+  hourMinute,
+  formatClock,
   SUPPORTED_LANGUAGES,
   getCosmeticName,
   getCosmeticDesc,
@@ -16,6 +18,7 @@ import {
   getMilestoneRewardLabel,
   getMoodName
 } from '../../src/lib/i18n';
+import { setState, DEFAULT_STATE, state } from '../../src/lib/store';
 
 describe('i18n Localization Engine', () => {
   beforeEach(() => {
@@ -125,6 +128,27 @@ describe('i18n Localization Engine', () => {
     expect(t('strike.mapName')).toBe('京都 (Kyoto)');
     expect(t('strike.weapons.rifle')).toBe('八九式サクラライフル');
     expect(t('strike.medals.headshot')).toBe('ヘッドショット！');
+  });
+
+  it('formats times in 12-hour by default (0 AM style)', () => {
+    setState(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+    expect(state.settings.timeFormat).toBe('12h');
+    expect(hourMinute(0, 0)).toBe('12:00 AM');
+    expect(hourMinute(9, 5)).toBe('9:05 AM');
+    expect(hourMinute(12, 30)).toBe('12:30 PM');
+    expect(hourMinute(23, 45)).toBe('11:45 PM');
+  });
+
+  it('formats times in 24-hour (00:00) when configured', () => {
+    setState(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+    setState('settings', 'timeFormat', '24h');
+    expect(hourMinute(0, 0)).toBe('00:00');
+    expect(hourMinute(9, 5)).toBe('09:05');
+    expect(hourMinute(12, 30)).toBe('12:30');
+    expect(hourMinute(23, 45)).toBe('23:45');
+    expect(formatClock(new Date(2026, 5, 15, 14, 3))).toBe('14:03');
+    setState('settings', 'timeFormat', '12h');
+    expect(formatClock(new Date(2026, 5, 15, 14, 3))).toBe('2:03 PM');
   });
 });
 

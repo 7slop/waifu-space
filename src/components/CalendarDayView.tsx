@@ -2,7 +2,7 @@ import { For, Show, onMount, createSignal } from 'solid-js';
 import { CalendarEventItem } from '../lib/ical';
 import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate } from '../lib/store';
 import { layoutTimedEvents } from '../lib/calendar-layout';
-import { t, getLocale, holidayTooltip } from '../lib/i18n';
+import { t, getLocale, holidayTooltip, hourMinute, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
 import { PhArrowsClockwise, PhMapPin, GlyphText } from './icons';
@@ -278,9 +278,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
   const formatDragTime = (min: number) => {
     const h = Math.floor(min / 60);
     const m = min % 60;
-    const period = h < 12 ? 'AM' : 'PM';
-    const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayH}:${m < 10 ? '0' + m : m} ${period}`;
+    return hourMinute(h, m);
   };
 
   return (
@@ -341,7 +339,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
           <For each={Array.from({ length: 24 })}>
             {(_, idx) => {
               const h = idx();
-              const label = h === 0 ? '' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
+              const label = h === 0 ? '' : hourMinute(h, 0);
               return (
                 <div class="time-slot-label">
                   <span>{label}</span>
@@ -406,7 +404,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                   const ev = layout.ev;
                   const s = new Date(ev.start);
                   const e = new Date(ev.end || ev.start);
-                  const timeStr = `${s.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${e.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                  const timeStr = `${formatClock(s)} - ${formatClock(e)}`;
                   const isResizing = resize()?.id === ev.id;
                   const preview = applyResizePreview(ev, layout);
 

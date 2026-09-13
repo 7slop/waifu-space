@@ -85,6 +85,28 @@ export function formatTime(date: Date | string | number, options?: Intl.DateTime
   return d.toLocaleTimeString(getLocale(), options);
 }
 
+export type TimeFormat = '24h' | '12h';
+
+/**
+ * Formats an hour/minute pair according to `state.settings.timeFormat`:
+ * '24h' → "09:00", '12h' → "9:00 AM". Reacts to the setting automatically.
+ */
+export function hourMinute(hour: number, minute: number): string {
+  const mm = String(Math.max(0, Math.min(59, Math.round(minute)))).padStart(2, '0');
+  if (state?.settings?.timeFormat === '24h') {
+    return `${String(Math.max(0, Math.min(23, Math.round(hour)))).padStart(2, '0')}:${mm}`;
+  }
+  const h = hour % 12 === 0 ? 12 : hour % 12;
+  const period = hour < 12 ? 'AM' : 'PM';
+  return `${h}:${mm} ${period}`;
+}
+
+/** Formats a date's wall-clock time via {@link hourMinute}. */
+export function formatClock(date: Date | string | number): string {
+  const d = typeof date === 'object' ? date : new Date(date);
+  return hourMinute(d.getHours(), d.getMinutes());
+}
+
 export function getCosmeticName(id: string, fallbackName?: string): string {
   const translated = t(`items.${id}.name`);
   if (translated !== `items.${id}.name`) return translated;
