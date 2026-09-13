@@ -15,7 +15,17 @@ import {
 import { callLLM } from './llm';
 import { parseIntent, hasIntent, DialogIntent, matchesKeywordOrPhrase } from './intents';
 import { validateCalendarEventInput, sanitizeSettings, clampNumber } from './validation';
-import { sanitizeRawState, sanitizeEvent, sanitizeOccurrenceOverride } from './validate';
+import { sanitizeRawState, sanitizeEvent, sanitizeOccurrenceOverride, sanitizeTimeBudget } from './validate';
+import {
+  deriveBudgetKey,
+  decryptBudgetState,
+  encryptBudgetState,
+  generateBudgetSalt,
+  isEncryptedBudgetBlob,
+  exportBudgetKey,
+  importBudgetKey
+} from './cloudcrypt';
+import type { EncryptedBudgetBlob } from './cloudcrypt';
 import {
   sanitizeCountry,
   sanitizeHolidayEntry,
@@ -392,6 +402,7 @@ export function saveState() {
     console.error('Failed to save state to localStorage', e);
   }
   scheduleCloudSync();
+  scheduleBudgetCloudSync();
 }
 
 // ---------------------------------------------------------------------------
@@ -419,17 +430,19 @@ function isOnline(): boolean {
 function buildSyncSnapshot(): {
   waifu?: unknown;
   settings?: unknown;
-  calendar?: unknown;
-  calendarOverrides?: unknown;
   showcaseItems?: unknown;
   rpg?: unknown;
 } {
   // Until the account's cloud snapshot has been pulled at least once, the local
   // state is only the empty/default guest template. Pushing it would clobber the
-  // user's REAL saved waifu, settings, calendar and showcase (e.g. a returning
-  // user opening the app on a fresh device). So the first push carries no
-  // resources at all - the server leaves everything untouched and the pull that
-  // runs right after boot sets cloudSnapshotLoaded, unlocking full syncs.
+  // user's REAL saved waifu, settings and showcase (e.g. a returning user
+  // opening the app on a fresh device). So the first push carries no resources
+  // at all - the server leaves everything untouched and the pull that runs right
+  // after boot sets cloudSnapshotLoaded, unlocking full syncs.
+  //
+  // NOTE: the calendar (and time budget) are NOT part of this plaintext
+  // snapshot - they sync exclusively through the end-to-end encrypted privacy
+  // blob (/api/timebudget/sync).
   if (!cloudSnapshotLoaded) {
     return {};
   }
@@ -440,8 +453,6 @@ function buildSyncSnapshot(): {
       appearance: state.waifu.appearance
     },
     settings: state.settings,
-    calendar: state.calendar.events.map(e => ({ ...e })),
-    calendarOverrides: state.calendar.occurrenceOverrides.map(o => ({ ...o })),
     showcaseItems: state.rpg.showcaseItems,
     rpg: {
       claimedAffectionMilestones: state.rpg?.claimedAffectionMilestones || []
@@ -629,6 +640,10 @@ if (typeof window !== 'undefined') {
     if (!state.user?.token) return;
     clearTimeout(cloudSyncTimer);
     void pushProgressToCloud();
+    if (isBudgetUnlocked()) {
+      if (budgetSyncTimer) clearTimeout(budgetSyncTimer);
+      void pushBudgetToCloud();
+    }
   };
   window.addEventListener('pagehide', flushPendingSync);
   window.addEventListener('beforeunload', flushPendingSync);
@@ -650,9 +665,429 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', retryCloudSync);
   window.addEventListener('load', retryCloudSync);
 
+  // Retry any queued encrypted time-budget push once the connection is back.
+  const retryBudgetCloudSync = () => {
+    if (!state.user?.token || budgetSyncIsLocked()) return;
+    if (!readPendingBudget()) return;
+    void syncBudgetFromPending();
+  };
+  window.addEventListener('online', retryBudgetCloudSync);
+
   // Another tab saved to local storage for this account - make sure our
   // freshest state still reaches the cloud.
   window.addEventListener('storage', syncProgressFromStorageEvent);
+}
+
+// ---------------------------------------------------------------------------
+// Private cloud sync (time budget + calendar, end-to-end encrypted)
+// ---------------------------------------------------------------------------
+// The time budget AND the calendar are the only user data encrypted before
+// upload. The payload { timebudget, calendar } is AES-256-GCM encrypted in the
+// browser with a key derived from the account password (PBKDF2). The server
+// only stores the opaque { salt, iv, ciphertext } blob and can never read the
+// tracking goals or calendar events. The derived key is cached on the device
+// (per account) so a tab booting from a stored session token unlocks the cloud
+// copy automatically - without needing to re-enter the password.
+
+let budgetSyncTimer: ReturnType<typeof setTimeout> | null = null;
+const PENDING_BUDGET_KEY = 'waifu_space_pending_budget_v1';
+const BUDGET_KEY_STORAGE_PREFIX = 'waifu_space_budget_key_v1';
+
+export type BudgetCloudStatus = 'idle' | 'syncing' | 'synced' | 'locked' | 'offline' | 'error';
+
+export const [budgetCloudStatus, setBudgetCloudStatus] = createSignal<BudgetCloudStatus>('idle');
+export const [budgetKeyReady, setBudgetKeyReady] = createSignal(false);
+
+let budgetKey: CryptoKey | null = null;
+let budgetSalt = ''; // salt of the key currently in memory (stamped onto new blobs)
+let budgetBlobSynced = false; // true once a cloud snapshot has been safely read/decrypted
+let budgetPushBlocked = false; // decrypt failed -> never overwrite the cloud copy
+let budgetCloudSnapshotLoaded = false;
+
+function budgetSyncIsLocked(): boolean {
+  return !budgetKey || budgetPushBlocked;
+}
+
+export function isBudgetUnlocked(): boolean {
+  return budgetKey !== null && !budgetPushBlocked;
+}
+
+function budgetKeyStorageKey(userId: string | null | undefined): string {
+  return `${BUDGET_KEY_STORAGE_PREFIX}_${userId ?? 'guest'}`;
+}
+
+/**
+ * Persists the derived AES key (+ its salt) for this account so a later boot
+ * from a stored session token can unlock the cloud copy automatically without
+ * prompting for the password again. The key stays on this device in
+ * localStorage; only ciphertext is ever exported to the cloud.
+ */
+async function persistBudgetKey(): Promise<boolean> {
+  if (!budgetKey || !budgetSalt) return false;
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = await exportBudgetKey(budgetKey);
+    localStorage.setItem(
+      budgetKeyStorageKey(state.user?.id),
+      JSON.stringify({ v: 1, raw, salt: budgetSalt })
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Re-imports the persisted key for the currently signed-in account from
+ * localStorage. Returns true when a key was restored, so the cloud copy can be
+ * decrypted without the password (e.g. sessions restored from a stored token).
+ */
+async function restoreStoredBudgetKey(): Promise<boolean> {
+  if (budgetKey) return true;
+  const userId = state.user?.id;
+  if (!userId || typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem(budgetKeyStorageKey(userId));
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.v !== 1 || typeof parsed.raw !== 'string' || typeof parsed.salt !== 'string') return false;
+    budgetKey = await importBudgetKey(parsed.raw);
+    budgetSalt = parsed.salt;
+    budgetPushBlocked = false;
+    budgetCloudSnapshotLoaded = false;
+    setBudgetKeyReady(true);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchBudgetBlob(token: string): Promise<EncryptedBudgetBlob | null> {
+  try {
+    const res = await fetch('/api/timebudget/sync', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.status === 401) {
+      setUserAccount(null);
+      setBudgetCloudStatus('error');
+      return null;
+    }
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.success) return null;
+    return isEncryptedBudgetBlob(data.blob) ? data.blob : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Applies a decrypted privacy payload ({ timebudget, calendar }) onto local
+ * state. The cloud copy is authoritative once a blob exists, because a blob is
+ * only created by a successful push - mirroring the old calendar_synced_at
+ * semantics for the encrypted channel.
+ */
+function applyCloudPrivacyState(plain: unknown): void {
+  const data =
+    plain && typeof plain === 'object' && !Array.isArray(plain)
+      ? (plain as Record<string, unknown>)
+      : {};
+
+  const tb = sanitizeTimeBudget(data.timebudget ?? {});
+  setState('timebudget', tb);
+
+  const cal = data.calendar;
+  if (cal && typeof cal === 'object' && !Array.isArray(cal)) {
+    const c = cal as Record<string, unknown>;
+    if (Array.isArray(c.events)) {
+      const sanitized = (c.events as unknown[])
+        .map(sanitizeEvent)
+        .filter((e): e is CalendarEventItem => e !== null);
+      setState('calendar', 'events', sanitized);
+    }
+    if (Array.isArray(c.occurrenceOverrides)) {
+      const sanitizedOverrides = (c.occurrenceOverrides as unknown[])
+        .map(sanitizeOccurrenceOverride)
+        .filter((o): o is CalendarOccurrenceOverride => o !== null && o.parentId !== '');
+      setState('calendar', 'occurrenceOverrides', sanitizedOverrides);
+    }
+  }
+
+  saveState();
+}
+
+/**
+ * Derives the privacy-blob encryption key from the account password on this
+ * device and caches it (persisted to localStorage so later sessions unlock
+ * automatically). Must be called while signed in. Returns true on success.
+ *
+ * - If a cloud blob exists, the password is re-derived with its stored salt
+ *   and used to decrypt it (a wrong password fails loudly and never touches
+ *   the cloud copy).
+ * - If no blob exists yet, a fresh salt is generated and a key cached so the
+ *   first scheduled push can create the cloud blob.
+ */
+export async function unlockBudgetKey(password: string): Promise<boolean> {
+  if (budgetKey) return true;
+  if (!password || !state.user?.token) return false;
+  if (!isOnline()) {
+    setBudgetCloudStatus('offline');
+    return false;
+  }
+
+  try {
+    const blob = await fetchBudgetBlob(state.user.token);
+    if (blob) {
+      const key = await deriveBudgetKey(password, blob.salt);
+      const plain = await decryptBudgetState(blob, key);
+      if (plain === null) {
+        // Wrong password or tampered blob. Never overwrite the cloud copy.
+        budgetPushBlocked = true;
+        setBudgetCloudStatus('locked');
+        return false;
+      }
+      budgetKey = key;
+      budgetSalt = blob.salt;
+      budgetBlobSynced = true;
+      budgetPushBlocked = false;
+      budgetCloudSnapshotLoaded = true;
+      setBudgetKeyReady(true);
+      await persistBudgetKey();
+      applyCloudPrivacyState(plain);
+      setBudgetCloudStatus('synced');
+      return true;
+    }
+
+    // No cloud copy yet: seed a fresh salt and cache a derived key.
+    const salt = generateBudgetSalt();
+    budgetKey = await deriveBudgetKey(password, salt);
+    budgetSalt = salt;
+    budgetBlobSynced = false;
+    budgetPushBlocked = false;
+    setBudgetKeyReady(true);
+    await persistBudgetKey();
+    setBudgetCloudStatus('idle');
+    return true;
+  } catch {
+    setBudgetCloudStatus(isOnline() ? 'error' : 'offline');
+    return false;
+  }
+}
+
+/**
+ * Drops the in-memory key. Called on logout/account switch. The persisted copy
+ * in localStorage is intentionally kept so the next login on this device still
+ * unlocks the cloud copy automatically.
+ */
+export function forgetBudgetKey(): void {
+  budgetKey = null;
+  budgetSalt = '';
+  budgetBlobSynced = false;
+  budgetPushBlocked = false;
+  budgetCloudSnapshotLoaded = false;
+  setBudgetKeyReady(false);
+  setBudgetCloudStatus('idle');
+}
+
+/**
+ * Pulls the encrypted time budget + calendar from the cloud. The key is
+ * restored automatically from the persisted copy for this account, so a
+ * session booting from a stored token can decrypt it without a password.
+ */
+export async function loadBudgetFromCloud(token?: string): Promise<void> {
+  const authToken = token || state.user?.token;
+  if (!authToken) return;
+
+  if (!isOnline()) {
+    setBudgetCloudStatus('offline');
+    return;
+  }
+
+  // Sessions restored from a stored token have no password on hand: unlock
+  // automatically from the persisted key for this account.
+  await restoreStoredBudgetKey();
+
+  const blob = await fetchBudgetBlob(authToken);
+  if (!blob) {
+    // Nothing uploaded yet. If a key exists on this device, seed the cloud copy.
+    if (budgetKey && !budgetPushBlocked) {
+      budgetBlobSynced = false;
+      scheduleBudgetCloudSync();
+    }
+    return;
+  }
+
+  if (budgetSyncIsLocked()) {
+    // Cloud copy exists but this tab has no key yet (e.g. a brand-new device
+    // that never had the password entered). Stay locked; local data is never
+    // clobbered by the unreadable cloud copy.
+    budgetBlobSynced = false;
+    setBudgetCloudStatus('locked');
+    return;
+  }
+
+  const plain = await decryptBudgetState(blob, budgetKey!);
+  if (plain === null) {
+    // Blob cannot be decrypted with the current key (e.g. the password was
+    // changed on another device). Never clobber the cloud copy with local state.
+    budgetPushBlocked = true;
+    setBudgetCloudStatus('locked');
+    return;
+  }
+
+  budgetSalt = blob.salt;
+  budgetBlobSynced = true;
+  budgetPushBlocked = false;
+  budgetCloudSnapshotLoaded = true;
+  applyCloudPrivacyState(plain);
+  // The cloud blob's salt is authoritative; re-persist the current key under
+  // it so future bootstraps derive/restore against the right salt.
+  await persistBudgetKey();
+  setBudgetCloudStatus('synced');
+}
+
+function readPendingBudget(): { userId?: unknown } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(PENDING_BUDGET_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    if (parsed.userId !== (state.user?.id ?? null)) {
+      clearPendingBudget();
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function queuePendingBudget() {
+  if (typeof window === 'undefined') return;
+  if (!state.user?.id) return;
+  try {
+    localStorage.setItem(PENDING_BUDGET_KEY, JSON.stringify({ userId: state.user.id, updatedAt: Date.now() }));
+  } catch (e) {
+    console.error('Failed to queue pending time budget sync', e);
+  }
+}
+
+function clearPendingBudget() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(PENDING_BUDGET_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Retries the freshest encrypted budget push after an offline/failed attempt. */
+export async function syncBudgetFromPending(): Promise<boolean> {
+  const pending = readPendingBudget();
+  if (!pending) return false;
+  if (typeof pending.userId === 'string') {
+    if (!state.user || state.user.id !== pending.userId) {
+      clearPendingBudget();
+      return false;
+    }
+  } else {
+    clearPendingBudget();
+    return false;
+  }
+  return pushBudgetToCloud();
+}
+
+export function scheduleBudgetCloudSync() {
+  if (typeof window === 'undefined') return;
+  if (!state.user?.token) return;
+  if (budgetSyncIsLocked()) return;
+  if (budgetSyncTimer) clearTimeout(budgetSyncTimer);
+  budgetSyncTimer = setTimeout(() => {
+    void pushBudgetToCloud();
+  }, 2500);
+}
+
+/**
+ * Encrypts the current time budget + calendar and pushes it to the cloud.
+ * Best-effort: on offline/failure the attempt is queued locally and retried
+ * when the connection returns. Never runs while the budget is locked, so a
+ * local default (or another account's data) can never overwrite the cloud copy.
+ */
+export function pushBudgetToCloud(): Promise<boolean> {
+  const token = state.user?.token;
+  if (!token) return Promise.resolve(false);
+
+  if (budgetSyncIsLocked()) {
+    setBudgetCloudStatus('locked');
+    return Promise.resolve(false);
+  }
+  if (!budgetSalt) budgetSalt = generateBudgetSalt();
+
+  if (!isOnline()) {
+    setBudgetCloudStatus('offline');
+    queuePendingBudget();
+    return Promise.resolve(false);
+  }
+
+  setBudgetCloudStatus('syncing');
+
+  const attempt = async (): Promise<boolean> => {
+    try {
+      const blob = await encryptBudgetState(
+        {
+          timebudget: state.timebudget,
+          calendar: {
+            events: state.calendar.events,
+            occurrenceOverrides: state.calendar.occurrenceOverrides
+          }
+        },
+        budgetKey!,
+        budgetSalt,
+        new Date().toISOString()
+      );
+      const res = await fetch('/api/timebudget/sync', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ blob })
+      });
+      if (res.status === 401) {
+        setUserAccount(null);
+        setBudgetCloudStatus('error');
+        return false;
+      }
+      if (!res.ok) {
+        setBudgetCloudStatus('error');
+        queuePendingBudget();
+        return false;
+      }
+      budgetBlobSynced = true;
+      budgetPushBlocked = false;
+      clearPendingBudget();
+      setBudgetCloudStatus('synced');
+      return true;
+    } catch {
+      setBudgetCloudStatus(isOnline() ? 'error' : 'offline');
+      queuePendingBudget();
+      return false;
+    }
+  };
+
+  pushActive = true;
+  const commit = pushQueue.then(attempt);
+  // Whatever happens, the next push waits for this one before it starts.
+  pushQueue = commit.then(
+    () => {
+      pushActive = false;
+      return true;
+    },
+    () => {
+      pushActive = false;
+      return true;
+    }
+  );
+  return commit;
 }
 
 /**
@@ -660,9 +1095,13 @@ if (typeof window !== 'undefined') {
  * local state. Cloud data wins for RPG/waifu save fields, except that a richer
  * local save is never clobbered by the default 200-coin registration snapshot.
  */
-export async function loadCloudProgress(token?: string, scope?: 'all' | 'profile' | 'calendar' | 'rpg'): Promise<void> {
+export async function loadCloudProgress(token?: string, scope?: 'all' | 'profile' | 'rpg'): Promise<void> {
   const authToken = token || state.user?.token;
   if (!authToken) return;
+
+  // The encrypted time budget is pulled independently of the main profile
+  // snapshot (and can be locked without a password-derived key in memory).
+  void loadBudgetFromCloud(authToken);
 
   if (!isOnline()) {
     // Offline fallback: keep the local save authoritative until a pull succeeds.
@@ -697,36 +1136,9 @@ export async function loadCloudProgress(token?: string, scope?: 'all' | 'profile
     // may be pushed back to the cloud.
     cloudSnapshotLoaded = true;
 
-    // The cloud calendar is authoritative once it has EVER been synced,
-    // including when the list is now empty (e.g. the user deleted everything).
-    // A push records calendar_synced_at exactly for that reason. Before the
-    // first calendar sync the server has no way to know our list, so we keep
-    // the local list and schedule a push instead of wiping it.
-    const serverCalendarItems: unknown[] = Array.isArray(data.calendarItems) ? data.calendarItems : [];
-    const serverCalendarOverrides: unknown[] = Array.isArray(data.calendarOverrides) ? data.calendarOverrides : [];
-    const serverCalendarSyncedAt: string | null =
-      typeof data.calendarSyncedAt === 'string' ? data.calendarSyncedAt : null;
-    const neverSyncedCalendar =
-      serverCalendarSyncedAt === null &&
-      serverCalendarItems.length === 0 &&
-      serverCalendarOverrides.length === 0;
-
-    if (!neverSyncedCalendar) {
-      const sanitized = serverCalendarItems
-        .map(sanitizeEvent)
-        .filter((e): e is CalendarEventItem => e !== null);
-      const sanitizedOverrides = serverCalendarOverrides
-        .map(sanitizeOccurrenceOverride)
-        .filter((o): o is CalendarOccurrenceOverride => o !== null && o.parentId !== '');
-      setState('calendar', 'events', sanitized);
-      setState('calendar', 'occurrenceOverrides', sanitizedOverrides);
-      saveState();
-    } else if (!scope || scope === 'all') {
-      // Brand-new account, no cloud calendar yet: never drop local events.
-      // Make sure the (fresh or restored) list is pushed so the cloud copy
-      // is created on the first successful sync.
-      scheduleCloudSync();
-    }
+    // The calendar (events + occurrence overrides) is NOT part of this
+    // plaintext endpoint - it is merged from the end-to-end encrypted privacy
+    // blob pulled by loadBudgetFromCloud() above.
 
     const p = data.progress;
     if (!p) {
@@ -1218,7 +1630,10 @@ export function setUserAccount(user: UserAccount | null) {
       if (prevRegistered) {
         localStorage.removeItem(ACTIVE_USER_KEY);
       }
+      forgetBudgetKey();
       resetStateInMemory();
+    } else if (!nextRegistered) {
+      forgetBudgetKey();
     }
     setState('user', user);
 
@@ -1229,6 +1644,9 @@ export function setUserAccount(user: UserAccount | null) {
       if (saved) applyStoredState(JSON.parse(saved));
       // Keep the freshly-issued session/account from the auth response.
       setState('user', user);
+      // Auto-unlock the encrypted cloud backup with this account's persisted
+      // key (no password needed on this device).
+      void restoreStoredBudgetKey();
     }
 
     saveState();

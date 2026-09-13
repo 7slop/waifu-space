@@ -12,7 +12,9 @@ import {
   checkCatchUpReminders,
   deleteTimeBudgetActivity,
   reorderTimeBudgetActivities,
-  clearCatchUpReminderMemory
+  clearCatchUpReminderMemory,
+  budgetCloudStatus,
+  budgetKeyReady
 } from '../lib/store';
 import {
   TimeBudgetActivity,
@@ -149,6 +151,12 @@ export function TimeBudgetPlanner() {
         </div>
         <div class="timebudget-toolbar">
           <div class="timebudget-week-chip">📅 {t('timebudget.weekLabel', { week: week().slice(-2) })}</div>
+          <Show when={budgetKeyReady() && budgetCloudStatus() === 'offline'}>
+            <span class="tb-sync-status tb-sync-offline" title={t('timebudget.cloud.offline')}>{t('timebudget.cloud.offline')}</span>
+          </Show>
+          <Show when={budgetKeyReady() && budgetCloudStatus() === 'error'}>
+            <span class="tb-sync-status tb-sync-error">{t('timebudget.cloud.syncError')}</span>
+          </Show>
           <button type="button" class="timebudget-btn" onClick={() => setSettingsOpen(true)} title={t('timebudget.settingsTitle')}><PhGearSix /></button>
           <button type="button" class="timebudget-btn" onClick={() => { setEditTarget(null); setFormModalOpen(true); }}><PhPlus /> {t('timebudget.addActivity')}</button>
           <button type="button" class="timebudget-btn" onClick={handleExport} title={t('timebudget.export')}><PhDownloadSimple /></button>

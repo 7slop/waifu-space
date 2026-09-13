@@ -32,18 +32,19 @@ export function CalendarTimeBudgetPanel() {
   const totalLogged = () => activities().reduce((sum, a) => sum + a.currentMinutes, 0);
   const totalTarget = () => activities().reduce((sum, a) => sum + a.targetHours * 60, 0);
 
+  // The panel is purely derived from the user's own time-budget activities.
+  // With none defined there is nothing worth showing - hide the whole widget so
+  // the calendar sidebar stays clean for users who never set up a budget.
   return (
-    <div class="tb-side-panel" data-testid="tb-calendar-panel">
-      <div class="tb-side-head">
-        <h4 class="sidebar-heading">
-          <PhTimer /> {t('timebudget.nav')}
-        </h4>
-        <Show when={activities().length > 0} fallback={<span class="tasks-badge">0</span>}>
+    <Show when={activities().length > 0}>
+      <div class="tb-side-panel" data-testid="tb-calendar-panel">
+        <div class="tb-side-head">
+          <h4 class="sidebar-heading">
+            <PhTimer /> {t('timebudget.nav')}
+          </h4>
           <span class="tasks-badge">{activities().length}</span>
-        </Show>
-      </div>
+        </div>
 
-      <Show when={activities().length > 0}>
         {activities().slice(0, 5).map(a => {
           const zone = () => getActivityZone(a);
           const frac = () =>
@@ -70,19 +71,15 @@ export function CalendarTimeBudgetPanel() {
             </div>
           );
         })}
-      </Show>
 
-      <Show when={activities().length === 0}>
-        <p class="tb-side-empty">{t('timebudget.empty')}</p>
-      </Show>
+        <div class="tb-side-summary">
+          <span>{formatDurationHours(totalLogged())} / {formatDurationHours(totalTarget())} {t('timebudget.calPanel.week', { week: week().slice(-2) })}</span>
+        </div>
 
-      <div class="tb-side-summary">
-        <span>{formatDurationHours(totalLogged())} / {formatDurationHours(totalTarget())} {t('timebudget.calPanel.week', { week: week().slice(-2) })}</span>
+        <a class="tb-side-link" href="/timebudget">
+          {t('timebudget.calPanel.open')} <PhArrowRight />
+        </a>
       </div>
-
-      <a class="tb-side-link" href="/timebudget">
-        {t('timebudget.calPanel.open')} <PhArrowRight />
-      </a>
-    </div>
+    </Show>
   );
 }

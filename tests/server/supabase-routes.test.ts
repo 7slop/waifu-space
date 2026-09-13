@@ -10,9 +10,9 @@ const mocks = vi.hoisted(() => ({
       user_progress: [] as any[],
       user_showcase: [] as any[],
       user_inventory: [] as any[],
-      calendar_items: [] as any[],
       action_logs: [] as any[],
-      leaderboard_view: [] as any[]
+      leaderboard_view: [] as any[],
+      time_budget_sync: [] as any[]
     },
     signUpCalls: [] as any[],
     signInCalls: [] as any[]
@@ -30,6 +30,7 @@ import { GET as meGET, POST as mePOST } from '../../src/routes/api/auth/me';
 import { POST as uploadAvatarPOST } from '../../src/routes/api/upload/avatar';
 import { POST as profilePOST } from '../../src/routes/api/profile';
 import { POST as syncPOST, GET as syncGET } from '../../src/routes/api/sync/progress';
+import { POST as privacyPOST, GET as privacyGET } from '../../src/routes/api/timebudget/sync';
 import { POST as rollPOST } from '../../src/routes/api/gacha/roll';
 import { GET as leaderboardGET } from '../../src/routes/api/leaderboard';
 import { createSessionToken, SESSION_COOKIE_NAME } from '../../src/lib/server/auth';
@@ -99,7 +100,7 @@ function buildFakeClient() {
         maybeSingle() {
           const res = exec(state.filters, 'read');
           const first = res.data?.[0] ?? null;
-          return Promise.resolve({ data: first, error: first === null ? notFound.error : null });
+          return Promise.resolve({ data: first, error: null });
         },
         single() {
           const res = exec(state.filters, 'read');
@@ -135,7 +136,7 @@ function buildFakeClient() {
             if (table === 'user_inventory') {
               idx = src.findIndex(r => r.user_id === row.user_id && r.item_id === row.item_id);
             } else {
-              const keyCol = table === 'user_progress' ? 'user_id' : 'id';
+              const keyCol = table === 'user_progress' || table === 'time_budget_sync' ? 'user_id' : 'id';
               idx = src.findIndex(r => r[keyCol] === row[keyCol]);
             }
             if (idx >= 0) src[idx] = { ...src[idx], ...row };
@@ -188,45 +189,6 @@ function buildFakeClient() {
     }))
   };
 
-  // Mirrors public.sync_calendar_items: atomically replace the user's calendar
-  // rows in-place (delete absent ids + upsert incoming), skipping rows that
-  // fail the SQL validation (bad type/recurrence).
-  const syncCalendarItems = (params: { p_user_id: string; p_items: any[]; p_updated_at: string }) => {
-    const table = db.calendar_items || (db.calendar_items = []);
-    const incomingIds = (params.p_items || [])
-      .map((it: any) => it.item_id)
-      .filter((id: any): id is string => typeof id === 'string' && id !== '');
-    for (let i = table.length - 1; i >= 0; i--) {
-      if (table[i].user_id === params.p_user_id && !incomingIds.includes(table[i].item_id)) {
-        table.splice(i, 1);
-      }
-    }
-    for (const raw of params.p_items || []) {
-      const row = {
-        user_id: params.p_user_id,
-        item_id: raw.item_id,
-        title: raw.title,
-        start_at: raw.start_at,
-        end_at: raw.end_at,
-        all_day: raw.all_day ?? false,
-        type: raw.type,
-        completed: raw.completed ?? false,
-        rewarded: raw.rewarded ?? false,
-        color: raw.color ?? '#ff6584',
-        description: raw.description ?? '',
-        location: raw.location ?? '',
-        recurrence: raw.recurrence ?? 'none',
-        updated_at: params.p_updated_at
-      };
-      if (!['event', 'task', 'birthday'].includes(row.type)) continue;
-      if (!['none', 'daily', 'weekly', 'monthly', 'weekdays'].includes(row.recurrence)) continue;
-      const idx = table.findIndex(r => r.user_id === params.p_user_id && r.item_id === row.item_id);
-      if (idx >= 0) table[idx] = { ...table[idx], ...row };
-      else table.push({ ...row });
-    }
-    return { data: null, error: null };
-  };
-
   // Mirrors public.sync_showcase_items: atomically replace the user's showcase
   // rows (delete all + re-insert, capped to slots 0-5) inside one call.
   const syncShowcaseItems = (params: { p_user_id: string; p_items: any[] }) => {
@@ -253,7 +215,6 @@ function buildFakeClient() {
     storage,
     from: (table: string) => chains[table]?.() ?? chains[table],
     rpc: vi.fn(async (fn: string, params: any) => {
-      if (fn === 'sync_calendar_items') return syncCalendarItems(params);
       if (fn === 'sync_showcase_items') return syncShowcaseItems(params);
       return { data: null, error: { message: `Unknown RPC: ${fn}` } };
     })
@@ -428,7 +389,8 @@ describe('Supabase-backed API routes (regression guard)', () => {
           body: JSON.stringify({ waifu: { bondLevel: 10 } })
         })
       );
-      // Test calendar item with xp injection
+      // Calendar payloads are ignored entirely (they travel through the
+      // encrypted privacy blob), so an xp-injected calendar row is dropped.
       res = await syncPOST(
         req('http://localhost/api/sync/progress', {
           method: 'POST',
@@ -436,7 +398,7 @@ describe('Supabase-backed API routes (regression guard)', () => {
           body: JSON.stringify({ calendar: [{ id: 'hack-1', title: 'Task', xp: 500, start: '2026-09-10T10:00:00Z' }] })
         })
       );
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
 
       // Test tasks array with coin rewards injection
       res = await syncPOST(
@@ -633,9 +595,14 @@ describe('Supabase-backed API routes (regression guard)', () => {
       expect(data.showcaseItems).toEqual(['kimono']);
     });
 
-    it('replaces calendar_items on POST and sanitizes/validates invalid rows', async () => {
-      mocks.state.db.calendar_items.push({ user_id: userId, item_id: 'stale', title: 'Old' });
+    it('rejects requests without a valid session', async () => {
+      const res = await syncGET(req('http://localhost/api/sync/progress', {}));
+      expect(res.status).toBe(401);
+    });
 
+    it('persists occurrence overrides inside the encrypted blob path via /api/sync/progress (no calendar)', async () => {
+      // The calendar is never synced through this plaintext endpoint anymore.
+      // A push carrying a calendar field is accepted but ignored entirely.
       const res = await syncPOST(
         req('http://localhost/api/sync/progress', {
           method: 'POST',
@@ -645,109 +612,24 @@ describe('Supabase-backed API routes (regression guard)', () => {
             rpg: { claimedAffectionMilestones: [], defenseStats: {}, showcaseItems: [] },
             settings: {},
             calendar: [
-              { id: 'evt-1', title: 'Sprint Review', start: '2026-09-10T10:00:00Z', end: '2026-09-10T11:00:00Z', allDay: false, type: 'event', completed: false, color: '#ff6584', description: 'sync', location: 'Room 4', recurrence: 'none' },
-              { id: 'task-1', title: 'Study Kanji', start: '2026-09-10T18:00:00Z', end: '2026-09-10T18:30:00Z', allDay: false, type: 'task', completed: true, color: '#00cec9', recurrence: 'daily' },
-              { id: 'bad-1', title: '', start: 'not-a-date' },
-              { id: 'bad-2', title: 'Bad Color', start: '2026-09-10T09:00:00Z', type: 'event', color: 'not-a-hex', recurrence: 'fortnightly' }
-            ]
-          })
-        })
-      );
-      expect(res.status).toBe(200);
-
-      const rows = mocks.state.db.calendar_items.filter(r => r.user_id === userId);
-      expect(rows.map(r => r.item_id).sort((a, b) => a.localeCompare(b))).toEqual(['bad-2', 'evt-1', 'task-1']);
-      expect(rows.find(r => r.item_id === 'bad-2')).toMatchObject({ color: '#ff6584', recurrence: 'none', type: 'event' });
-      expect(rows.find(r => r.item_id === 'task-1').completed).toBe(true);
-      expect(rows.find(r => r.item_id === 'evt-1')).toMatchObject({
-        title: 'Sprint Review',
-        start_at: '2026-09-10T10:00:00.000Z',
-        description: 'sync',
-        location: 'Room 4'
-      });
-    });
-
-    it('returns calendar_items on GET mapped back to event shape', async () => {
-      mocks.state.db.user_progress.push({ user_id: userId, coins: 200, bond_level: 1 });
-      mocks.state.db.calendar_items.push({
-        user_id: userId,
-        item_id: 'cloud-ev-1',
-        title: 'Cloud Synced Dinner',
-        start_at: '2026-09-12T19:00:00.000Z',
-        end_at: '2026-09-12T20:00:00.000Z',
-        all_day: false,
-        type: 'event',
-        completed: false,
-        color: '#6c5ce7',
-        description: 'from the cloud',
-        location: 'Cafe',
-        recurrence: 'weekly'
-      });
-
-      const res = await syncGET(
-        req('http://localhost/api/sync/progress', { headers: { Authorization: `Bearer ${token}` } })
-      );
-      expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(data.calendarItems).toHaveLength(1);
-      expect(data.calendarItems[0]).toEqual({
-        id: 'cloud-ev-1',
-        title: 'Cloud Synced Dinner',
-        start: '2026-09-12T19:00:00.000Z',
-        end: '2026-09-12T20:00:00.000Z',
-        allDay: false,
-        type: 'event',
-        completed: false,
-        _rewarded: false,
-        color: '#6c5ce7',
-        description: 'from the cloud',
-        location: 'Cafe',
-        recurrence: 'weekly'
-      });
-    });
-
-    it('rejects requests without a valid session', async () => {
-      const res = await syncGET(req('http://localhost/api/sync/progress', {}));
-      expect(res.status).toBe(401);
-    });
-
-    it('persists calendar occurrence overrides on POST and sanitizes them', async () => {
-      const res = await syncPOST(
-        req('http://localhost/api/sync/progress', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            waifu: { name: 'Neo', personality: 'kuudere', appearance: {} },
-            rpg: { claimedAffectionMilestones: [], defenseStats: {}, showcaseItems: [] },
-            settings: {},
-            calendar: [],
+              { id: 'evt-1', title: 'Sprint Review', start: '2026-09-10T10:00:00Z', end: '2026-09-10T11:00:00Z', allDay: false, type: 'event', completed: false, color: '#ff6584', recurrence: 'none' }
+            ],
             calendarOverrides: [
-              { id: 'ov1', parentId: 'evt-9', dateKey: '2026-09-15', deleted: true, updatedAt: '2026-09-15T00:00:00Z' },
-              { id: 'ov2', parentId: 'evt-9', dateKey: 'bad-date', completed: true },
-              { id: 'ov3', parentId: 'bad-parent', dateKey: '2026-09-16' }
+              { id: 'ov1', parentId: 'evt-9', dateKey: '2026-09-15', deleted: true }
             ]
           })
         })
       );
       expect(res.status).toBe(200);
 
-      const progress = mocks.state.db.user_progress.find(p => p.user_id === userId);
-      expect(progress).toBeDefined();
-      expect(Array.isArray(progress.calendar_overrides)).toBe(true);
-      // Both ov1 (valid) and ov3 (valid shape, unknown parentId) survive;
-      // only ov2 is dropped (invalid dateKey).
-      expect(progress.calendar_overrides).toHaveLength(2);
-      expect(progress.calendar_overrides[0]).toMatchObject({ id: 'ov1', parentId: 'evt-9', dateKey: '2026-09-15', deleted: true });
-      expect(progress.calendar_overrides[1]).toMatchObject({ id: 'ov3', parentId: 'bad-parent', dateKey: '2026-09-16' });
-    });
-
-    it('returns calendarOverrides array on GET (defaulting to empty when no data)', async () => {
-      const res = await syncGET(
+      // And the GET response no longer exposes any calendar data.
+      const getRes = await syncGET(
         req('http://localhost/api/sync/progress', { headers: { Authorization: `Bearer ${token}` } })
       );
-      expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(Array.isArray(data.calendarOverrides)).toBe(true);
+      expect(getRes.status).toBe(200);
+      const data = await getRes.json();
+      expect(data).not.toHaveProperty('calendarItems');
+      expect(data).not.toHaveProperty('calendarOverrides');
     });
   });
 
@@ -979,36 +861,8 @@ describe('Supabase-backed API routes (regression guard)', () => {
         defense_victories: 4,
         goblins_defeated: 60
       });
-      mocks.state.db.calendar_items.push({
-        user_id: userId,
-        item_id: 'cal-1',
-        title: 'Scoped Task',
-        start_at: '2026-09-12T10:00:00Z',
-        end_at: '2026-09-12T11:00:00Z',
-        all_day: false,
-        type: 'task',
-        completed: false,
-        color: '#00cec9',
-        recurrence: 'none'
-      });
       mocks.state.db.user_inventory.push({ user_id: userId, item_id: 'sakura-shrine', category: 'wallpaper', rarity: 'rare' });
       mocks.state.db.user_showcase.push({ user_id: userId, slot_index: 0, item_id: 'sakura-shrine' });
-    });
-
-    it('returns only calendar items when scope=calendar', async () => {
-      const res = await syncGET(
-        req('http://localhost/api/sync/progress?scope=calendar', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      );
-      expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(data.success).toBe(true);
-      expect(data.calendarItems).toHaveLength(1);
-      expect(data.calendarItems[0].id).toBe('cal-1');
-      expect(data.progress).toBeNull();
-      expect(data.inventory).toHaveLength(0);
-      expect(data.showcaseItems).toHaveLength(0);
     });
 
     it('returns only rpg and inventory when scope=rpg', async () => {
@@ -1022,7 +876,8 @@ describe('Supabase-backed API routes (regression guard)', () => {
       expect(data.success).toBe(true);
       expect(data.progress.coins).toBe(888);
       expect(data.inventory).toHaveLength(1);
-      expect(data.calendarItems).toHaveLength(0);
+      // The calendar is never part of this plaintext endpoint anymore.
+      expect(data).not.toHaveProperty('calendarItems');
     });
 
     it('persists claimed milestones and grants milestone cosmetic items into user_inventory on sync', async () => {
@@ -1049,6 +904,112 @@ describe('Supabase-backed API routes (regression guard)', () => {
       const progress = mocks.state.db.user_progress.find(p => p.user_id === userId);
       expect(progress.claimed_milestones).toContain(5);
       expect(progress.claimed_milestones).toContain(8);
+    });
+  });
+
+  describe('encrypted time budget / privacy sync (/api/timebudget/sync)', () => {
+    const blob = {
+      v: 1,
+      salt: 'c2FsdHNhbHRzYWx0c2FsdHNhbHQ=',
+      iv: 'aXZpdml2aXZpdml2aXY=',
+      ciphertext: 'Y2lwaGVydGV4dGNpcGhlcnRleHQ=',
+      updatedAt: '2026-09-13T00:00:00Z'
+    };
+
+    it('rejects unauthenticated requests with 401', async () => {
+      const res = await privacyGET(req('http://localhost/api/timebudget/sync', {}));
+      expect(res.status).toBe(401);
+      const res2 = await privacyPOST(
+        req('http://localhost/api/timebudget/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ blob })
+        })
+      );
+      expect(res2.status).toBe(401);
+    });
+
+    it('rejects malformed encrypted blobs with 400', async () => {
+      const userId = randomId();
+      const token = createSessionToken({ id: userId, username: 'Encrypted' });
+      const res = await privacyPOST(
+        req('http://localhost/api/timebudget/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ blob: { v: 1 } })
+        })
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('returns empty blob for a user with nothing stored', async () => {
+      const userId = randomId();
+      const token = createSessionToken({ id: userId, username: 'Encrypted' });
+      const res = await privacyGET(
+        req('http://localhost/api/timebudget/sync', { headers: { Authorization: `Bearer ${token}` } })
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.blob).toBeNull();
+    });
+
+    it('stores and returns the opaque encrypted blob without ever parsing it', async () => {
+      const userId = randomId();
+      const token = createSessionToken({ id: userId, username: 'Encrypted' });
+      const res = await privacyPOST(
+        req('http://localhost/api/timebudget/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ blob })
+        })
+      );
+      expect(res.status).toBe(200);
+
+      // The stored row is pure ciphertext - the server only saw the blob.
+      const stored = mocks.state.db.time_budget_sync.filter(r => r.user_id === userId);
+      expect(stored).toHaveLength(1);
+      expect(stored[0].ciphertext).toBe(blob.ciphertext);
+      expect(stored[0].kdf_salt).toBe(blob.salt);
+      expect(stored[0].blob_version).toBe(1);
+
+      const getRes = await privacyGET(
+        req('http://localhost/api/timebudget/sync', { headers: { Authorization: `Bearer ${token}` } })
+      );
+      expect(getRes.status).toBe(200);
+      const data = await getRes.json();
+      expect(data.blob).toEqual({
+        v: 1,
+        salt: blob.salt,
+        iv: blob.iv,
+        ciphertext: blob.ciphertext,
+        updatedAt: blob.updatedAt
+      });
+    });
+
+    it('upserts the latest blob per user (no duplicate rows)', async () => {
+      const userId = randomId();
+      const token = createSessionToken({ id: userId, username: 'Encrypted' });
+      const v2 = { ...blob, ciphertext: 'bmV3Y2lwaGVydGV4dG5ld2NpcGhlcnRleHQ=' };
+
+      await privacyPOST(
+        req('http://localhost/api/timebudget/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ blob })
+        })
+      );
+      const res = await privacyPOST(
+        req('http://localhost/api/timebudget/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ blob: v2 })
+        })
+      );
+      expect(res.status).toBe(200);
+      const rows = mocks.state.db.time_budget_sync.filter(r => r.user_id === userId);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].ciphertext).toBe(v2.ciphertext);
     });
   });
 

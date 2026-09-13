@@ -883,13 +883,10 @@
     "resetHour": "Reset time (hour)",
     "notifications": "Milestone notifications",
     "catchUp": "Mid-week catch-up reminders",
-    "sortBy": "Sort by",
-    "sortPriority": "Priority",
-    "sortDeficit": "Deficit (worst first)",
-    "sortProgress": "% complete",
-    "sortName": "Name",
-    "filterZone": "Show zone",
-    "zoneAll": "All zones",
+    "cloud": {
+      "offline": "Offline",
+      "syncError": "Sync error"
+    },
     "calPanel": {
       "week": "W{week}",
       "open": "Open time budget"

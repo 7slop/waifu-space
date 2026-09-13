@@ -577,41 +577,22 @@ describe('Global Store & RPG State (store.ts)', () => {
       expect(state.settings.countryHolidays).toEqual(['JP', 'GB', 'ZZ', 'DE']);
     });
 
-    it('adopts the server calendar list when the cloud has calendar items', async () => {
+    it('keeps the local calendar when the profile pull carries no calendar data', async () => {
       setState('user', { id: 'u1', username: 'CloudCal', token: 'ws_cloud' });
-      setState('calendar', 'events', []);
+      setState('calendar', 'events', [
+        { id: 'local-1', title: 'Local Event', start: new Date().toISOString(), end: new Date().toISOString(), allDay: false, type: 'event', completed: false, color: '#ff6584', recurrence: 'none' }
+      ]);
 
+      // The /api/sync/progress pull no longer carries any calendar payload -
+      // the calendar is merged through the encrypted privacy blob instead.
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
           success: true,
           progress: { coins: 200 },
           inventory: [],
-          showcaseItems: [],
-          calendarItems: [
-            { id: 'c1', title: 'Cloud Sunset', start: '2026-09-12T19:00:00Z', end: '2026-09-12T20:00:00Z', allDay: false, type: 'event', completed: false, color: '#6c5ce7', recurrence: 'none' },
-            { id: 'c2', title: 'Kanji Rep', start: '2026-09-12T18:00:00Z', end: '2026-09-12T18:30:00Z', allDay: false, type: 'task', completed: true, color: 'not-a-hex', recurrence: 'daily' }
-          ]
+          showcaseItems: []
         })
-      }));
-
-      await loadCloudProgress('ws_cloud');
-
-      expect(state.calendar.events).toHaveLength(2);
-      expect(state.calendar.events.map(e => e.id)).toEqual(['c1', 'c2']);
-      expect(state.calendar.events[0].title).toBe('Cloud Sunset');
-      // Invalid hex is sanitized to the default color.
-      expect(state.calendar.events[1].color).toBe('#ff6584');
-      expect(state.calendar.events[1].completed).toBe(true);
-    });
-
-    it('keeps the local calendar when the cloud has no calendar items', async () => {
-      setState('user', { id: 'u1', username: 'LocalCal', token: 'ws_cloud' });
-      setState('calendar', 'events', [{ id: 'local-1', title: 'Local Event', start: new Date().toISOString(), end: new Date().toISOString(), allDay: false, type: 'event', completed: false, color: '#ff6584', recurrence: 'none' }]);
-
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true, progress: { coins: 200 }, inventory: [], showcaseItems: [], calendarItems: [] })
       }));
 
       await loadCloudProgress('ws_cloud');
@@ -686,7 +667,6 @@ describe('Global Store & RPG State (store.ts)', () => {
         json: async () => ({
           success: true,
           progress: { coins: 5, bond_level: 3, bond_exp: 0, waifu_name: 'Rin', waifu_personality: 'kuudere' },
-          calendarSyncedAt: '2026-01-01T00:00:00Z',
           showcaseItems: ['kimono'],
           inventory: [{ item_id: 'kimono', category: 'outfit' }]
         })
@@ -735,7 +715,7 @@ describe('Global Store & RPG State (store.ts)', () => {
       const body = JSON.parse(calls[0][1].body);
       expect(body.showcaseItems).toEqual(['kimono']);
       expect(body.waifu).toBeDefined();
-      expect(body.calendar).toBeDefined();
+      expect(body.calendar).toBeUndefined();
     });
 
     it('merges the server showcase even when it is empty (cleared elsewhere)', async () => {
@@ -748,7 +728,6 @@ describe('Global Store & RPG State (store.ts)', () => {
         json: async () => ({
           success: true,
           progress: { coins: 5, bond_level: 3 },
-          calendarSyncedAt: '2026-01-01T00:00:00Z',
           showcaseItems: [],
           inventory: [{ item_id: 'kimono', category: 'outfit' }]
         })

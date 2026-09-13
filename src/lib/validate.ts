@@ -231,7 +231,7 @@ function sanitizeTimeBudgetActivity(raw: unknown): TimeBudgetActivity | null {
   return activity;
 }
 
-function sanitizeTimeBudget(raw: unknown): TimeBudgetState {
+export function sanitizeTimeBudget(raw: unknown): TimeBudgetState {
   const src = isRecord(raw) ? raw : {};
   const settings = isRecord(src.settings) ? src.settings : {};
   const activities = Array.isArray(src.activities)

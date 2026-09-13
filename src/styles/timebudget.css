@@ -759,6 +759,26 @@
 
 .tb-side-link:hover { text-decoration: underline; }
 
+/* Encrypted cloud sync status pills */
+.tb-sync-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.tb-sync-offline {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+
+.tb-sync-error {
+  color: #ef4444;
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+}
+
 @media (max-width: 640px) {
   .timebudget-layout { padding: 18px 14px 48px; }
   .timebudget-grid { grid-template-columns: 1fr; }

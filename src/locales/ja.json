@@ -883,13 +883,10 @@
     "resetHour": "リセット時刻（時）",
     "notifications": "マイルストーン通知",
     "catchUp": "週中のリマインド",
-    "sortBy": "並び替え",
-    "sortPriority": "優先度",
-    "sortDeficit": "不足度（悪い順）",
-    "sortProgress": "達成率",
-    "sortName": "名前",
-    "filterZone": "ゾーン表示",
-    "zoneAll": "すべてのゾーン",
+    "cloud": {
+      "offline": "オフライン",
+      "syncError": "同期エラー"
+    },
     "calPanel": {
       "week": "W{week}",
       "open": "タイムバジェットを開く"

@@ -1,5 +1,5 @@
 import { createSignal, Show } from 'solid-js';
-import { setUserAccount, resetAccountProgress, showToast, loadCloudProgress } from '../lib/store';
+import { setUserAccount, resetAccountProgress, unlockBudgetKey, showToast, loadCloudProgress } from '../lib/store';
 import { t } from '../lib/i18n';
 import { useFocusTrap } from '../lib/accessibility';
 import { PhFlowerLotus, PhX } from './icons';
@@ -79,6 +79,13 @@ export function AuthModal(props: { isOpen: boolean; onClose: () => void; initial
         bio: data.user.bio,
         token: data.token
       });
+
+      // Derive the time-budget encryption key from the password while it's
+      // available locally (the server only validated it - it never sees the
+      // derived key). Ignored failures: on login the password was already
+      // verified, so this only fails for a corrupt cloud blob, in which case
+      // the planner shows the locked state instead of overwriting it.
+      await unlockBudgetKey(password());
 
       await loadCloudProgress(data.token);
 
