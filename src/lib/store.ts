@@ -739,6 +739,26 @@ async function persistBudgetKey(): Promise<boolean> {
 }
 
 /**
+ * Drops the in-memory key AND the persisted (possibly drifted) one for this
+ * account. Used when an auto-restored key fails to decrypt the cloud blob, so
+ * it can never wedge this device in 'locked' on later sessions; the next
+ * explicit password login re-derives cleanly against the blob's own salt.
+ */
+async function invalidateStoredBudgetKey(): Promise<void> {
+  budgetKey = null;
+  budgetSalt = '';
+  budgetBlobSynced = false;
+  budgetPushBlocked = false;
+  if (typeof window !== 'undefined' && state.user?.id) {
+    try {
+      localStorage.removeItem(budgetKeyStorageKey(state.user.id));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
  * Re-imports the persisted key for the currently signed-in account from
  * localStorage. Returns true when a key was restored, so the cloud copy can be
  * decrypted without the password (e.g. sessions restored from a stored token).
@@ -923,7 +943,7 @@ export async function loadBudgetFromCloud(token?: string): Promise<void> {
 
   // Sessions restored from a stored token have no password on hand: unlock
   // automatically from the persisted key for this account.
-  await restoreStoredBudgetKey();
+  const restored = await restoreStoredBudgetKey();
 
   const blob = await fetchBudgetBlob(authToken);
   if (!blob) {
@@ -947,8 +967,16 @@ export async function loadBudgetFromCloud(token?: string): Promise<void> {
 
   const plain = await decryptBudgetState(blob, budgetKey!);
   if (plain === null) {
-    // Blob cannot be decrypted with the current key (e.g. the password was
-    // changed on another device). Never clobber the cloud copy with local state.
+    if (restored) {
+      // The restored persisted key no longer matches the cloud blob (e.g. it
+      // was derived under a drifted pre-fix salt, or the password was changed
+      // on another device). It is useless on this path and would wedge this
+      // device in 'locked' on every auto-login. Drop it so the next explicit
+      // password login re-derives against the blob's own salt instead.
+      await invalidateStoredBudgetKey();
+    }
+    // Blob cannot be decrypted with the current key. Never clobber the cloud
+    // copy with local state.
     budgetPushBlocked = true;
     setBudgetCloudStatus('locked');
     return;

@@ -12,7 +12,7 @@ import {
   budgetKeyReady,
   budgetCloudStatus
 } from '../../src/lib/store';
-import { generateBudgetSalt, deriveBudgetKey, encryptBudgetState } from '../../src/lib/cloudcrypt';
+import { generateBudgetSalt, deriveBudgetKey, encryptBudgetState, exportBudgetKey } from '../../src/lib/cloudcrypt';
 
 const CLOUD_PRIVACY = {
   timebudget: {
@@ -298,5 +298,41 @@ describe('Time Budget encrypted cloud sync (store wiring)', () => {
     const body = JSON.parse((post![1] as RequestInit).body as string);
     expect(body.blob.ciphertext).not.toContain('Keep Me'); // still encrypted
     expect(body.blob.salt).toBe(blob.salt);
+  });
+
+  it('drops a stale persisted key that can no longer decrypt the cloud blob (wedge fix)', async () => {
+    // A blob was created (e.g. on another device) under its own random salt.
+    const { blob } = await buildCloudBlob('pw-wedge', CLOUD_PRIVACY);
+
+    // This device carries a PERSISTED key from a pre-fix build that was derived
+    // under a DIFFERENT (drifted/random) salt - it can never decrypt the blob.
+    const staleSalt = generateBudgetSalt();
+    const staleKey = await deriveBudgetKey('pw-wedge', staleSalt);
+    localStorage.setItem(
+      `waifu_space_budget_key_v1_u9`,
+      JSON.stringify({ v: 1, raw: await exportBudgetKey(staleKey), salt: staleSalt })
+    );
+
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      return fakeResponse({ success: true, blob });
+    });
+    setState('user', { id: 'u9', username: 'Wedge', token: 'tok-9' });
+
+    // Auto-login from a stored token: the restored stale key fails to decrypt.
+    await loadBudgetFromCloud('tok-9');
+    expect(budgetCloudStatus()).toBe('locked');
+    expect(state.timebudget.activities.length).toBe(0);
+
+    // The wedge fix: the useless persisted key was REMOVED, so a later auto-login
+    // starts clean instead of being permanently stuck on the bad key.
+    expect(localStorage.getItem('waifu_space_budget_key_v1_u9')).toBeNull();
+    expect(isBudgetUnlocked()).toBe(false);
+
+    // A correct-password login re-derives against the blob's own salt and recovers.
+    expect(await unlockBudgetKey('pw-wedge')).toBe(true);
+    expect(budgetCloudStatus()).toBe('synced');
+    expect(state.timebudget.activities.map(a => a.name)).toEqual(['C++']);
+    expect(localStorage.getItem('waifu_space_budget_key_v1_u9')).not.toBeNull();
   });
 });
