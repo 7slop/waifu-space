@@ -33,6 +33,16 @@ export const STORAGE_KEY = 'waifu_space_data_v1';
 const ACTIVE_USER_KEY = 'waifu_space_active_user_v1';
 const GUEST_ID_PREFIX = 'guest_';
 
+// ---- Cloud push serialization --------------------------------------------
+// Every cloud push is chained onto a single promise queue so two pushes can
+// never run (or interleave) at the same time - this was a real source of data
+// loss bugs: a debounce trigger and a pagehide flush racing could reorder
+// payloads server-side and clobber newer progress with an older snapshot.
+// Each queued push also reads the live state when it RUNS (not when it was
+// scheduled), so the last scheduled push always transmits the freshest state.
+let pushQueue: Promise<boolean> = Promise.resolve(true);
+let pushActive = false;
+
 function isRegisteredAccount(user: UserAccount | null | undefined): boolean {
   return !!user && !!user.id;
 }
@@ -389,7 +399,23 @@ function isOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
 }
 
-function buildSyncSnapshot() {
+function buildSyncSnapshot(): {
+  waifu?: unknown;
+  settings?: unknown;
+  calendar?: unknown;
+  calendarOverrides?: unknown;
+  showcaseItems?: unknown;
+  rpg?: unknown;
+} {
+  // Until the account's cloud snapshot has been pulled at least once, the local
+  // state is only the empty/default guest template. Pushing it would clobber the
+  // user's REAL saved waifu, settings, calendar and showcase (e.g. a returning
+  // user opening the app on a fresh device). So the first push carries no
+  // resources at all - the server leaves everything untouched and the pull that
+  // runs right after boot sets cloudSnapshotLoaded, unlocking full syncs.
+  if (!cloudSnapshotLoaded) {
+    return {};
+  }
   return {
     waifu: {
       name: state.waifu.name,
@@ -399,11 +425,7 @@ function buildSyncSnapshot() {
     settings: state.settings,
     calendar: state.calendar.events.map(e => ({ ...e })),
     calendarOverrides: state.calendar.occurrenceOverrides.map(o => ({ ...o })),
-    // Only ship the showcase once the account's cloud snapshot has been pulled,
-    // so a fresh-login push can never replace the user's saved showcase with an
-    // empty default array. JSON.stringify drops this key when undefined, and the
-    // server leaves the showcase untouched when it is absent.
-    showcaseItems: cloudSnapshotLoaded ? state.rpg.showcaseItems : undefined,
+    showcaseItems: state.rpg.showcaseItems,
     rpg: {
       claimedAffectionMilestones: state.rpg?.claimedAffectionMilestones || []
     }
@@ -449,6 +471,62 @@ function clearPendingSync() {
   }
 }
 
+/**
+ * If a sync snapshot was queued locally (offline / failed push), trigger a push
+ * with the freshest state. The queued payload is only consulted for its account
+ * ownership - the actual snapshot is rebuilt from live state so nothing queued
+ * is ever silently lost or replayed for the wrong user.
+ */
+export async function syncProgressFromPending(): Promise<boolean> {
+  const pending = readPendingSync();
+  if (!pending) return false;
+  const pendingUser = pending.userId;
+  if (typeof pendingUser === 'string') {
+    if (!state.user || state.user.id !== pendingUser) {
+      // The queued snapshot belongs to a different account - it must not be
+      // pushed onto whoever is logged in now.
+      clearPendingSync();
+      return false;
+    }
+  } else if (state.user?.id) {
+    clearPendingSync();
+    return false;
+  }
+  return pushProgressToCloud();
+}
+
+// Cross-tab coordination: when any tab sharing this account saves data to
+// local storage, other open tabs flush so their freshest state still reaches
+// the cloud. 'storage' fires only in OTHER tabs, so this never loops back onto
+// the writer. PENDING_SYNC_KEY churn (written on failure, removed on success)
+// is deliberately ignored to avoid tabs re-triggering each other.
+function syncProgressFromStorageEvent(e: StorageEvent) {
+  if (!state.user?.token) return;
+  if (e.key === PENDING_SYNC_KEY) return;
+  if (!e.newValue) return;
+  const key = e.key;
+  if (!key) return;
+  let eventUserId: string | null = null;
+  if (key === STORAGE_KEY) {
+    eventUserId = null;
+  } else if (key.startsWith(`${STORAGE_KEY}_acct_`)) {
+    eventUserId = key.slice(`${STORAGE_KEY}_acct_`.length);
+  } else {
+    return;
+  }
+  if (eventUserId !== (state.user?.id ?? null)) return;
+  // Offline tabs queue (not push) on failure; this is enough to make sure the
+  // freshest snapshot is retried once the connection returns.
+  clearTimeout(cloudSyncTimer);
+  void pushProgressToCloud();
+}
+
+export function queuePushProgressFromStorage() {
+  if (typeof window === 'undefined') return;
+  clearTimeout(cloudSyncTimer);
+  void pushProgressToCloud();
+}
+
 export function scheduleCloudSync() {
   if (typeof window === 'undefined') return;
   if (!state.user?.token) return;
@@ -463,44 +541,68 @@ export function scheduleCloudSync() {
  * browser is offline, the latest snapshot is queued locally and retried when
  * the connection comes back, so no progress is silently lost.
  */
-export async function pushProgressToCloud(): Promise<boolean> {
+export function pushProgressToCloud(): Promise<boolean> {
   const token = state.user?.token;
-  if (!token) return false;
+  if (!token) return Promise.resolve(false);
 
   if (!isOnline()) {
     setCloudSyncStatus('offline');
     queuePendingSync();
-    return false;
+    return Promise.resolve(false);
   }
 
   setCloudSyncStatus('syncing');
-  try {
-    const res = await fetch('/api/sync/progress', {
-      method: 'POST',
-      keepalive: true,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(buildSyncSnapshot())
-    });
-    if (res.status === 401) {
-      // Intentional 401 on unauthorized / expired session: clear session and stop syncing
-      setUserAccount(null);
-      setCloudSyncStatus('error');
+
+  const attempt = async () => {
+    try {
+      // buildSyncSnapshot() runs when the push actually executes, so the last
+      // push in a burst always carries the newest state.
+      const res = await fetch('/api/sync/progress', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(buildSyncSnapshot())
+      });
+      if (res.status === 401) {
+        // Intentional 401 on unauthorized / expired session: clear session and stop syncing
+        setUserAccount(null);
+        setCloudSyncStatus('error');
+        clearPendingSync();
+        return false;
+      }
+      if (!res.ok) {
+        setCloudSyncStatus('error');
+        queuePendingSync();
+        return false;
+      }
       clearPendingSync();
-      return false;
-    }
-    if (!res.ok) {
-      setCloudSyncStatus('error');
+      setCloudSyncStatus('synced');
+      return true;
+    } catch {
+      setCloudSyncStatus(isOnline() ? 'error' : 'offline');
       queuePendingSync();
       return false;
     }
-    clearPendingSync();
-    setCloudSyncStatus('synced');
-    return true;
-  } catch {
-    setCloudSyncStatus(isOnline() ? 'error' : 'offline');
-    queuePendingSync();
-    return false;
-  }
+  };
+
+  pushActive = true;
+  const commit = pushQueue.then(attempt);
+  // Whatever happens, the next push waits for this one before it starts.
+  pushQueue = commit.then(
+    () => {
+      pushActive = false;
+      return true;
+    },
+    () => {
+      pushActive = false;
+      return true;
+    }
+  );
+  return commit;
+}
+
+export function isPushActive(): boolean {
+  return pushActive;
 }
 
 // Flush any pending debounced sync when the page is being unloaded, so a
@@ -514,13 +616,26 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', flushPendingSync);
   window.addEventListener('beforeunload', flushPendingSync);
 
-  // Retry any queued (offline) sync as soon as the connection returns.
-  window.addEventListener('online', () => {
+  // When the connection (re-)appears after being offline, pick up wherever we
+  // left off: retry a pull that was never completed, then flush any queued sync.
+  const retryCloudSync = () => {
     if (!state.user?.token) return;
-    if (!readPendingSync()) return;
     clearTimeout(cloudSyncTimer);
-    void pushProgressToCloud();
-  });
+    if (!cloudSnapshotLoaded) {
+      // The very first pull never succeeded (e.g. app was opened offline). Until
+      // it does, pushes intentionally carry no state - so retry the pull now.
+      void loadCloudProgress();
+      return;
+    }
+    if (!readPendingSync()) return;
+    void syncProgressFromPending();
+  };
+  window.addEventListener('online', retryCloudSync);
+  window.addEventListener('load', retryCloudSync);
+
+  // Another tab saved to local storage for this account - make sure our
+  // freshest state still reaches the cloud.
+  window.addEventListener('storage', syncProgressFromStorageEvent);
 }
 
 /**

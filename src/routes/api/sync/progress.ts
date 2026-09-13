@@ -101,6 +101,14 @@ export async function POST(event: { request: Request }) {
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseServerClient()!;
 
+      // A push that carries no waifu/settings resources is a pre-pull heartbeat
+      // (e.g. the very first push from a fresh device before the cloud snapshot
+      // was pulled). It must NOT overwrite the saved cloud row with defaults.
+      const hasProfileData =
+        (waifu && typeof waifu === 'object' && !Array.isArray(waifu)) ||
+        (settings && typeof settings === 'object' && !Array.isArray(settings));
+
+      if (hasProfileData) {
       // Fetch existing bond level to securely validate any claimed milestones
       const { data: existing } = await supabase
         .from('user_progress')
@@ -151,6 +159,7 @@ export async function POST(event: { request: Request }) {
         if (cosmeticInserts.length > 0) {
           await supabase.from('user_inventory').upsert(cosmeticInserts, { onConflict: 'user_id,item_id', ignoreDuplicates: true });
         }
+      }
       }
 
       // Update showcase slots from validated inventory items. This runs through

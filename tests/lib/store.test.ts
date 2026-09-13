@@ -24,6 +24,7 @@ import {
   pokeAvatar,
   headpatWaifu,
   loadCloudProgress,
+  pushProgressToCloud,
   resetAccountProgress,
   DEFAULT_STATE,
   DEFAULT_RPG,
@@ -666,6 +667,140 @@ describe('Global Store & RPG State (store.ts)', () => {
 
       expect(state.rpg.coins).toBe(777);
       expect((fetch as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Cloud sync integrity guards (showcase / first-pull / serialization)', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      setState('user', null);
+    });
+
+    // Resets the module-scoped cloudSnapshotLoaded flag and gives the account a
+    // saved cloud state (showcase 'kimono') so later pushes must ship it.
+    async function seedReturningUser() {
+      resetAccountProgress();
+      setState('user', { id: 'u1', username: 'Returner', token: 'ws_u1' });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          progress: { coins: 5, bond_level: 3, bond_exp: 0, waifu_name: 'Rin', waifu_personality: 'kuudere' },
+          calendarSyncedAt: '2026-01-01T00:00:00Z',
+          showcaseItems: ['kimono'],
+          inventory: [{ item_id: 'kimono', category: 'outfit' }]
+        })
+      }));
+      await loadCloudProgress('ws_u1');
+      vi.unstubAllGlobals();
+    }
+
+    const capturePushBodies = () => {
+      const bodies: Record<string, any>[] = [];
+      const fetcher = vi.fn(() =>
+        Promise.resolve({ ok: true, json: async () => ({ success: true }) })
+      );
+      vi.stubGlobal('fetch', fetcher as unknown as typeof fetch);
+      return { fetcher, bodiesIn: (body: any) => JSON.parse(body) };
+    };
+
+    it('never pushes the empty showcase (or any cloud state) before the first pull', async () => {
+      resetAccountProgress();
+      setState('user', { id: 'u1', username: 'FreshDevice', token: 'ws_u1' });
+      // Local state is the untouched default template: empty showcase, empty
+      // calendar, default waifu.
+      expect(state.rpg.showcaseItems).toEqual([]);
+
+      const { fetcher } = capturePushBodies();
+      const pushed = await pushProgressToCloud();
+
+      expect(pushed).toBe(true);
+      const calls = fetcher.mock.calls as any[][];
+      expect(calls.length).toBe(1);
+      const body = JSON.parse(calls[0][1].body);
+      // A pre-pull push must not carry any resource that could clobber the
+      // cloud copy of this account.
+      expect(body).toEqual({});
+    });
+
+    it('ships the full snapshot (including the pulled showcase) once the pull succeeds', async () => {
+      await seedReturningUser();
+      expect(state.rpg.showcaseItems).toEqual(['kimono']);
+
+      const { fetcher } = capturePushBodies();
+      await pushProgressToCloud();
+
+      const calls = fetcher.mock.calls as any[][];
+      expect(calls.length).toBe(1);
+      const body = JSON.parse(calls[0][1].body);
+      expect(body.showcaseItems).toEqual(['kimono']);
+      expect(body.waifu).toBeDefined();
+      expect(body.calendar).toBeDefined();
+    });
+
+    it('merges the server showcase even when it is empty (cleared elsewhere)', async () => {
+      await seedReturningUser();
+      setState('rpg', 'showcaseItems', ['kimono']);
+
+      // Another device cleared the showcase; the cloud now returns [].
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          progress: { coins: 5, bond_level: 3 },
+          calendarSyncedAt: '2026-01-01T00:00:00Z',
+          showcaseItems: [],
+          inventory: [{ item_id: 'kimono', category: 'outfit' }]
+        })
+      }));
+      await loadCloudProgress('ws_u1');
+
+      expect(state.rpg.showcaseItems).toEqual([]);
+      vi.unstubAllGlobals();
+    });
+
+    it('serializes concurrent pushes and always lands the last snapshot', async () => {
+      await seedReturningUser();
+
+      let release!: (v: unknown) => void;
+      const gate = new Promise(res => { release = res; });
+      const bodies: string[] = [];
+
+      const fetcher = vi.fn()
+        // Push #1: hangs until the test resolves the gate.
+        .mockImplementationOnce((input: any, init: any) => {
+          bodies.push(init.body);
+          return gate.then(() => ({ ok: true, json: async () => ({ success: true }) }));
+        })
+        // Push #2 (queued) resolves immediately.
+        .mockImplementation(async (input: any, init: any) => {
+          bodies.push(init.body);
+          return { ok: true, json: async () => ({ success: true }) };
+        });
+      vi.stubGlobal('fetch', fetcher as unknown as typeof fetch);
+
+      setState('waifu', 'name', 'Umbra');
+      const p1 = pushProgressToCloud(); // in flight, waiting on the gate
+      // Let the queued push build & send its snapshot ('Umbra') before a newer
+      // edit lands.
+      await Promise.resolve();
+      setState('waifu', 'name', 'Neo');
+      // A second push schedules while the first is still in flight. It is not
+      // dropped: it waits in the queue and sends its own (fresher) snapshot.
+      const p2 = pushProgressToCloud();
+
+      release(null);
+      const [ok1, ok2] = await Promise.all([p1, p2]);
+
+      expect(ok1).toBe(true);
+      expect(ok2).toBe(true);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      const firstBody = JSON.parse(bodies[0]);
+      const lastBody = JSON.parse(bodies[1]);
+      expect(firstBody.waifu.name).toBe('Umbra');
+      // Last-write-wins: the queued push carried the newer name, so 'Neo'
+      // reached the server even though the first push was still in flight.
+      expect(lastBody.waifu.name).toBe('Neo');
     });
   });
 });
