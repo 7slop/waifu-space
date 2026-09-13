@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_profiles_username ON public.profiles(username);
 -- 2. User Progress Table (stores stats, coins, XP, waifu setup)
 CREATE TABLE IF NOT EXISTS public.user_progress (
   user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
-  coins BIGINT DEFAULT 200 NOT NULL CHECK (coins >= 0),
+  coins BIGINT DEFAULT 0 NOT NULL CHECK (coins >= 0),
   bond_exp BIGINT DEFAULT 0 NOT NULL,
   bond_level INT DEFAULT 1 NOT NULL,
   waifu_name TEXT DEFAULT 'Akari' NOT NULL,

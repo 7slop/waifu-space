@@ -419,7 +419,7 @@ describe('Global Store & RPG State (store.ts)', () => {
   });
 
   describe('Fresh Player Defaults & Account Reset', () => {
-    it('defaults a brand-new player to bond level 1 with no XP and starter coins', () => {
+    it('defaults a brand-new player to bond level 1 with no XP and zero coins', () => {
       expect(DEFAULT_STATE.waifu.bondLevel).toBe(1);
       expect(DEFAULT_STATE.waifu.bondExp).toBe(0);
       expect(state.waifu.bondLevel).toBe(1);
@@ -464,13 +464,13 @@ describe('Global Store & RPG State (store.ts)', () => {
         json: async () => ({
           success: true,
           progress: {
-            coins: 200,
+            coins: 0,
             bond_level: 1,
             bond_exp: 0,
             waifu_name: 'Akari',
             waifu_personality: 'tsundere',
             worn_outfit: 'seifuku',
-            worn_accessory: 'none',
+            worn_accessory: 'ribbon',
             worn_hairstyle: 'twintails',
             appearance_data: {},
             settings_data: {},
@@ -486,7 +486,7 @@ describe('Global Store & RPG State (store.ts)', () => {
 
       await loadCloudProgress('ws_fresh');
 
-      expect(state.rpg.coins).toBe(200);
+      expect(state.rpg.coins).toBe(0);
       expect(state.waifu.bondLevel).toBe(1);
       expect(state.waifu.bondExp).toBe(0);
       expect(state.rpg.unlockedOutfits).toEqual(DEFAULT_RPG.unlockedOutfits);

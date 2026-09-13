@@ -12,7 +12,7 @@ describe('State hydration sanitizer (validate.ts)', () => {
   it('defaults empty input to null user and zeroed rpg slice', () => {
     const out = sanitizeRawState({}).data;
     expect(out.user).toBeNull();
-    expect(out.rpg?.coins).toBe(200);
+    expect(out.rpg?.coins).toBe(0);
     expect(out.rpg?.unlockedOutfits).toEqual([]);
     expect(out.waifu).toBeUndefined();
   });

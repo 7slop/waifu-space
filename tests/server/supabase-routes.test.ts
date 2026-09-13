@@ -276,7 +276,7 @@ describe('Supabase-backed API routes (regression guard)', () => {
       expect(mocks.state.db.profiles[0]).toMatchObject({ id: data.user.id, username: 'CloudKnight', email: 'cloud@waifuspace.moe' });
 
       expect(mocks.state.db.user_progress).toHaveLength(1);
-      expect(mocks.state.db.user_progress[0]).toMatchObject({ user_id: data.user.id, coins: 200, bond_level: 1, bond_exp: 0 });
+      expect(mocks.state.db.user_progress[0]).toMatchObject({ user_id: data.user.id, coins: 0, bond_level: 1, bond_exp: 0 });
     });
 
     it('rejects duplicate usernames with 409 before creating an orphan auth user', async () => {

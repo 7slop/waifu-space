@@ -174,7 +174,7 @@ function sanitizeRpg(raw: unknown): RpgState {
   const showcaseItems = dedupeStrings(src.showcaseItems).slice(0, MAX_SHOWCASE_ITEMS);
   const defenseStats = isRecord(src.defenseStats) ? src.defenseStats : {};
   return {
-    coins: toNonNegativeInt(src.coins, 200),
+    coins: toNonNegativeInt(src.coins, 0),
     unlockedOutfits: dedupeStrings(src.unlockedOutfits),
     unlockedAccessories: dedupeStrings(src.unlockedAccessories),
     unlockedHairstyles: dedupeStrings(src.unlockedHairstyles),

@@ -217,76 +217,20 @@ export interface AppState {
   };
 }
 
-export const DEFAULT_EVENTS: CalendarEventItem[] = [
-  {
-    id: 'evt-1',
-    title: 'Morning Sync & Coffee',
-    start: new Date(new Date().setHours(9, 0, 0, 0)).toISOString(),
-    end: new Date(new Date().setHours(10, 0, 0, 0)).toISOString(),
-    allDay: false,
-    type: 'event',
-    completed: false,
-    color: '#ff6584',
-    description: 'Quick check-in and plan for today with Waifu',
-    location: 'Discord / Workspace'
-  },
-  {
-    id: 'evt-2',
-    title: 'Code Review & Sprint Planning',
-    start: new Date(new Date().setHours(14, 0, 0, 0)).toISOString(),
-    end: new Date(new Date().setHours(15, 30, 0, 0)).toISOString(),
-    allDay: false,
-    type: 'event',
-    completed: false,
-    color: '#6c5ce7',
-    description: 'Review features and merge pull requests',
-    location: 'Engineering Room'
-  },
-  {
-    id: 'evt-3',
-    title: 'Study Japanese Kanji (30 min)',
-    start: new Date(new Date().setHours(18, 0, 0, 0)).toISOString(),
-    end: new Date(new Date().setHours(18, 30, 0, 0)).toISOString(),
-    allDay: false,
-    type: 'task',
-    completed: false,
-    color: '#00cec9',
-    description: 'Review N3 vocabulary flashcards',
-    location: 'Desk'
-  },
-  {
-    id: 'evt-4',
-    title: 'Anime Night with Akari',
-    start: new Date(new Date().setHours(21, 0, 0, 0)).toISOString(),
-    end: new Date(new Date().setHours(22, 30, 0, 0)).toISOString(),
-    allDay: false,
-    type: 'event',
-    completed: false,
-    color: '#fd79a8',
-    description: 'Watch the newest seasonal episodes together!',
-    location: 'Living Room'
-  },
-  {
-    id: 'evt-5',
-    title: "Akari's Birthday Celebration",
-    start: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 4).toISOString(),
-    end: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 4).toISOString(),
-    allDay: true,
-    type: 'birthday',
-    completed: false,
-    color: '#e84393',
-    description: 'Special cake and surprise present for Akari!',
-    location: 'Home'
-  }
-];
+// New accounts (and logged-out guests) start with a completely empty calendar.
+// There are no pre-seeded/demo events — everything on the calendar is something
+// the player creates themselves.
+export const DEFAULT_EVENTS: CalendarEventItem[] = [];
 
 export const DEFAULT_RPG: RpgState = {
-  coins: 200,
-  unlockedOutfits: ['seifuku', 'casual'],
-  unlockedAccessories: ['none', 'ribbon', 'glasses'],
-  unlockedHairstyles: ['twintails', 'long', 'short_bob'],
+  coins: 0,
+  // Fresh players start with only the minimal starters: the default worn
+  // outfit, accessory and hairstyle. Everything else must be earned.
+  unlockedOutfits: ['seifuku'],
+  unlockedAccessories: ['ribbon'],
+  unlockedHairstyles: ['twintails'],
   unlockedAvatarFrames: [],
-  showcaseItems: ['ribbon', 'glasses'],
+  showcaseItems: [],
   claimedAffectionMilestones: [],
   defenseHighWave: 0,
   defenseStats: {
@@ -354,9 +298,9 @@ export const DEFAULT_STATE: AppState = {
       {
         id: 'msg-init',
         sender: 'waifu',
-        text: "H-Hey! What took you so long? It's not like I was waiting for you or anything, baka! Check your schedule if you don't want to fall behind!",
+        text: "H-Hey! I'm Akari, your companion. Nice to meet you, senpai! Start chatting, add some plans to the calendar, or play a minigame — I'll be right here!",
         timestamp: new Date().toISOString(),
-        emotion: 'pout'
+        emotion: 'happy'
       }
     ],
     suggestions: [
