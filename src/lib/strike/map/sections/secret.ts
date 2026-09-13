@@ -5,16 +5,31 @@ import {
   createBambooFence, createHangingLantern, createStoneLantern
 } from '../components';
 
-/** Secret Passage — "Roji" covered alley & East Kura District (X = +38..+51, Z = -32..+32). */
+/**
+ * Secret Passage — "Roji" covered alley & East Kura District (X = +38..+51).
+ *
+ * Rework: the alley is now a fully sealed 5m covered route from the B-lane
+ * south approach up to B-Site — both open ends that previously leaked into
+ * voids are capped, the Kura storehouse quarter is fused to the perimeter on
+ * all sides, and the interior is dressed with pergola beams, noren curtains
+ * and lantern light.
+ */
 export function buildSecret(b: MapBuilder) {
   const { mats } = b;
 
-  // Inner west wall (separates Secret Passage from Lane B, with tactical doorway openings)
+  // --- Alley end caps (seal the north and south mouths of the Roji) ---
+  // North cap: fuses the alley end to the shrine flank / Kura district
+  b.addBox('secCapNorth', 14, 7.5, 1.6, new Vector3(45, 3.75, -32.5), mats.wall);
+  // South cap: closes the alley before the south-east void
+  b.addBox('secCapSouth', 14, 7.5, 1.6, new Vector3(45, 3.75, 32), mats.wall);
+
+  // Inner west wall (separates Secret Passage from Lane B, with two
+  // tactical doorway openings at Z=-7..-3 and Z=3..7)
   b.addBox('secretWW1', 0.8, 3.5, 22, new Vector3(38, 1.75, -18), mats.plaster);  // North segment (Z=-29..-7)
   b.addBox('secretWW_Mid', 0.8, 3.5, 6, new Vector3(38, 1.75, 0), mats.plaster);  // Mid segment (Z=-3..+3)
   b.addBox('secretWW2', 0.8, 3.5, 22, new Vector3(38, 1.75, 18), mats.plaster);   // South segment (Z=7..29)
 
-  // Outer east alley wall (seals the eastern corridor at X=43, fully closing the previous 14m void!)
+  // Outer east alley wall (seals the eastern corridor at X=43)
   b.addBox('secWallEastN', 0.8, 4.0, 22, new Vector3(43, 2.0, -18), mats.plaster);
   b.addBox('secWallEastMid', 0.8, 4.0, 10, new Vector3(43, 2.0, 0), mats.plaster);
   b.addBox('secWallEastS', 0.8, 4.0, 22, new Vector3(43, 2.0, 18), mats.plaster);
@@ -45,13 +60,17 @@ export function buildSecret(b: MapBuilder) {
   }
 
   // Bamboo screen gates at alley entries
-  createBambooFence(b, 'bambooSecS', new Vector3(40.5, 0, 31), 3, true);
-  createBambooFence(b, 'bambooSecN', new Vector3(40.5, 0, -31), 3, true);
+  createBambooFence(b, 'bambooSecS', new Vector3(40.5, 0, 30.5), 4, true);
+  createBambooFence(b, 'bambooSecN', new Vector3(40.5, 0, -30.5), 4, true);
+
+  // Noren fabric curtains framing the Lane B doorways (Z=-5 and Z=+5)
+  b.addBox('norenSecN', 3.4, 2.4, 0.12, new Vector3(38.6, 2.4, -5), mats.shoji, false);
+  b.addBox('norenSecS', 3.4, 2.4, 0.12, new Vector3(38.6, 2.4, 5), mats.shoji, false);
 
   // Cover & props within Secret Passage
   createCrateCluster(b, 'secCrate', new Vector3(40.5, 0, -3), false);
   createSakeBarrelStack(b, 'secSake', new Vector3(40.5, 0, 4), true);
   createStoneLantern(b, 'secLanMid', new Vector3(40.5, 0, 0.5));
-  createStoneLantern(b, 'secLanNorth', new Vector3(40.5, 0, -30));
-  createStoneLantern(b, 'secLanSouth', new Vector3(40.5, 0, 30));
+  createStoneLantern(b, 'secLanNorth', new Vector3(40.5, 0, -26));
+  createStoneLantern(b, 'secLanSouth', new Vector3(40.5, 0, 26));
 }
