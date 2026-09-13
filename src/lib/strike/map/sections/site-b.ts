@@ -9,6 +9,16 @@ import {
 export function buildSiteB(b: MapBuilder) {
   const { mats } = b;
 
+  // ═══════════════════════════════════════════════════════════════════
+  // QUARTER SEALS — SE background block & T1 spawn-east boundary
+  // ═══════════════════════════════════════════════════════════════════
+
+  // --- South-East corner block (fills the void behind Team 1 spawn east) ---
+  b.addBox('seBlock', 29.4, 7.5, 16.5, new Vector3(37.3, 3.75, 44), mats.plaster);
+  b.addBox('seBlockRoof', 30.4, 0.6, 17.5, new Vector3(37.3, 7.8, 44), mats.tileRoof, false);
+  // Continuous spawn-east boundary wall (extends the T1 flank wall to the perimeter)
+  b.addBox('t1SpawnEastWall', 1.2, 5.5, 16, new Vector3(22, 2.75, 44), mats.wall);
+
   // --- Elevated stone platform (defenders have height advantage) ---
   b.addBox('bPlatform', 20, 0.9, 12, new Vector3(27, 0.45, -29), mats.ground);
 
@@ -73,9 +83,10 @@ export function buildSiteB(b: MapBuilder) {
   b.addBox('shrineRidge', 20, 0.9, 10, new Vector3(27, 8.6, -44), mats.tileRoof);
   b.addBox('shrineRidgePeak', 14, 0.6, 6, new Vector3(27, 9.3, -44), mats.timber);
 
-  // Flanking Sanctuary Enclosure Walls (connect Hondo to north-west and north-east)
+  // Flanking Sanctuary Enclosure Walls (connect Hondo to north-west and north-east;
+  // the east flank extends south to fuse with the Kura district cap wall)
   b.addBox('shrineFlankW', 0.8, 7.5, 12, new Vector3(15, 3.75, -44), mats.wall);
-  b.addBox('shrineFlankE', 0.8, 7.5, 12, new Vector3(39, 3.75, -44), mats.wall);
+  b.addBox('shrineFlankE', 0.8, 7.5, 16, new Vector3(39, 3.75, -42), mats.wall);
 
   // --- B-Site Enclosure & Approach Walls ---
   // North boundary wall in front of Hondo

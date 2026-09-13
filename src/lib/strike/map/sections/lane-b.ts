@@ -19,11 +19,12 @@ export function buildLaneB(b: MapBuilder) {
 
   // --- Fully Sealed West Wall (separates Lane B from Mid Plaza) ---
   // Solid plaster walls with authentic timber copings and tactical choke at Z=-2..+1
-  b.addBox('bShortWallW1', 0.8, 4, 10, new Vector3(22, 2, -16), mats.plaster);
-  b.addBox('bShortWallW1b', 0.8, 4, 5.5, new Vector3(22, 2, -7), mats.plaster); // Seals 9m gap
-  b.addBox('bShortWallW2', 0.8, 4, 6, new Vector3(22, 2, 2.5), mats.plaster);
-  createBambooFence(b, 'bambooMidB', new Vector3(22, 0, 8.5), 5.5, true); // Natural bamboo partition
-  b.addBox('bShortWallW3', 0.8, 4, 10, new Vector3(22, 2, 16.5), mats.plaster);
+  // (segments overlap so no sliver gaps remain)
+  b.addBox('bShortWallW1', 0.8, 4, 10.8, new Vector3(22, 2, -15.9), mats.plaster);
+  b.addBox('bShortWallW1b', 0.8, 4, 7, new Vector3(22, 2, -7), mats.plaster);
+  b.addBox('bShortWallW2', 0.8, 4, 7, new Vector3(22, 2, 0), mats.plaster);
+  createBambooFence(b, 'bambooMidB', new Vector3(22, 0, 6.75), 7, true); // Natural bamboo partition
+  b.addBox('bShortWallW3', 0.8, 4, 12, new Vector3(22, 2, 16.25), mats.plaster);
 
   // --- Fully Sealed East Wall (separates Lane B from Secret Passage Roji) ---
   b.addBox('bShortWallE0', 0.8, 4, 7, new Vector3(34, 2, -17.5), mats.plaster);
