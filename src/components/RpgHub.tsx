@@ -1,4 +1,4 @@
-import { createSignal, Show, For, lazy, Suspense } from 'solid-js';
+import { createSignal, Show, For, lazy, Suspense, onMount } from 'solid-js';
 import {
   state,
   COSMETIC_CATALOG,
@@ -31,9 +31,23 @@ const WaifuStrikeGame = lazy(() =>
   import('./WaifuStrikeGame').then((m) => ({ default: m.WaifuStrikeGame }))
 );
 
+const StrikeMapEditor = lazy(() =>
+  import('./StrikeMapEditor').then((m) => ({ default: m.StrikeMapEditor }))
+);
+
 export function RpgHub() {
   const [activeTab, setActiveTab] = createSignal<'games' | 'gacha' | 'affection'>('games');
   const [selectedGame, setSelectedGame] = createSignal<'defense' | 'strike' | 'future'>('defense');
+  const [editMode, setEditMode] = createSignal(false);
+
+  // The map editor is a launch-time feature: `bun run dev --edit` enables it,
+  // and selecting Waifu Strike opens the editor instead of the match.
+  onMount(() => {
+    fetch('/api/strike/edit-mode')
+      .then((res) => res.json())
+      .then((data) => setEditMode(Boolean(data?.editEnabled)))
+      .catch(() => setEditMode(false));
+  });
 
   // Intercept tab switches while a defense run is in progress so the game
   // (and the player's progress) is never silently discarded.
@@ -124,28 +138,53 @@ export function RpgHub() {
             </Show>
 
             <Show when={selectedGame() === 'strike'}>
-              <Suspense
+              <Show
+                when={editMode()}
                 fallback={
-                  <div
-                    style={{
-                      height: '600px',
-                      display: 'flex',
-                      'flex-direction': 'column',
-                      'align-items': 'center',
-                      'justify-content': 'center',
-                      background: '#0c1017',
-                      'border-radius': '16px',
-                      color: '#ff7597',
-                      gap: '12px'
-                    }}
+                  <Suspense
+                    fallback={
+                      <div
+                        style={{
+                          height: '600px',
+                          display: 'flex',
+                          'flex-direction': 'column',
+                          'align-items': 'center',
+                          'justify-content': 'center',
+                          background: '#0c1017',
+                          'border-radius': '16px',
+                          color: '#ff7597',
+                          gap: '12px'
+                        }}
+                      >
+                        <div style={{ 'font-size': '2.5rem' }}><PhBuildings /></div>
+                        <div style={{ 'font-weight': 'bold', 'font-size': '1.1rem' }}>Loading Cyber Shrine Arena...</div>
+                      </div>
+                    }
                   >
-                    <div style={{ 'font-size': '2.5rem' }}><PhBuildings /></div>
-                    <div style={{ 'font-weight': 'bold', 'font-size': '1.1rem' }}>Loading Cyber Shrine Arena...</div>
-                  </div>
+                    <WaifuStrikeGame onExit={() => setSelectedGame('defense')} />
+                  </Suspense>
                 }
               >
-                <WaifuStrikeGame onExit={() => setSelectedGame('defense')} />
-              </Suspense>
+                <Suspense
+                  fallback={
+                    <div
+                      style={{
+                        height: '600px',
+                        display: 'flex',
+                        'align-items': 'center',
+                        'justify-content': 'center',
+                        background: '#0c1017',
+                        'border-radius': '16px',
+                        color: '#6fb4ff'
+                      }}
+                    >
+                      Loading Map Editor...
+                    </div>
+                  }
+                >
+                  <StrikeMapEditor onExit={() => setSelectedGame('defense')} />
+                </Suspense>
+              </Show>
             </Show>
 
             <Show when={selectedGame() === 'future'}>

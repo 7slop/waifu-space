@@ -1,4 +1,4 @@
-import { MeshBuilder, Vector3, Color3 } from '@babylonjs/core';
+import { Vector3, Color3 } from '@babylonjs/core';
 import type { MapBuilder } from '../types';
 import {
   createMachiyaHouse, createCrateCluster, createSakuraTree, createGardenBush,
@@ -15,7 +15,7 @@ import {
  * slip behind buildings out to the map edge.
  */
 export function buildSiteA(b: MapBuilder) {
-  const { mats, scene } = b;
+  const { mats } = b;
 
   // ═══════════════════════════════════════════════════════════════════
   // QUARTER SEALS — NW & SW background blocks (behind spawn walls)
@@ -42,10 +42,7 @@ export function buildSiteA(b: MapBuilder) {
   b.addBox('aSiteFloor', 20, 0.4, 12, new Vector3(-27, 0.2, -29), mats.woodDeck);
 
   // --- Zen sand garden visual overlay ---
-  const zenGrd = MeshBuilder.CreateGround('zenGrdA', { width: 14, height: 10, subdivisions: 2 }, scene);
-  zenGrd.position = new Vector3(-24, 0.42, -29);
-  zenGrd.material = mats.zenSand;
-  zenGrd.checkCollisions = false;
+  b.addGround('zenGrdA', 14, 10, new Vector3(-24, 0.42, -29), mats.zenSand, false);
 
   // ═══════════════════════════════════════════════════════════════════
   // TEA HOUSE (anchor structure, no entry)

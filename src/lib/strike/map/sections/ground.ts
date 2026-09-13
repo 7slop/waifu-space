@@ -1,4 +1,4 @@
-import { MeshBuilder, Vector3 } from '@babylonjs/core';
+import { Vector3 } from '@babylonjs/core';
 import type { MapBuilder } from '../types';
 
 /** Arena ground and perimeter walls (104m × 104m). */
@@ -6,12 +6,7 @@ export function buildGround(b: MapBuilder) {
   const { mats } = b;
 
   // Main cobblestone ground
-  const ground = MeshBuilder.CreateGround('mainGround', { width: 104, height: 104, subdivisions: 4 }, b.scene);
-  ground.position = new Vector3(0, 0, 0);
-  ground.material = mats.ground;
-  ground.checkCollisions = true;
-  ground.receiveShadows = true;
-  b.colliders.push(ground);
+  b.addGround('mainGround', 104, 104, new Vector3(0, 0, 0), mats.ground, true);
 
   // Perimeter walls (height 7.5m)
   b.addBox('wallN', 104, 7.5, 1.4, new Vector3(0, 3.75, -52), mats.wall);
