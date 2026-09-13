@@ -27,7 +27,8 @@ import {
   PhSparkle,
   PhDoor,
   PhWarning,
-  PhRunning
+  PhRunning,
+  PhTimer
 } from './components/icons';
 
 // Global Styles
@@ -37,6 +38,7 @@ import './styles/waifu.css';
 import './styles/calendar.css';
 import './styles/settings.css';
 import './styles/rpg.css';
+import './styles/timebudget.css';
 
 // Legacy theme names from older builds map onto the new palettes.
 const LEGACY_THEME_MAP: Record<string, string> = {
@@ -204,6 +206,10 @@ function AppLayout(props: { children: any }) {
           <A href="/minigames" class="nav-tab-btn" activeClass="active" onClick={e => handleNavClick(e, '/minigames')}>
             <span><PhGameController /></span>
             <span>{t('nav.minigames')}</span>
+          </A>
+          <A href="/timebudget" class="nav-tab-btn" activeClass="active" onClick={e => handleNavClick(e, '/timebudget')}>
+            <span><PhTimer /></span>
+            <span>{t('timebudget.nav')}</span>
           </A>
           <A href="/profile" class="nav-tab-btn" activeClass="active" onClick={e => handleNavClick(e, '/profile')}>
             <span><PhUserCircle /></span>

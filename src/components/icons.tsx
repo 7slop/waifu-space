@@ -230,6 +230,16 @@ import PhPlay from '~icons/ph/play';
 export { PhPlay };
 import PhDotsThreeVertical from '~icons/ph/dots-three-vertical';
 export { PhDotsThreeVertical };
+import PhTimer from '~icons/ph/timer';
+export { PhTimer };
+import PhUploadSimple from '~icons/ph/upload-simple';
+export { PhUploadSimple };
+import PhDownloadSimple from '~icons/ph/download-simple';
+export { PhDownloadSimple };
+import PhSlidersHorizontal from '~icons/ph/sliders-horizontal';
+export { PhSlidersHorizontal };
+import PhTagSimple from '~icons/ph/tag-simple';
+export { PhTagSimple };
 
 // ─── Emoji → Phosphor icon map ─────────────────────────────────────────────
 // Keys are emojis with the U+FE0F variation selector stripped.
