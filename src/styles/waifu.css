@@ -507,11 +507,146 @@
   transform: scale(1.08);
 }
 
+/* Mobile switcher helpers (hidden on desktop) */
+.companion-mobile-switcher {
+  display: none;
+}
+.mobile-only-chip {
+  display: none;
+}
+.chat-stage-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 @media (max-width: 900px) {
   .main-stage-layout {
     grid-template-columns: 1fr;
     height: auto;
     overflow-y: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .companion-mobile-switcher {
+    display: flex;
+    background: var(--surface-2);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .companion-switcher-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .companion-switcher-btn.active {
+    background: var(--accent-soft);
+    color: var(--primary-accent);
+  }
+
+  .mobile-only-chip {
+    display: inline-flex !important;
+  }
+
+  .waifu-stage-panel.mobile-hidden,
+  .chat-stage-wrapper.mobile-hidden {
+    display: none !important;
+  }
+
+  .main-stage-layout {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    gap: 10px;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .waifu-stage-panel {
+    padding: 14px 12px;
+  }
+
+  .avatar-mount {
+    max-height: 250px;
+  }
+
+  .waifu-live-bubble {
+    max-width: 95%;
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+
+  .stage-header-card {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .waifu-identity {
+    gap: 8px;
+  }
+
+  .waifu-display-name {
+    font-size: 20px;
+  }
+
+  .stage-leaderboard-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .affection-card {
+    min-width: 100px;
+    padding: 4px 10px;
+  }
+
+  .stage-quick-actions {
+    gap: 6px;
+  }
+
+  .stage-action-chip {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .chat-panel {
+    height: calc(100vh - 52px - 56px - 70px - env(safe-area-inset-bottom, 0px));
+    height: calc(100dvh - 52px - 56px - 70px - env(safe-area-inset-bottom, 0px));
+    min-height: 400px;
+    padding: 14px 12px;
+  }
+
+  .chat-bubble-row {
+    max-width: 95%;
+  }
+
+  .chat-suggestions {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 4px;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .suggestion-chip {
+    flex-shrink: 0;
   }
 }
 

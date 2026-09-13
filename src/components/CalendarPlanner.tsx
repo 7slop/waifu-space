@@ -37,7 +37,8 @@ import {
   PhCaretLeft,
   PhCaretRight,
   PhArrowsClockwise,
-  PhX
+  PhX,
+  PhList
 } from './icons';
 import { SettingsIcon } from './icons';
 
@@ -47,6 +48,7 @@ export function CalendarPlanner() {
   const [quickTaskInput, setQuickTaskInput] = createSignal('');
 
   // Modals & Popovers & Dropdowns
+  const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const [createMenuOpen, setCreateMenuOpen] = createSignal(false);
   let createMenuRef: HTMLDivElement | undefined;
 
@@ -386,6 +388,15 @@ const sidebarTasks = createMemo(() => {
       {/* TOP TOOLBAR */}
       <header class="gcal-toolbar">
         <div class="gcal-toolbar-left">
+          <button
+            type="button"
+            class="gcal-icon-btn gcal-sidebar-toggle-btn"
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen())}
+            title={t('calendar.sidebar.myCalendars')}
+            aria-label="Toggle calendar sidebar"
+          >
+            <PhList />
+          </button>
           <div class="create-menu-container" ref={createMenuRef}>
             <button
               type="button"
@@ -506,13 +517,34 @@ const sidebarTasks = createMemo(() => {
 
       {/* CALENDAR MAIN BODY: SIDEBAR + STAGE */}
       <div class="gcal-body">
+        {/* MOBILE SIDEBAR BACKDROP */}
+        <Show when={mobileSidebarOpen()}>
+          <div
+            class="gcal-sidebar-backdrop"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        </Show>
+
         {/* LEFT SIDEBAR */}
-        <aside class="gcal-sidebar">
+        <aside class={`gcal-sidebar ${mobileSidebarOpen() ? 'mobile-open' : ''}`}>
+          <div class="mobile-sidebar-header">
+            <span class="mobile-sidebar-title">{t('calendar.sidebar.myCalendars')}</span>
+            <button
+              type="button"
+              class="gcal-icon-btn mobile-sidebar-close"
+              onClick={() => setMobileSidebarOpen(false)}
+              aria-label="Close sidebar"
+            >
+              <PhX />
+            </button>
+          </div>
+
           <MiniCalendar
             selectedDate={selectedDate()}
             onSelectDate={d => {
               setSelectedDate(d);
               setCurrentDate(d);
+              setMobileSidebarOpen(false);
             }}
           />
 

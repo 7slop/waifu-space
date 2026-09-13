@@ -842,7 +842,11 @@
 }
 
 @media (max-width: 640px) {
-  .timebudget-layout { padding: 18px 14px 48px; }
+  .timebudget-layout { padding: 14px 10px 48px; }
   .timebudget-grid { grid-template-columns: 1fr; }
-  .timebudget-header { flex-direction: column; align-items: flex-start; }
+  .timebudget-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .timebudget-toolbar { width: 100%; justify-content: flex-start; gap: 6px; }
+  .timebudget-btn { padding: 6px 10px; font-size: 0.8rem; }
+  .tb-modal-backdrop { padding: 12px; }
+  .tb-modal { width: 95%; max-width: 95vw; max-height: 88dvh; padding: 18px 14px; }
 }
