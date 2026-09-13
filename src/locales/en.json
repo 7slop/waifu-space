@@ -280,6 +280,7 @@
       "importedEvents": "Imported {count} events from {file}!",
       "noValidEvents": "No valid events found in .ics file",
       "rescheduled": "Rescheduled \"{title}\" to {date}",
+      "resized": "Resized \"{title}\"",
       "waifuBriefing": "Waifu Briefing: {text}"
     },
     "validation": {

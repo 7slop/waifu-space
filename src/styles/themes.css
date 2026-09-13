@@ -38,12 +38,12 @@
   --text-primary: #cdd6f4;   /* text */
   --text-secondary: #a6adc8; /* subtext0 */
   --text-muted: #7f849c;     /* overlay1 */
-  /* Accent palette */
-  --primary-accent: #89b4fa;  /* blue */
-  --primary-glow: rgba(137, 180, 250, 0.28);
-  --accent-soft: rgba(137, 180, 250, 0.14);
+  /* Accent palette (exact Catppuccin Mocha pink) */
+  --primary-accent: #f5c2e7;  /* pink */
+  --primary-glow: rgba(245, 194, 231, 0.28);
+  --accent-soft: rgba(245, 194, 231, 0.14);
   --accent-contrast: #11111b; /* crust */
-  --border-focus: #89b4fa;    /* blue */
+  --border-focus: #f5c2e7;    /* pink */
   --surface-glass: rgba(255, 255, 255, 0.04);
   --hover-bg: rgba(255, 255, 255, 0.05);
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -78,11 +78,11 @@
   --text-primary: #4c4f69;   /* text */
   --text-secondary: #5c5f77; /* subtext1 */
   --text-muted: #7c7f93;     /* overlay2 */
-  --primary-accent: #1e66f5;  /* blue */
-  --primary-glow: rgba(30, 102, 245, 0.22);
-  --accent-soft: rgba(30, 102, 245, 0.12);
-  --accent-contrast: #ffffff;
-  --border-focus: #1e66f5;    /* blue */
+  --primary-accent: #ea76cb;  /* pink */
+  --primary-glow: rgba(234, 118, 203, 0.22);
+  --accent-soft: rgba(234, 118, 203, 0.14);
+  --accent-contrast: #4c4f69; /* text */
+  --border-focus: #ea76cb;    /* pink */
   --surface-glass: rgba(0, 0, 0, 0.04);
   --hover-bg: rgba(0, 0, 0, 0.05);
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -121,11 +121,11 @@
   --text-secondary: #908caa; /* subtle */
   --text-muted: #6e6a86;     /* muted */
   /* Accent palette */
-  --primary-accent: #eb6f92;  /* love */
-  --primary-glow: rgba(235, 111, 146, 0.28);
-  --accent-soft: rgba(235, 111, 146, 0.14);
+  --primary-accent: #f6c177;  /* gold */
+  --primary-glow: rgba(246, 193, 119, 0.28);
+  --accent-soft: rgba(246, 193, 119, 0.14);
   --accent-contrast: #191724;
-  --border-focus: #eb6f92;    /* love */
+  --border-focus: #f6c177;    /* gold */
   --danger: #eb6f92;          /* love */
   --success: #9ccfd8;         /* foam */
   --warning: #f6c177;         /* gold */
@@ -155,11 +155,11 @@
   --text-secondary: #797593; /* subtle */
   --text-muted: #9893a5;     /* muted */
   /* Accent palette */
-  --primary-accent: #d7827e;  /* rose */
-  --primary-glow: rgba(215, 130, 126, 0.24);
-  --accent-soft: rgba(215, 130, 126, 0.14);
-  --accent-contrast: #ffffff;
-  --border-focus: #d7827e;    /* rose */
+  --primary-accent: #ea9d34;  /* gold */
+  --primary-glow: rgba(234, 157, 52, 0.24);
+  --accent-soft: rgba(234, 157, 52, 0.14);
+  --accent-contrast: #575279;
+  --border-focus: #ea9d34;    /* gold */
   --danger: #b4637a;          /* love */
   --success: #56949f;         /* foam */
   --warning: #ea9d34;         /* gold */
@@ -186,11 +186,11 @@
   --text-primary: #eceff4;   /* snow storm 3 */
   --text-secondary: #d8dee9; /* snow storm 0 */
   --text-muted: #4c566a;     /* polar night 3 */
-  --primary-accent: #88c0d0;  /* frost 1 */
-  --primary-glow: rgba(136, 192, 208, 0.28);
-  --accent-soft: rgba(136, 192, 208, 0.14);
+  --primary-accent: #b48ead;  /* aurora purple */
+  --primary-glow: rgba(180, 142, 173, 0.28);
+  --accent-soft: rgba(180, 142, 173, 0.14);
   --accent-contrast: #2e3440;
-  --border-focus: #88c0d0;    /* frost 1 */
+  --border-focus: #b48ead;    /* aurora purple */
   --danger: #bf616a;          /* aurora red */
   --success: #a3be8c;         /* aurora green */
   --warning: #ebcb8b;         /* aurora yellow */
@@ -218,11 +218,11 @@
   --text-primary: #2e3440;   /* polar night 0 */
   --text-secondary: #4c566a; /* polar night 3 */
   --text-muted: #8f9bb0;     /* muted */
-  --primary-accent: #5e81ac;  /* frost 3 */
-  --primary-glow: rgba(94, 129, 172, 0.22);
-  --accent-soft: rgba(94, 129, 172, 0.12);
-  --accent-contrast: #ffffff;
-  --border-focus: #5e81ac;    /* frost 3 */
+  --primary-accent: #a3be8c;  /* aurora green */
+  --primary-glow: rgba(163, 190, 140, 0.22);
+  --accent-soft: rgba(163, 190, 140, 0.12);
+  --accent-contrast: #2e3440;
+  --border-focus: #a3be8c;    /* aurora green */
   --danger: #bf616a;
   --success: #4c7d5a;
   --warning: #b48e56;
@@ -281,11 +281,11 @@
   --text-primary: #282a36;
   --text-secondary: #4d4f5c;
   --text-muted: #8b8fa8;
-  --primary-accent: #bd93f9;
-  --primary-glow: rgba(189, 147, 249, 0.24);
-  --accent-soft: rgba(189, 147, 249, 0.14);
+  --primary-accent: #ff79c6;  /* pink */
+  --primary-glow: rgba(255, 121, 198, 0.24);
+  --accent-soft: rgba(255, 121, 198, 0.14);
   --accent-contrast: #282a36;
-  --border-focus: #bd93f9;
+  --border-focus: #ff79c6;    /* pink */
   --danger: #ff5555;
   --success: #2a9d43;
   --warning: #a8871f;
@@ -315,11 +315,11 @@
   --text-secondary: #bdae93; /* fg3 */
   --text-muted: #928374;     /* gray */
   /* Accent palette */
-  --primary-accent: #fabd2f;  /* yellow */
-  --primary-glow: rgba(250, 189, 47, 0.3);
-  --accent-soft: rgba(250, 189, 47, 0.16);
+  --primary-accent: #fe8019;  /* bright orange */
+  --primary-glow: rgba(254, 128, 25, 0.3);
+  --accent-soft: rgba(254, 128, 25, 0.16);
   --accent-contrast: #1d2021;
-  --border-focus: #fabd2f;    /* yellow */
+  --border-focus: #fe8019;    /* bright orange */
   --danger: #fb4934;          /* red */
   --success: #b8bb26;         /* green */
   --warning: #fabd2f;         /* yellow */
@@ -346,10 +346,10 @@
   --text-primary: #3c3836;   /* fg1 */
   --text-secondary: #504945; /* bg2 dark */
   --text-muted: #7c6f64;     /* gray */
-  --primary-accent: #d79921;  /* yellow light */
+  --primary-accent: #d79921;  /* bright yellow */
   --primary-glow: rgba(215, 153, 33, 0.24);
   --accent-soft: rgba(215, 153, 33, 0.14);
-  --accent-contrast: #ffffff;
+  --accent-contrast: #3c3836;
   --border-focus: #d79921;
   --danger: #9d0006;
   --success: #79740e;

@@ -280,6 +280,7 @@
       "importedEvents": "{file}から{count}件の予定をインポートしました！",
       "noValidEvents": ".icsファイルに有効な予定が見つかりませんでした",
       "rescheduled": "「{title}」の日時を {date} に変更しました",
+      "resized": "「{title}」の長さを変更しました",
       "waifuBriefing": "ブリーフィング: {text}"
     },
     "validation": {

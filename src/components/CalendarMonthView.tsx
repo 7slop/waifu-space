@@ -160,6 +160,14 @@ export function CalendarMonthView(props: {
                           title={ev._holiday ? holidayTooltip(ev._holiday) : undefined}
                           draggable={!ev._holiday}
                           onDragStart={e => handleDragStart(e, ev)}
+                          onDragOver={e => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                          }}
+                          onDrop={e => {
+                            e.stopPropagation();
+                            handleDrop(e, d);
+                          }}
                           onClick={e => {
                             e.stopPropagation();
                             props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());

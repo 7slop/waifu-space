@@ -46,7 +46,20 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDrop = (e: DragEvent, hour: number) => {
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  };
+
+  const minuteFromColumn = (e: DragEvent | MouseEvent): number => {
+    const colEl = (e.target as HTMLElement).closest('.week-day-column') as HTMLElement | null;
+    if (!colEl) return 0;
+    const rect = colEl.getBoundingClientRect();
+    const relY = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
+    return Math.max(0, Math.min(1425, Math.round((relY / rect.height) * 96) * 15));
+  };
+
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     if (!e.dataTransfer) return;
     const raw = e.dataTransfer.getData('text/plain');
@@ -54,6 +67,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
 
     try {
       const data = JSON.parse(raw);
+      if (data.type !== 'calendar-event' && data.type !== 'sidebar-task') return;
       const ev = props.events.find(x => x.id === data.id);
       if (!ev) return;
       // Country holidays are read-only and must never be moved by a drop.
@@ -63,25 +77,18 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
       const oldEnd = new Date(ev.end || ev.start);
       const duration = oldEnd.getTime() - oldStart.getTime();
 
-      // 15-minute precision calculation based on drop point in cell
-      let minute = 0;
-      const targetCell = e.currentTarget as HTMLElement;
-      if (targetCell) {
-        const rect = targetCell.getBoundingClientRect();
-        const relY = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
-        const fraction = relY / rect.height;
-        minute = Math.floor(fraction * 4) * 15; // 0, 15, 30, 45
-      }
-
+      const minute = minuteFromColumn(e);
       const newStart = new Date(props.currentDate);
-      newStart.setHours(hour, minute, 0, 0);
+      newStart.setHours(0, 0, 0, 0);
+      newStart.setMinutes(minute);
       const newEnd = new Date(newStart.getTime() + (duration > 0 ? duration : 3600000));
 
-      const minStr = minute < 10 ? '0' + minute : minute;
+      const m60 = minute % 60;
+      const minStr = m60 < 10 ? '0' + m60 : m60;
 
       if (data.dateKey && ev.recurrence && ev.recurrence !== 'none' && props.onRequestMove) {
         props.onRequestMove(ev, newStart, newEnd, data.dateKey);
-        showToast(t('calendar.toasts.rescheduled', { title: ev.title, date: `${hour}:${minStr}` }));
+        showToast(t('calendar.toasts.rescheduled', { title: ev.title, date: `${Math.floor(minute / 60)}:${minStr}` }));
         return;
       }
 
@@ -91,11 +98,102 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
       });
       showToast(t('calendar.toasts.rescheduled', {
         title: ev.title,
-        date: `${hour}:${minStr}`
+        date: `${Math.floor(minute / 60)}:${minStr}`
       }));
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // ---- Event resize (Google Calendar style) ----
+  interface ResizeState {
+    id: string;
+    edge: 'top' | 'bottom';
+    startOfDay: Date;
+    oldStartMin: number;
+    oldEndMin: number;
+    newStartMin: number;
+    newEndMin: number;
+  }
+  const [resize, setResize] = createSignal<ResizeState | null>(null);
+
+  const startResize = (e: MouseEvent, ev: CalendarEventItem, edge: 'top' | 'bottom') => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (ev._holiday) return;
+
+    const s = new Date(ev.start);
+    const startOfDay = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+    const oldStartMin = s.getHours() * 60 + s.getMinutes();
+    const e2 = new Date(ev.end || ev.start);
+    const oldEndMin = e2.getHours() * 60 + e2.getMinutes();
+
+    const colEl = (e.currentTarget as HTMLElement).closest('.week-day-column') as HTMLElement | null;
+    if (!colEl) return;
+
+    setResize({ id: ev.id, edge, startOfDay, oldStartMin, oldEndMin, newStartMin: oldStartMin, newEndMin: oldEndMin });
+    if (typeof document !== 'undefined') document.body.classList.add('is-resizing-event');
+
+    const onMove = (moveEv: MouseEvent) => {
+      const rect = colEl.getBoundingClientRect();
+      const relY = Math.max(0, Math.min(rect.height - 1, moveEv.clientY - rect.top));
+      const minute = Math.max(0, Math.min(1425, Math.round((relY / rect.height) * 96) * 15));
+      setResize(prev => {
+        if (!prev) return prev;
+        let { newStartMin, newEndMin } = prev;
+        if (prev.edge === 'top') {
+          newStartMin = Math.min(minute, prev.oldEndMin - 30);
+        } else {
+          newEndMin = Math.max(minute, prev.oldStartMin + 30);
+        }
+        return { ...prev, newStartMin, newEndMin };
+      });
+    };
+
+    const onUp = () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      if (typeof document !== 'undefined') document.body.classList.remove('is-resizing-event');
+
+      const r = resize();
+      setResize(null);
+      if (!r) return;
+      if (r.newStartMin === r.oldStartMin && r.newEndMin === r.oldEndMin) return;
+
+      const target = props.events.find(x => x.id === r.id);
+      if (!target) return;
+      const newStart = new Date(r.startOfDay);
+      newStart.setMinutes(r.newStartMin);
+      const newEnd = new Date(r.startOfDay);
+      newEnd.setMinutes(r.newEndMin);
+
+      if (target.recurrence && target.recurrence !== 'none') {
+        updateCalendarEvent(target.id, { start: newStart.toISOString(), end: newEnd.toISOString() }, target.dateKey);
+      } else {
+        updateCalendarEvent(target.id, { start: newStart.toISOString(), end: newEnd.toISOString() });
+      }
+      showToast(t('calendar.toasts.resized', { title: target.title }));
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    }
+  };
+
+  const applyResizePreview = (ev: CalendarEventItem, layout: { topPct: number; heightPct: number }) => {
+    const r = resize();
+    if (!r || r.id !== ev.id) return layout;
+    const topMin = r.edge === 'top' ? r.newStartMin : r.oldStartMin;
+    const endMin = r.edge === 'bottom' ? r.newEndMin : r.oldEndMin;
+    return {
+      ...layout,
+      topPct: Math.max(0, (topMin / 1440) * 100),
+      heightPct: Math.max(2.2, ((endMin - topMin) / 1440) * 100)
+    };
   };
 
   // Click-and-drag to create
@@ -258,16 +356,14 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
             class={`week-day-column ${isToday() ? 'today-col' : ''}`}
             style={{ width: '100%' }}
             onMouseDown={e => startDragCreate(e)}
+            onDragOver={handleDragOver}
+            onDrop={e => handleDrop(e)}
           >
             <For each={Array.from({ length: 24 })}>
               {(_, idx) => {
-                const h = idx();
+                void idx;
                 return (
-                  <div
-                    class="week-hour-cell"
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => handleDrop(e, h)}
-                  />
+                  <div class="week-hour-cell" />
                 );
               }}
             </For>
@@ -311,13 +407,15 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                   const s = new Date(ev.start);
                   const e = new Date(ev.end || ev.start);
                   const timeStr = `${s.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${e.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                  const isResizing = resize()?.id === ev.id;
+                  const preview = applyResizePreview(ev, layout);
 
                   return (
                     <div
-                      class={`week-event-card ${ev.type === 'task' && ev.completed ? 'completed' : ''}`}
+                      class={`week-event-card ${ev.type === 'task' && ev.completed ? 'completed' : ''} ${isResizing ? 'is-resizing' : ''}`}
                       style={{
-                        top: `${layout.topPct}%`,
-                        height: `${layout.heightPct}%`,
+                        top: `${preview.topPct}%`,
+                        height: `${preview.heightPct}%`,
                         left: `calc(${layout.leftPct}% + 2px)`,
                         width: `calc(${layout.widthPct}% - 4px)`,
                         background: ev.color || '#ff6584'
@@ -325,14 +423,27 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                       role="button"
                       tabindex="0"
                       aria-label={t('calendar.a11y.openEvent', { title: ev.title })}
-                      draggable={true}
+                      draggable={!ev._holiday}
                       onDragStart={e => handleDragStart(e, ev)}
+                      onDragOver={e => {
+                        e.stopPropagation();
+                        handleDragOver(e);
+                      }}
+                      onDrop={e => {
+                        e.stopPropagation();
+                        handleDrop(e);
+                      }}
                       onClick={e => {
                         e.stopPropagation();
                         props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                       }}
                       onKeyDown={e => onActivateKey(e, () => props.onOpenEvent(ev))}
                     >
+                      <div
+                        class="event-resize-handle top"
+                        onMouseDown={e => startResize(e, ev, 'top')}
+                        aria-hidden="true"
+                      />
                       <div class="event-card-header">
                         {ev.type === 'task' && (
                           <input
@@ -352,6 +463,11 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                       </div>
                       <span class="card-time">{timeStr}</span>
                       {ev.location && <span class="card-loc"><PhMapPin /> {ev.location}</span>}
+                      <div
+                        class="event-resize-handle"
+                        onMouseDown={e => startResize(e, ev, 'bottom')}
+                        aria-hidden="true"
+                      />
                     </div>
                   );
                 }}
