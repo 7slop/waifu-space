@@ -63,17 +63,19 @@ export async function POST(event: { request: Request }) {
 
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseServerClient()!;
-      const { error } = await supabase.from('time_budget_sync').upsert(
-        {
-          user_id: session.userId,
-          blob_version: blob.v,
-          kdf_salt: blob.salt,
-          iv: blob.iv,
-          ciphertext: blob.ciphertext,
-          updated_at: blob.updatedAt
-        },
-        { onConflict: 'user_id' }
-      );
+      // The blob is stored through a SECURITY DEFINER RPC (same pattern as
+      // sync_showcase_items): the server runs as `anon` in dev/anon-key
+      // deployments, where direct table access would be blocked by RLS + grants.
+      // The function verifies (when a JWT is present) that the session user owns
+      // the target row and stores the payload exactly as given - still opaque.
+      const { error } = await supabase.rpc('save_time_budget_blob', {
+        p_user_id: session.userId,
+        p_blob_version: blob.v,
+        p_kdf_salt: blob.salt,
+        p_iv: blob.iv,
+        p_ciphertext: blob.ciphertext,
+        p_updated_at: blob.updatedAt
+      });
       if (error) {
         return json({ success: false, error: error.message || 'Sync failed.' }, { status: 500 });
       }
@@ -100,28 +102,28 @@ export async function GET(event: { request: Request }) {
 
   try {
     const supabase = getSupabaseServerClient()!;
-    const { data, error } = await supabase
-      .from('time_budget_sync')
-      .select('blob_version, kdf_salt, iv, ciphertext, updated_at')
-      .eq('user_id', session.userId)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc('get_time_budget_blob', {
+      p_user_id: session.userId
+    });
 
     if (error) {
       return json({ success: false, error: error.message || 'Failed to load sync data.' }, { status: 500 });
     }
 
-    if (!data) {
+    const row = Array.isArray(data) ? data[0] : null;
+
+    if (!row) {
       return json({ success: true, blob: null });
     }
 
     return json({
       success: true,
       blob: {
-        v: data.blob_version,
-        salt: data.kdf_salt,
-        iv: data.iv,
-        ciphertext: data.ciphertext,
-        updatedAt: data.updated_at
+        v: row.blob_version,
+        salt: row.kdf_salt,
+        iv: row.iv,
+        ciphertext: row.ciphertext,
+        updatedAt: row.updated_at
       }
     });
   } catch (err: any) {

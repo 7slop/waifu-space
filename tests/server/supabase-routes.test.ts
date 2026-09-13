@@ -210,12 +210,40 @@ function buildFakeClient() {
     return { data: null, error: null };
   };
 
+  // Mirrors public.save_time_budget_blob: upsert the opaque encrypted blob.
+  const saveTimeBudgetBlob = (params: { p_user_id: string; p_blob_version: number; p_kdf_salt: string; p_iv: string; p_ciphertext: string; p_updated_at: string }) => {
+    const table = db.time_budget_sync || (db.time_budget_sync = []);
+    const idx = table.findIndex(r => r.user_id === params.p_user_id);
+    const row = {
+      user_id: params.p_user_id,
+      blob_version: params.p_blob_version,
+      kdf_salt: params.p_kdf_salt,
+      iv: params.p_iv,
+      ciphertext: params.p_ciphertext,
+      updated_at: params.p_updated_at
+    };
+    if (idx >= 0) table[idx] = { ...table[idx], ...row };
+    else table.push(row);
+    return { data: null, error: null };
+  };
+
+  // Mirrors public.get_time_budget_blob: return the user's blob row, if any.
+  const getTimeBudgetBlob = (params: { p_user_id: string }) => {
+    const row = (db.time_budget_sync || []).find(r => r.user_id === params.p_user_id);
+    return {
+      data: row ? [row] : [],
+      error: null
+    };
+  };
+
   return {
     auth,
     storage,
     from: (table: string) => chains[table]?.() ?? chains[table],
     rpc: vi.fn(async (fn: string, params: any) => {
       if (fn === 'sync_showcase_items') return syncShowcaseItems(params);
+      if (fn === 'save_time_budget_blob') return saveTimeBudgetBlob(params);
+      if (fn === 'get_time_budget_blob') return getTimeBudgetBlob(params);
       return { data: null, error: { message: `Unknown RPC: ${fn}` } };
     })
   } as unknown as SupabaseClient;
