@@ -858,7 +858,8 @@
     "minHours": "最低時間 / 週",
     "targetHours": "目標時間 / 週",
     "dangerHours": "危険ライン（任意）",
-    "tags": "タグ（カンマ区切り）",
+    "icon": "アイコン",
+    "noIcon": "アイコンなし",
     "priority": "優先度",
     "priorityHigh": "高",
     "priorityMedium": "中",
@@ -889,8 +890,10 @@
     "sortName": "名前",
     "filterZone": "ゾーン表示",
     "zoneAll": "すべてのゾーン",
-    "search": "アクティビティを検索…",
-    "tagFilter": "タグ",
+    "calPanel": {
+      "week": "W{week}",
+      "open": "タイムバジェットを開く"
+    },
     "import": "JSONをインポート",
     "export": "JSONをエクスポート",
     "importSuccess": "{count} 件のアクティビティをインポートしました。",

@@ -23,11 +23,13 @@ import {
   addTimeBudgetActivity,
   updateTimeBudgetActivity,
   deleteTimeBudgetActivity,
+  reorderTimeBudgetActivities,
   setTimeBudgetSettings,
   checkCatchUpReminders,
   DEFAULT_STATE,
   getActivityZone as storeGetActivityZone
 } from '../../src/lib/store';
+import { getDefaultTimeBudgetState } from '../../src/lib/timebudget';
 import type { TimeBudgetActivity } from '../../src/lib/store';
 
 function makeActivity(partial: Partial<TimeBudgetActivity> = {}): TimeBudgetActivity {
@@ -40,7 +42,6 @@ function makeActivity(partial: Partial<TimeBudgetActivity> = {}): TimeBudgetActi
     currentMinutes: 0,
     history: [],
     lastResetWeek: getCurrentBudgetWeek(),
-    tags: [],
     priority: 1,
     ...partial
   };
@@ -152,7 +153,14 @@ describe('Time Budget store', () => {
   beforeEach(() => {
     localStorage.clear();
     setState(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+    // Default state has no example activities, so the shared store tests need
+    // a starter activity to operate on.
+    addTimeBudgetActivity({ name: 'Test', minHours: 4, targetHours: 6, dangerHours: 10, priority: 1 });
     vi.restoreAllMocks();
+  });
+
+  it('starts with an empty activity list (no baked-in examples)', () => {
+    expect(getDefaultTimeBudgetState().activities).toEqual([]);
   });
 
   describe('logTime', () => {
@@ -206,10 +214,10 @@ describe('Time Budget store', () => {
 
   describe('CRUD', () => {
     it('creates, updates and deletes activities', () => {
-      const act = addTimeBudgetActivity({ name: '  Guitar  ', minHours: 2, targetHours: 4, dangerHours: 7, tags: ['music', 'music'], priority: 2 });
+      const act = addTimeBudgetActivity({ name: '  Guitar  ', minHours: 2, targetHours: 4, dangerHours: 7, icon: 'music-notes', priority: 2 });
       expect(act).not.toBeNull();
       expect(act!.name).toBe('Guitar');
-      expect(act!.tags).toEqual(['music']);
+      expect(act!.icon).toBe('music-notes');
 
       expect(updateTimeBudgetActivity(act!.id, { name: 'Bass', targetHours: 5 })).toBe(true);
       const found = state.timebudget.activities.find(a => a.id === act!.id);
@@ -234,6 +242,27 @@ describe('Time Budget store', () => {
     it('normalises danger null to no threshold', () => {
       const act = addTimeBudgetActivity({ name: 'Y', minHours: 1, targetHours: 2, dangerHours: null });
       expect(act!.dangerHours).toBeNull();
+    });
+  });
+
+  describe('drag reorder', () => {
+    it('moves one activity before another and persists the new order', () => {
+      const a = addTimeBudgetActivity({ name: 'A', minHours: 1, targetHours: 2, dangerHours: null });
+      const b = addTimeBudgetActivity({ name: 'B', minHours: 1, targetHours: 2, dangerHours: null });
+      const c = addTimeBudgetActivity({ name: 'C', minHours: 1, targetHours: 2, dangerHours: null });
+      // Default order: Test, A, B, C
+      expect(reorderTimeBudgetActivities(c!.id, a!.id)).toBe(true);
+      const ids = state.timebudget.activities.map(x => x.name);
+      expect(ids).toEqual(['Test', 'C', 'A', 'B']);
+    });
+
+    it('ignores unknown or self-moves', () => {
+      const a = state.timebudget.activities[0];
+      const before = state.timebudget.activities.map(x => x.name);
+      expect(reorderTimeBudgetActivities(a.id, a.id)).toBe(false);
+      expect(reorderTimeBudgetActivities('nope', a.id)).toBe(false);
+      expect(reorderTimeBudgetActivities(a.id, 'nope')).toBe(false);
+      expect(state.timebudget.activities.map(x => x.name)).toEqual(before);
     });
   });
 

@@ -9,7 +9,8 @@ import {
   getActivityProgressPercent,
   minutesRemainingToTarget
 } from '../lib/timebudget';
-import { PhArrowsClockwise, PhClock, PhPencilSimple, PhTrash } from './icons';
+import { ActivityIcon } from './activityIcons';
+import { PhArrowsClockwise, PhClock, PhPencilSimple, PhTrash, PhDotsSixVertical } from './icons';
 
 export function TimeActivityCard(props: {
   activity: TimeBudgetActivity;
@@ -18,6 +19,13 @@ export function TimeActivityCard(props: {
   onUndo: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  draggable?: boolean;
+  isDragging?: boolean;
+  isDropTarget?: boolean;
+  onDragStart?: (id: string) => void;
+  onDragEnd?: () => void;
+  onDragHover?: (id: string) => void;
+  onDropOn?: (id: string) => void;
 }) {
   const a = () => props.activity;
   const zone = () => getActivityZone(a());
@@ -45,25 +53,48 @@ export function TimeActivityCard(props: {
   const minPx = (a().minHours * 60) / barEnd;
   const targetPx = (a().targetHours * 60) / barEnd;
 
+  const handleDragStart = (e: DragEvent) => {
+    if (!props.draggable) return;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      try {
+        e.dataTransfer.setData('text/plain', a().id);
+      } catch {
+        // noop
+      }
+    }
+    props.onDragStart?.(a().id);
+  };
+
   return (
     <article
-      class={`tb-card ${zone() === 'danger' ? 'tb-zone-danger' : ''}`}
+      class={`tb-card ${zone() === 'danger' ? 'tb-zone-danger' : ''} ${props.isDragging ? 'tb-dragging' : ''} ${props.isDropTarget ? 'tb-drop-target' : ''}`}
+      draggable={props.draggable}
+      onDragStart={handleDragStart}
+      onDragEnd={() => props.onDragEnd?.()}
+      onDragOver={(e) => {
+        if (!props.draggable) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        props.onDragHover?.(a().id);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        props.onDropOn?.(a().id);
+      }}
       data-testid="tb-card"
       data-activity={a().id}
     >
       <div class="tb-card-header">
         <div>
           <div class="tb-card-title-row">
+            <Show when={props.draggable}>
+              <span class="tb-drag-handle" title="Drag to reorder"><PhDotsSixVertical /></span>
+            </Show>
+            <span class="tb-activity-icon"><ActivityIcon icon={a().icon} /></span>
             <h3 class="tb-card-name">{a().name}</h3>
             <span class={`tb-priority-badge ${priorityClass()}`}>{priorityLabel()}</span>
           </div>
-          <Show when={(a().tags || []).length > 0}>
-            <div class="tb-tags">
-              {a().tags.map(tag => (
-                <span class="tb-tag">#{tag}</span>
-              ))}
-            </div>
-          </Show>
         </div>
         <div class="tb-card-actions">
           <button type="button" class="tb-icon-btn" title={t('timebudget.manualLogTitle', { name: a().name })} onClick={props.onOpenManualLog}>

@@ -858,7 +858,8 @@
     "minHours": "Min hours / week",
     "targetHours": "Target hours / week",
     "dangerHours": "Danger hours (optional)",
-    "tags": "Tags (comma separated)",
+    "icon": "Icon",
+    "noIcon": "No icon",
     "priority": "Priority",
     "priorityHigh": "High",
     "priorityMedium": "Medium",
@@ -889,8 +890,10 @@
     "sortName": "Name",
     "filterZone": "Show zone",
     "zoneAll": "All zones",
-    "search": "Search activities…",
-    "tagFilter": "Tag",
+    "calPanel": {
+      "week": "W{week}",
+      "open": "Open time budget"
+    },
     "import": "Import JSON",
     "export": "Export JSON",
     "importSuccess": "Imported {count} activities.",

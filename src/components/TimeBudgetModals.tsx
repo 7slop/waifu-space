@@ -12,7 +12,8 @@ import {
   TimeBudgetSettings,
   ACTIVITY_COLORS
 } from '../lib/timebudget';
-import { PhX } from './icons';
+import { ACTIVITY_ICON_IDS, ActivityIcon } from './activityIcons';
+import { PhX, PhCheck } from './icons';
 
 // ─── Manual time-logging modal ─────────────────────────────────────────────
 export function TimeLogModal(props: {
@@ -88,8 +89,8 @@ export function TimeActivityFormModal(props: {
   const [minH, setMinH] = createSignal(4);
   const [targetH, setTargetH] = createSignal(6);
   const [dangerH, setDangerH] = createSignal<number | null>(null);
-  const [tags, setTags] = createSignal('');
   const [priority, setPriority] = createSignal(5);
+  const [icon, setIcon] = createSignal<string | undefined>(undefined);
   const [color, setColor] = createSignal('');
   const [error, setError] = createSignal('');
 
@@ -102,16 +103,16 @@ export function TimeActivityFormModal(props: {
         setMinH(a.minHours);
         setTargetH(a.targetHours);
         setDangerH(a.dangerHours);
-        setTags((a.tags || []).join(', '));
         setPriority(a.priority);
+        setIcon(a.icon || undefined);
         setColor(a.color || '');
       } else {
         setName('');
         setMinH(4);
         setTargetH(6);
         setDangerH(null);
-        setTags('');
         setPriority(5);
+        setIcon(undefined);
         setColor(ACTIVITY_COLORS[Math.floor(Math.random() * ACTIVITY_COLORS.length)]);
       }
     }
@@ -124,28 +125,21 @@ export function TimeActivityFormModal(props: {
     const n = (name() || '').trim();
     if (!n) { setError(t('timebudget.activityName')); return; }
 
+    const payload = {
+      name: n,
+      minHours: Math.max(0, minH()),
+      targetHours: Math.max(1, targetH()),
+      dangerHours: dangerH() && dangerH()! > 0 ? dangerH() : null,
+      priority: priority(),
+      icon: icon() || undefined,
+      color: color() || undefined
+    };
+
     if (isEdit() && props.editActivity) {
-      const patched = {
-        name: n,
-        minHours: Math.max(0, minH()),
-        targetHours: Math.max(1, targetH()),
-        dangerHours: dangerH() && dangerH()! > 0 ? dangerH() : null,
-        tags: (tags() || '').split(',').map(t => t.trim()).filter(Boolean),
-        priority: priority(),
-        color: color() || undefined
-      };
-      updateTimeBudgetActivity(props.editActivity.id, patched);
+      updateTimeBudgetActivity(props.editActivity.id, payload);
       showToast(t('timebudget.toasts.activityUpdated', { name: n }));
     } else {
-      const act = addTimeBudgetActivity({
-        name: n,
-        minHours: Math.max(0, minH()),
-        targetHours: Math.max(1, targetH()),
-        dangerHours: dangerH() && dangerH()! > 0 ? dangerH() : null,
-        tags: (tags() || '').split(',').map(t => t.trim()).filter(Boolean),
-        priority: priority(),
-        color: color() || undefined
-      });
+      const act = addTimeBudgetActivity(payload);
       if (act) showToast(t('timebudget.toasts.activityAdded', { name: n }));
     }
     props.onClose();
@@ -189,8 +183,27 @@ export function TimeActivityFormModal(props: {
           </div>
 
           <div class="form-group">
-            <label class="form-label">{t('timebudget.tags')}</label>
-            <input type="text" class="modal-input" value={tags()} onInput={e => setTags(e.currentTarget.value.slice(0, 200))} placeholder="code, study, health" />
+            <label class="form-label">{t('timebudget.icon')}</label>
+            <div class="tb-icon-grid" data-testid="tb-icon-picker">
+              <button
+                type="button"
+                class={`tb-icon-choice${!icon() ? ' active' : ''}`}
+                title={t('timebudget.noIcon')}
+                onClick={() => setIcon(undefined)}
+              >
+                <PhX />
+              </button>
+              {ACTIVITY_ICON_IDS.map(id => (
+                <button
+                  type="button"
+                  class={`tb-icon-choice${icon() === id ? ' active' : ''}`}
+                  onClick={() => setIcon(id)}
+                >
+                  <ActivityIcon icon={id} />
+                  <Show when={icon() === id}><PhCheck class="tb-icon-check" /></Show>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div class="form-group">

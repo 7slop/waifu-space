@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup, createEffect, For, Show } from 'solid-js';
+import { createSignal, onMount, onCleanup, createEffect, Show } from 'solid-js';
 import { t } from '../lib/i18n';
 import {
   state,
@@ -11,16 +11,16 @@ import {
   requestNotificationPermission,
   checkCatchUpReminders,
   deleteTimeBudgetActivity,
+  reorderTimeBudgetActivities,
   clearCatchUpReminderMemory
 } from '../lib/store';
 import {
   TimeBudgetActivity,
-  getActivityZone,
   getWeekProgress,
   getCurrentBudgetWeek,
   formatDurationHours
 } from '../lib/timebudget';
-import { PhGearSix, PhPlus, PhSlidersHorizontal, PhUploadSimple, PhDownloadSimple } from './icons';
+import { PhGearSix, PhPlus, PhUploadSimple, PhDownloadSimple } from './icons';
 import { TimeActivityCard } from './TimeActivityCard';
 import {
   TimeLogModal,
@@ -29,20 +29,17 @@ import {
   ConfirmDeleteModal
 } from './TimeBudgetModals';
 
-type SortKey = 'priority' | 'deficit' | 'progress' | 'name';
-type FilterZone = 'all' | 'deficit' | 'progress' | 'target' | 'danger';
-
 export function TimeBudgetPlanner() {
-  const [sortKey, setSortKey] = createSignal<SortKey>('priority');
-  const [filterZone, setFilterZone] = createSignal<FilterZone>('all');
-  const [search, setSearch] = createSignal('');
-
   const [logModalOpen, setLogModalOpen] = createSignal(false);
   const [logTarget, setLogTarget] = createSignal<TimeBudgetActivity | null>(null);
   const [formModalOpen, setFormModalOpen] = createSignal(false);
   const [editTarget, setEditTarget] = createSignal<TimeBudgetActivity | null>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [deleteTarget, setDeleteTarget] = createSignal<TimeBudgetActivity | null>(null);
+
+  // Drag & drop reorder state
+  const [dragId, setDragId] = createSignal<string | null>(null);
+  const [dropTargetId, setDropTargetId] = createSignal<string | null>(null);
 
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -74,33 +71,10 @@ export function TimeBudgetPlanner() {
 
   const weekProgress = () => getWeekProgress(new Date(), settings().resetDay, settings().resetHour);
 
-  const filtered = () => {
-    let acts = [...(state.timebudget.activities || [])];
-    const q = search().toLowerCase();
-    if (q) acts = acts.filter(a => a.name.toLowerCase().includes(q) || (a.tags || []).some(tag => tag.includes(q)));
-    if (filterZone() !== 'all') acts = acts.filter(a => getActivityZone(a) === filterZone());
-    const sk = sortKey();
-    acts.sort((a, b) => {
-      if (sk === 'priority') return a.priority - b.priority;
-      if (sk === 'deficit') {
-        const za = getActivityZone(a);
-        const zb = getActivityZone(b);
-        const order: Record<string, number> = { deficit: 0, danger: 1, progress: 2, target: 3 };
-        const dz = (order[za] ?? 4) - (order[zb] ?? 4);
-        return dz !== 0 ? dz : a.priority - b.priority;
-      }
-      if (sk === 'progress') {
-        const pa = a.currentMinutes / Math.max(1, a.targetHours * 60);
-        const pb = b.currentMinutes / Math.max(1, b.targetHours * 60);
-        return pa - pb;
-      }
-      return a.name.localeCompare(b.name);
-    });
-    return acts;
-  };
+  const activities = () => state.timebudget.activities || [];
 
-  const totalLogged = () => (state.timebudget.activities || []).reduce((s, a) => s + a.currentMinutes, 0);
-  const targetTotal = () => (state.timebudget.activities || []).reduce((s, a) => s + a.targetHours * 60, 0);
+  const totalLogged = () => activities().reduce((s, a) => s + a.currentMinutes, 0);
+  const targetTotal = () => activities().reduce((s, a) => s + a.targetHours * 60, 0);
 
   const openManualLog = (act: TimeBudgetActivity) => { setLogTarget(act); setLogModalOpen(true); };
   const openEdit = (act: TimeBudgetActivity) => { setEditTarget(act); setFormModalOpen(true); };
@@ -116,6 +90,15 @@ export function TimeBudgetPlanner() {
       showToast(t('timebudget.undoToast', { name: act.name, minutes: '1 session' }));
     } else {
       showToast(t('timebudget.nothingToUndo', { name: act.name }));
+    }
+  };
+
+  const handleDropOn = (targetId: string) => {
+    const sourceId = dragId();
+    setDragId(null);
+    setDropTargetId(null);
+    if (sourceId && sourceId !== targetId) {
+      reorderTimeBudgetActivities(sourceId, targetId);
     }
   };
 
@@ -195,59 +178,9 @@ export function TimeBudgetPlanner() {
         </div>
       </div>
 
-      {/* Sort/filter bar */}
-      <div style={{ 'display': 'flex', 'gap': '10px', 'flex-wrap': 'wrap', 'align-items': 'center', 'margin-bottom': '18px' }}>
-        <div style={{ 'display': 'flex', 'gap': '6px', 'align-items': 'center' }}>
-          <span style={{ 'font-size': '0.82rem', 'color': 'var(--text-muted)', 'font-weight': '600' }}>{t('timebudget.sortBy')}</span>
-          <For each={[
-            { value: 'priority' as SortKey, label: t('timebudget.sortPriority') },
-            { value: 'deficit' as SortKey, label: t('timebudget.sortDeficit') },
-            { value: 'progress' as SortKey, label: t('timebudget.sortProgress') },
-            { value: 'name' as SortKey, label: t('timebudget.sortName') }
-          ]}>
-            {opt => (
-              <button
-                type="button"
-                class={`timebudget-btn${sortKey() === opt.value ? ' primary' : ''}`}
-                style={{ 'padding': '6px 12px', 'font-size': '0.8rem' }}
-                onClick={() => setSortKey(opt.value)}
-              >{opt.label}</button>
-            )}
-          </For>
-        </div>
-        <div style={{ 'display': 'flex', 'gap': '6px', 'align-items': 'center' }}>
-          <span style={{ 'font-size': '0.82rem', 'color': 'var(--text-muted)', 'font-weight': '600' }}>{t('timebudget.filterZone')}</span>
-          <For each={[
-            { value: 'all' as FilterZone, label: t('timebudget.zoneAll') },
-            { value: 'deficit' as FilterZone, label: t('timebudget.zone.deficit') },
-            { value: 'progress' as FilterZone, label: t('timebudget.zone.progress') },
-            { value: 'target' as FilterZone, label: t('timebudget.zone.target') },
-            { value: 'danger' as FilterZone, label: t('timebudget.zone.danger') }
-          ]}>
-            {opt => (
-              <button
-                type="button"
-                class={`timebudget-btn${filterZone() === opt.value ? ' primary' : ''}`}
-                style={{ 'padding': '6px 12px', 'font-size': '0.8rem' }}
-                onClick={() => setFilterZone(opt.value)}
-              >{opt.label}</button>
-            )}
-          </For>
-        </div>
-        <input
-          type="text"
-          class="modal-input"
-          style={{ 'padding': '6px 12px', 'font-size': '0.85rem', 'flex': '1', 'min-width': '160px', 'max-width': '260px' }}
-          placeholder={t('timebudget.search')}
-          value={search()}
-          onInput={e => setSearch(e.currentTarget.value)}
-          data-testid="tb-search"
-        />
-      </div>
-
       {/* Activity grid */}
       <div class="timebudget-grid">
-        <Show when={filtered().length > 0} fallback={
+        <Show when={activities().length > 0} fallback={
           <div class="tb-empty" data-testid="tb-empty">
             <div class="tb-empty-icon">📊</div>
             <p>{t('timebudget.empty')}</p>
@@ -256,9 +189,19 @@ export function TimeBudgetPlanner() {
             </button>
           </div>
         }>
-          {filtered().map(a => (
+          {activities().map(a => (
             <TimeActivityCard
               activity={a}
+              draggable
+              isDragging={dragId() === a.id}
+              isDropTarget={dropTargetId() === a.id}
+              onDragStart={setDragId}
+              onDragEnd={() => { setDragId(null); setDropTargetId(null); }}
+              onDragHover={setDropTargetId}
+              onDropOn={(targetId) => {
+                setDropTargetId(null);
+                handleDropOn(targetId);
+              }}
               onQuickAdd={(mins) => handleQuickAdd(a, mins)}
               onOpenManualLog={() => openManualLog(a)}
               onUndo={() => handleUndo(a)}

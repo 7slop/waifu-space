@@ -192,7 +192,7 @@ function sanitizeRpg(raw: unknown): RpgState {
   };
 }
 
-const TIME_BUDGET_TAG_RE = /^[a-zA-Z0-9_\- ]{1,20}$/;
+const TIME_BUDGET_ICON_RE = /^[a-z0-9-]{1,40}$/;
 
 function sanitizeTimeLogEntry(raw: unknown): TimeBudgetActivity['history'][number] | null {
   if (!isRecord(raw)) return null;
@@ -212,7 +212,6 @@ function sanitizeTimeBudgetActivity(raw: unknown): TimeBudgetActivity | null {
   const history = Array.isArray(raw.history)
     ? raw.history.map(sanitizeTimeLogEntry).filter((e): e is TimeBudgetActivity['history'][number] => e !== null).slice(0, 2000)
     : [];
-  const tags: string[] = dedupeStrings(raw.tags).filter(tag => TIME_BUDGET_TAG_RE.test(tag)).slice(0, 10);
 
   const activity: TimeBudgetActivity = {
     id: toStr(raw.id, syntheticId('act')),
@@ -223,9 +222,11 @@ function sanitizeTimeBudgetActivity(raw: unknown): TimeBudgetActivity | null {
     currentMinutes: toNonNegativeInt(raw.currentMinutes, 0),
     history,
     lastResetWeek: typeof raw.lastResetWeek === 'string' ? raw.lastResetWeek : '',
-    tags,
     priority: toPositiveInt(raw.priority, 5)
   };
+  if (typeof raw.icon === 'string' && TIME_BUDGET_ICON_RE.test(raw.icon.trim().toLowerCase())) {
+    activity.icon = raw.icon.trim().toLowerCase();
+  }
   if (isHexColor(raw.color)) activity.color = raw.color as string;
   return activity;
 }

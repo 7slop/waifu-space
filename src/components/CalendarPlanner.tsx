@@ -20,6 +20,7 @@ import { CalendarEventItem } from '../lib/ical';
 import { buildCulturalHolidayEvents } from '../lib/countries';
 import { MiniCalendar } from './MiniCalendar';
 import { EventModal } from './EventModal';
+import { CalendarTimeBudgetPanel } from './CalendarTimeBudgetPanel';
 import { CalendarPopover } from './CalendarPopover';
 import { RepeatScopeDialog, RepeatScopeRequest } from './RepeatScopeDialog';
 import { CountryHolidaysModal } from './CountryHolidaysModal';
@@ -514,6 +515,9 @@ const sidebarTasks = createMemo(() => {
               setCurrentDate(d);
             }}
           />
+
+          {/* TIME BUDGET OVERVIEW (read-only) */}
+          <CalendarTimeBudgetPanel />
 
           {/* MY CALENDARS FILTER */}
           <div class="gcal-category-box">

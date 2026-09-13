@@ -2011,27 +2011,17 @@ export interface TimeBudgetActivityInput {
   minHours: number;
   targetHours: number;
   dangerHours: number | null;
-  tags?: string[];
   priority?: number;
+  icon?: string;
   color?: string;
 }
 
-const VALID_TAG_RE = /^[a-zA-Z0-9_\- ]{1,20}$/;
+const VALID_ICON_RE = /^[a-z0-9-]{1,40}$/;
 
-function cleanTags(raw: unknown): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  if (Array.isArray(raw)) {
-    for (const item of raw) {
-      if (typeof item !== 'string') continue;
-      const tag = item.trim().toLowerCase();
-      if (!tag || !VALID_TAG_RE.test(tag) || seen.has(tag)) continue;
-      seen.add(tag);
-      out.push(tag);
-      if (out.length >= 10) break;
-    }
-  }
-  return out;
+function cleanIcon(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const icon = raw.trim().toLowerCase();
+  return VALID_ICON_RE.test(icon) ? icon : undefined;
 }
 
 /** Creates a new weekly-budget activity with a clean weekly counter. */
@@ -2054,8 +2044,8 @@ export function addTimeBudgetActivity(input: TimeBudgetActivityInput): TimeBudge
     currentMinutes: 0,
     history: [],
     lastResetWeek: getCurrentBudgetWeek(new Date(), settings.resetDay, settings.resetHour),
-    tags: cleanTags(input.tags),
     priority: Number.isFinite(input.priority) ? Math.max(1, Math.min(10, Math.floor(input.priority ?? 5))) : 5,
+    ...(typeof input.icon === 'string' && VALID_ICON_RE.test(input.icon) ? { icon: input.icon } : {}),
     ...(typeof input.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(input.color) ? { color: input.color } : {})
   };
   setState('timebudget', 'activities', acts => [...acts, activity]);
@@ -2081,13 +2071,27 @@ export function updateTimeBudgetActivity(id: string, patch: Partial<TimeBudgetAc
         ? null
         : Math.max(clampHours(patch.dangerHours), next.targetHours ?? existing.targetHours);
   }
-  if (patch.tags !== undefined) next.tags = cleanTags(patch.tags);
   if (patch.priority !== undefined) next.priority = Math.max(1, Math.min(10, Math.floor(patch.priority)));
+  if (patch.icon !== undefined) next.icon = cleanIcon(patch.icon);
   if (patch.color !== undefined) {
     next.color = typeof patch.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(patch.color) ? patch.color : undefined;
   }
 
   setState('timebudget', 'activities', acts => acts.map(a => (a.id === id ? { ...a, ...next } : a)));
+  saveState();
+  return true;
+}
+
+/** Moves one activity so it sits right before another in the display order. */
+export function reorderTimeBudgetActivities(sourceId: string, targetId: string): boolean {
+  const acts = state.timebudget.activities;
+  const from = acts.findIndex(a => a.id === sourceId);
+  const to = acts.findIndex(a => a.id === targetId);
+  if (from === -1 || to === -1 || from === to) return false;
+  const next = [...acts];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  setState('timebudget', 'activities', next);
   saveState();
   return true;
 }

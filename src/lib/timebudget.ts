@@ -21,8 +21,8 @@ export interface TimeBudgetActivity {
   currentMinutes: number;
   history: TimeLogEntry[];
   lastResetWeek: string;
-  tags: string[];
   priority: number;
+  icon?: string;
   color?: string;
 }
 
@@ -64,14 +64,8 @@ export const DEFAULT_TIME_BUDGET_SETTINGS: TimeBudgetSettings = {
 };
 
 export function getDefaultTimeBudgetState(): TimeBudgetState {
-  const week = getCurrentBudgetWeek();
   return {
-    activities: [
-      { id: 'act-code', name: 'Coding', minHours: 5, targetHours: 8, dangerHours: null, currentMinutes: 0, history: [], lastResetWeek: week, tags: ['code'], priority: 1 },
-      { id: 'act-japanese', name: 'Japanese', minHours: 3, targetHours: 5, dangerHours: null, currentMinutes: 0, history: [], lastResetWeek: week, tags: ['study'], priority: 2 },
-      { id: 'act-gym', name: 'Gym', minHours: 2, targetHours: 4, dangerHours: 8, currentMinutes: 0, history: [], lastResetWeek: week, tags: ['health'], priority: 3 },
-      { id: 'act-music', name: 'Music', minHours: 1, targetHours: 3, dangerHours: 6, currentMinutes: 0, history: [], lastResetWeek: week, tags: ['hobby'], priority: 4 }
-    ],
+    activities: [],
     settings: { ...DEFAULT_TIME_BUDGET_SETTINGS }
   };
 }
