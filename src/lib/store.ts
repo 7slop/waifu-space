@@ -15,7 +15,18 @@ import {
 import { callLLM } from './llm';
 import { parseIntent, hasIntent, DialogIntent, matchesKeywordOrPhrase } from './intents';
 import { validateCalendarEventInput, sanitizeSettings, clampNumber } from './validation';
-import { sanitizeRawState, sanitizeEvent, sanitizeOccurrenceOverride } from './validate';
+import { sanitizeRawState, sanitizeEvent, sanitizeOccurrenceOverride, sanitizeTimeBudget } from './validate';
+import {
+  deriveBudgetKey,
+  deriveBudgetSalt,
+  decryptBudgetState,
+  encryptBudgetState,
+  generateBudgetSalt,
+  isEncryptedBudgetBlob,
+  exportBudgetKey,
+  importBudgetKey
+} from './cloudcrypt';
+import type { EncryptedBudgetBlob } from './cloudcrypt';
 import {
   sanitizeCountry,
   sanitizeHolidayEntry,
@@ -27,6 +38,20 @@ import {
 import { getLootboxCost, rollLootRarity, DUPLICATE_COMPENSATION, getDefenseCoinsReward, getDefenseExpReward } from './economy';
 import { t, getMilestoneRewardLabel } from './i18n';
 import { AVATAR_FRAME_CATALOG } from './avatar-frames';
+import {
+  TimeBudgetActivity,
+  TimeBudgetState,
+  TimeLogEntry,
+  ActivityZone,
+  getCurrentBudgetWeek,
+  getWeekProgress,
+  getActivityZone,
+  clampMinutes,
+  clampHours,
+  MAX_ACTIVITIES,
+  getDefaultTimeBudgetState
+} from './timebudget';
+import type { TimeBudgetSettings } from './timebudget';
 
 export const STORAGE_KEY = 'waifu_space_data_v1';
 
@@ -225,6 +250,7 @@ export interface AppState {
     suggestions: string[];
     isTyping: boolean;
   };
+  timebudget: TimeBudgetState;
 }
 
 // New accounts (and logged-out guests) start with a completely empty calendar.
@@ -320,7 +346,8 @@ export const DEFAULT_STATE: AppState = {
       "Tell me a joke"
     ],
     isTyping: false
-  }
+  },
+  timebudget: getDefaultTimeBudgetState()
 };
 
 // Global reactive store
@@ -358,6 +385,7 @@ export function saveState() {
       settings: state.settings,
       calendar: state.calendar,
       chat: state.chat,
+      timebudget: state.timebudget,
       waifu: {
         name: state.waifu.name,
         personality: state.waifu.personality,
@@ -375,6 +403,7 @@ export function saveState() {
     console.error('Failed to save state to localStorage', e);
   }
   scheduleCloudSync();
+  scheduleBudgetCloudSync();
 }
 
 // ---------------------------------------------------------------------------
@@ -402,17 +431,19 @@ function isOnline(): boolean {
 function buildSyncSnapshot(): {
   waifu?: unknown;
   settings?: unknown;
-  calendar?: unknown;
-  calendarOverrides?: unknown;
   showcaseItems?: unknown;
   rpg?: unknown;
 } {
   // Until the account's cloud snapshot has been pulled at least once, the local
   // state is only the empty/default guest template. Pushing it would clobber the
-  // user's REAL saved waifu, settings, calendar and showcase (e.g. a returning
-  // user opening the app on a fresh device). So the first push carries no
-  // resources at all - the server leaves everything untouched and the pull that
-  // runs right after boot sets cloudSnapshotLoaded, unlocking full syncs.
+  // user's REAL saved waifu, settings and showcase (e.g. a returning user
+  // opening the app on a fresh device). So the first push carries no resources
+  // at all - the server leaves everything untouched and the pull that runs right
+  // after boot sets cloudSnapshotLoaded, unlocking full syncs.
+  //
+  // NOTE: the calendar (and time budget) are NOT part of this plaintext
+  // snapshot - they sync exclusively through the end-to-end encrypted privacy
+  // blob (/api/timebudget/sync).
   if (!cloudSnapshotLoaded) {
     return {};
   }
@@ -423,8 +454,6 @@ function buildSyncSnapshot(): {
       appearance: state.waifu.appearance
     },
     settings: state.settings,
-    calendar: state.calendar.events.map(e => ({ ...e })),
-    calendarOverrides: state.calendar.occurrenceOverrides.map(o => ({ ...o })),
     showcaseItems: state.rpg.showcaseItems,
     rpg: {
       claimedAffectionMilestones: state.rpg?.claimedAffectionMilestones || []
@@ -612,6 +641,10 @@ if (typeof window !== 'undefined') {
     if (!state.user?.token) return;
     clearTimeout(cloudSyncTimer);
     void pushProgressToCloud();
+    if (isBudgetUnlocked()) {
+      if (budgetSyncTimer) clearTimeout(budgetSyncTimer);
+      void pushBudgetToCloud();
+    }
   };
   window.addEventListener('pagehide', flushPendingSync);
   window.addEventListener('beforeunload', flushPendingSync);
@@ -633,9 +666,475 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', retryCloudSync);
   window.addEventListener('load', retryCloudSync);
 
+  // Retry any queued encrypted time-budget push once the connection is back.
+  const retryBudgetCloudSync = () => {
+    if (!state.user?.token || budgetSyncIsLocked()) return;
+    if (!readPendingBudget()) return;
+    void syncBudgetFromPending();
+  };
+  window.addEventListener('online', retryBudgetCloudSync);
+
   // Another tab saved to local storage for this account - make sure our
   // freshest state still reaches the cloud.
   window.addEventListener('storage', syncProgressFromStorageEvent);
+}
+
+// ---------------------------------------------------------------------------
+// Private cloud sync (time budget + calendar, end-to-end encrypted)
+// ---------------------------------------------------------------------------
+// The time budget AND the calendar are the only user data encrypted before
+// upload. The payload { timebudget, calendar } is AES-256-GCM encrypted in the
+// browser with a key derived from the account password (PBKDF2). The server
+// only stores the opaque { salt, iv, ciphertext } blob and can never read the
+// tracking goals or calendar events. The derived key is cached on the device
+// (per account) so a tab booting from a stored session token unlocks the cloud
+// copy automatically - without needing to re-enter the password.
+
+let budgetSyncTimer: ReturnType<typeof setTimeout> | null = null;
+const PENDING_BUDGET_KEY = 'waifu_space_pending_budget_v1';
+const BUDGET_KEY_STORAGE_PREFIX = 'waifu_space_budget_key_v1';
+
+export type BudgetCloudStatus = 'idle' | 'syncing' | 'synced' | 'locked' | 'offline' | 'error';
+
+export const [budgetCloudStatus, setBudgetCloudStatus] = createSignal<BudgetCloudStatus>('idle');
+export const [budgetKeyReady, setBudgetKeyReady] = createSignal(false);
+
+let budgetKey: CryptoKey | null = null;
+let budgetSalt = ''; // salt of the key currently in memory (stamped onto new blobs)
+let budgetBlobSynced = false; // true once a cloud snapshot has been safely read/decrypted
+let budgetPushBlocked = false; // decrypt failed -> never overwrite the cloud copy
+let budgetCloudSnapshotLoaded = false;
+
+function budgetSyncIsLocked(): boolean {
+  return !budgetKey || budgetPushBlocked;
+}
+
+export function isBudgetUnlocked(): boolean {
+  return budgetKey !== null && !budgetPushBlocked;
+}
+
+function budgetKeyStorageKey(userId: string | null | undefined): string {
+  return `${BUDGET_KEY_STORAGE_PREFIX}_${userId ?? 'guest'}`;
+}
+
+/**
+ * Persists the derived AES key (+ its salt) for this account so a later boot
+ * from a stored session token can unlock the cloud copy automatically without
+ * prompting for the password again. The key stays on this device in
+ * localStorage; only ciphertext is ever exported to the cloud.
+ */
+async function persistBudgetKey(): Promise<boolean> {
+  if (!budgetKey || !budgetSalt) return false;
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = await exportBudgetKey(budgetKey);
+    localStorage.setItem(
+      budgetKeyStorageKey(state.user?.id),
+      JSON.stringify({ v: 1, raw, salt: budgetSalt })
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drops the in-memory key AND the persisted (possibly drifted) one for this
+ * account. Used when an auto-restored key fails to decrypt the cloud blob, so
+ * it can never wedge this device in 'locked' on later sessions; the next
+ * explicit password login re-derives cleanly against the blob's own salt.
+ */
+async function invalidateStoredBudgetKey(): Promise<void> {
+  budgetKey = null;
+  budgetSalt = '';
+  budgetBlobSynced = false;
+  budgetPushBlocked = false;
+  if (typeof window !== 'undefined' && state.user?.id) {
+    try {
+      localStorage.removeItem(budgetKeyStorageKey(state.user.id));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
+ * Re-imports the persisted key for the currently signed-in account from
+ * localStorage. Returns true when a key was restored, so the cloud copy can be
+ * decrypted without the password (e.g. sessions restored from a stored token).
+ */
+async function restoreStoredBudgetKey(): Promise<boolean> {
+  if (budgetKey) return true;
+  const userId = state.user?.id;
+  if (!userId || typeof window === 'undefined') return false;
+  try {
+    const raw = localStorage.getItem(budgetKeyStorageKey(userId));
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.v !== 1 || typeof parsed.raw !== 'string' || typeof parsed.salt !== 'string') return false;
+    budgetKey = await importBudgetKey(parsed.raw);
+    budgetSalt = parsed.salt;
+    budgetPushBlocked = false;
+    budgetCloudSnapshotLoaded = false;
+    setBudgetKeyReady(true);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchBudgetBlob(token: string): Promise<EncryptedBudgetBlob | null> {
+  try {
+    const res = await fetch('/api/timebudget/sync', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.status === 401) {
+      setUserAccount(null);
+      setBudgetCloudStatus('error');
+      return null;
+    }
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.success) return null;
+    return isEncryptedBudgetBlob(data.blob) ? data.blob : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Applies a decrypted privacy payload ({ timebudget, calendar }) onto local
+ * state. The cloud copy is authoritative once a blob exists, because a blob is
+ * only created by a successful push - mirroring the old calendar_synced_at
+ * semantics for the encrypted channel.
+ */
+function applyCloudPrivacyState(plain: unknown): void {
+  const data =
+    plain && typeof plain === 'object' && !Array.isArray(plain)
+      ? (plain as Record<string, unknown>)
+      : {};
+
+  const tb = sanitizeTimeBudget(data.timebudget ?? {});
+  // Guard against the empty-clobber case: an older bug could push an empty
+  // snapshot as the first blob. Never hollow out a device that has real data -
+  // it will repair the cloud copy on the next push instead.
+  if (tb.activities.length > 0 || state.timebudget.activities.length === 0) {
+    setState('timebudget', tb);
+  }
+
+  const cal = data.calendar;
+  if (cal && typeof cal === 'object' && !Array.isArray(cal)) {
+    const c = cal as Record<string, unknown>;
+    if (Array.isArray(c.events)) {
+      const sanitized = (c.events as unknown[])
+        .map(sanitizeEvent)
+        .filter((e): e is CalendarEventItem => e !== null);
+      if (sanitized.length > 0 || state.calendar.events.length === 0) {
+        setState('calendar', 'events', sanitized);
+      }
+    }
+    if (Array.isArray(c.occurrenceOverrides)) {
+      const sanitizedOverrides = (c.occurrenceOverrides as unknown[])
+        .map(sanitizeOccurrenceOverride)
+        .filter((o): o is CalendarOccurrenceOverride => o !== null && o.parentId !== '');
+      if (sanitizedOverrides.length > 0 || state.calendar.occurrenceOverrides.length === 0) {
+        setState('calendar', 'occurrenceOverrides', sanitizedOverrides);
+      }
+    }
+  }
+
+  saveState();
+}
+
+/**
+ * Derives the privacy-blob encryption key from the account password on this
+ * device and caches it (persisted to localStorage so later sessions unlock
+ * automatically). Must be called while signed in. Returns true on success.
+ *
+ * - If a cloud blob exists, the password is ALWAYS re-derived with the blob's
+ *   own stored salt and used to decrypt it. This heals a key that was cached
+ *   on this device under a drifted salt (e.g. another device created the first
+ *   blob) and is the only way to clear a previous push-block. A wrong password
+ *   fails loudly and never touches the cloud copy.
+ * - If no blob exists yet, the salt is derived deterministically from the
+ *   (account, password) pair so a second device logged in with the same
+ *   password derives the SAME key and can read the blob the first device
+ *   pushes - no per-device salt drift.
+ */
+export async function unlockBudgetKey(password: string): Promise<boolean> {
+  if (!password || !state.user?.token) return false;
+  if (!isOnline()) {
+    setBudgetCloudStatus('offline');
+    return false;
+  }
+
+  try {
+    const blob = await fetchBudgetBlob(state.user.token);
+    if (blob) {
+      const key = await deriveBudgetKey(password, blob.salt);
+      const plain = await decryptBudgetState(blob, key);
+      if (plain === null) {
+        // Wrong password or tampered blob. Never overwrite the cloud copy.
+        budgetPushBlocked = true;
+        setBudgetCloudStatus('locked');
+        return false;
+      }
+      budgetKey = key;
+      budgetSalt = blob.salt;
+      budgetBlobSynced = true;
+      budgetPushBlocked = false;
+      budgetCloudSnapshotLoaded = true;
+      setBudgetKeyReady(true);
+      await persistBudgetKey();
+      applyCloudPrivacyState(plain);
+      setBudgetCloudStatus('synced');
+      return true;
+    }
+
+    // No cloud copy yet. Keep a key that is already valid in this tab; a
+    // restored/derived key is interchangeable with the deterministic one.
+    if (budgetKey) return true;
+
+    // Deterministic per-(account, password) salt (see deriveBudgetSalt).
+    const salt = state.user.id ? await deriveBudgetSalt(state.user.id, password) : generateBudgetSalt();
+    budgetKey = await deriveBudgetKey(password, salt);
+    budgetSalt = salt;
+    budgetBlobSynced = false;
+    budgetPushBlocked = false;
+    setBudgetKeyReady(true);
+    await persistBudgetKey();
+    setBudgetCloudStatus('idle');
+    return true;
+  } catch {
+    setBudgetCloudStatus(isOnline() ? 'error' : 'offline');
+    budgetSalt = '';
+    return false;
+  }
+}
+
+/**
+ * Drops the in-memory key. Called on logout/account switch. The persisted copy
+ * in localStorage is intentionally kept so the next login on this device still
+ * unlocks the cloud copy automatically.
+ */
+export function forgetBudgetKey(): void {
+  budgetKey = null;
+  budgetSalt = '';
+  budgetBlobSynced = false;
+  budgetPushBlocked = false;
+  budgetCloudSnapshotLoaded = false;
+  setBudgetKeyReady(false);
+  setBudgetCloudStatus('idle');
+}
+
+/**
+ * Pulls the encrypted time budget + calendar from the cloud. The key is
+ * restored automatically from the persisted copy for this account, so a
+ * session booting from a stored token can decrypt it without a password.
+ */
+export async function loadBudgetFromCloud(token?: string): Promise<void> {
+  const authToken = token || state.user?.token;
+  if (!authToken) return;
+
+  if (!isOnline()) {
+    setBudgetCloudStatus('offline');
+    return;
+  }
+
+  // Sessions restored from a stored token have no password on hand: unlock
+  // automatically from the persisted key for this account.
+  const restored = await restoreStoredBudgetKey();
+
+  const blob = await fetchBudgetBlob(authToken);
+  if (!blob) {
+    // No cloud copy yet. Deliberately do NOT seed a push here: a plain boot
+    // carries no new data, and auto-pushing the (usually empty) local snapshot
+    // during a first load is what used to let a second device clobber the real
+    // blob. Genuine changes push themselves via saveState() ->
+    // scheduleBudgetCloudSync().
+    budgetBlobSynced = false;
+    return;
+  }
+
+  if (budgetSyncIsLocked()) {
+    // Cloud copy exists but this tab has no key yet (e.g. a brand-new device
+    // that never had the password entered). Stay locked; local data is never
+    // clobbered by the unreadable cloud copy.
+    budgetBlobSynced = false;
+    setBudgetCloudStatus('locked');
+    return;
+  }
+
+  const plain = await decryptBudgetState(blob, budgetKey!);
+  if (plain === null) {
+    if (restored) {
+      // The restored persisted key no longer matches the cloud blob (e.g. it
+      // was derived under a drifted pre-fix salt, or the password was changed
+      // on another device). It is useless on this path and would wedge this
+      // device in 'locked' on every auto-login. Drop it so the next explicit
+      // password login re-derives against the blob's own salt instead.
+      await invalidateStoredBudgetKey();
+    }
+    // Blob cannot be decrypted with the current key. Never clobber the cloud
+    // copy with local state.
+    budgetPushBlocked = true;
+    setBudgetCloudStatus('locked');
+    return;
+  }
+
+  budgetSalt = blob.salt;
+  budgetBlobSynced = true;
+  budgetPushBlocked = false;
+  budgetCloudSnapshotLoaded = true;
+  applyCloudPrivacyState(plain);
+  // The cloud blob's salt is authoritative; re-persist the current key under
+  // it so future bootstraps derive/restore against the right salt.
+  await persistBudgetKey();
+  setBudgetCloudStatus('synced');
+}
+
+function readPendingBudget(): { userId?: unknown } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(PENDING_BUDGET_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    if (parsed.userId !== (state.user?.id ?? null)) {
+      clearPendingBudget();
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function queuePendingBudget() {
+  if (typeof window === 'undefined') return;
+  if (!state.user?.id) return;
+  try {
+    localStorage.setItem(PENDING_BUDGET_KEY, JSON.stringify({ userId: state.user.id, updatedAt: Date.now() }));
+  } catch (e) {
+    console.error('Failed to queue pending time budget sync', e);
+  }
+}
+
+function clearPendingBudget() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(PENDING_BUDGET_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Retries the freshest encrypted budget push after an offline/failed attempt. */
+export async function syncBudgetFromPending(): Promise<boolean> {
+  const pending = readPendingBudget();
+  if (!pending) return false;
+  if (typeof pending.userId === 'string') {
+    if (!state.user || state.user.id !== pending.userId) {
+      clearPendingBudget();
+      return false;
+    }
+  } else {
+    clearPendingBudget();
+    return false;
+  }
+  return pushBudgetToCloud();
+}
+
+export function scheduleBudgetCloudSync() {
+  if (typeof window === 'undefined') return;
+  if (!state.user?.token) return;
+  if (budgetSyncIsLocked()) return;
+  if (budgetSyncTimer) clearTimeout(budgetSyncTimer);
+  budgetSyncTimer = setTimeout(() => {
+    void pushBudgetToCloud();
+  }, 2500);
+}
+
+/**
+ * Encrypts the current time budget + calendar and pushes it to the cloud.
+ * Best-effort: on offline/failure the attempt is queued locally and retried
+ * when the connection returns. Never runs while the budget is locked, so a
+ * local default (or another account's data) can never overwrite the cloud copy.
+ */
+export function pushBudgetToCloud(): Promise<boolean> {
+  const token = state.user?.token;
+  if (!token) return Promise.resolve(false);
+
+  if (budgetSyncIsLocked()) {
+    setBudgetCloudStatus('locked');
+    return Promise.resolve(false);
+  }
+  if (!budgetSalt) budgetSalt = generateBudgetSalt();
+
+  if (!isOnline()) {
+    setBudgetCloudStatus('offline');
+    queuePendingBudget();
+    return Promise.resolve(false);
+  }
+
+  setBudgetCloudStatus('syncing');
+
+  const attempt = async (): Promise<boolean> => {
+    try {
+      const blob = await encryptBudgetState(
+        {
+          timebudget: state.timebudget,
+          calendar: {
+            events: state.calendar.events,
+            occurrenceOverrides: state.calendar.occurrenceOverrides
+          }
+        },
+        budgetKey!,
+        budgetSalt,
+        new Date().toISOString()
+      );
+      const res = await fetch('/api/timebudget/sync', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ blob })
+      });
+      if (res.status === 401) {
+        setUserAccount(null);
+        setBudgetCloudStatus('error');
+        return false;
+      }
+      if (!res.ok) {
+        setBudgetCloudStatus('error');
+        queuePendingBudget();
+        return false;
+      }
+      budgetBlobSynced = true;
+      budgetPushBlocked = false;
+      clearPendingBudget();
+      setBudgetCloudStatus('synced');
+      return true;
+    } catch {
+      setBudgetCloudStatus(isOnline() ? 'error' : 'offline');
+      queuePendingBudget();
+      return false;
+    }
+  };
+
+  pushActive = true;
+  const commit = pushQueue.then(attempt);
+  // Whatever happens, the next push waits for this one before it starts.
+  pushQueue = commit.then(
+    () => {
+      pushActive = false;
+      return true;
+    },
+    () => {
+      pushActive = false;
+      return true;
+    }
+  );
+  return commit;
 }
 
 /**
@@ -643,9 +1142,13 @@ if (typeof window !== 'undefined') {
  * local state. Cloud data wins for RPG/waifu save fields, except that a richer
  * local save is never clobbered by the default 200-coin registration snapshot.
  */
-export async function loadCloudProgress(token?: string, scope?: 'all' | 'profile' | 'calendar' | 'rpg'): Promise<void> {
+export async function loadCloudProgress(token?: string, scope?: 'all' | 'profile' | 'rpg'): Promise<void> {
   const authToken = token || state.user?.token;
   if (!authToken) return;
+
+  // The encrypted time budget is pulled independently of the main profile
+  // snapshot (and can be locked without a password-derived key in memory).
+  void loadBudgetFromCloud(authToken);
 
   if (!isOnline()) {
     // Offline fallback: keep the local save authoritative until a pull succeeds.
@@ -680,36 +1183,9 @@ export async function loadCloudProgress(token?: string, scope?: 'all' | 'profile
     // may be pushed back to the cloud.
     cloudSnapshotLoaded = true;
 
-    // The cloud calendar is authoritative once it has EVER been synced,
-    // including when the list is now empty (e.g. the user deleted everything).
-    // A push records calendar_synced_at exactly for that reason. Before the
-    // first calendar sync the server has no way to know our list, so we keep
-    // the local list and schedule a push instead of wiping it.
-    const serverCalendarItems: unknown[] = Array.isArray(data.calendarItems) ? data.calendarItems : [];
-    const serverCalendarOverrides: unknown[] = Array.isArray(data.calendarOverrides) ? data.calendarOverrides : [];
-    const serverCalendarSyncedAt: string | null =
-      typeof data.calendarSyncedAt === 'string' ? data.calendarSyncedAt : null;
-    const neverSyncedCalendar =
-      serverCalendarSyncedAt === null &&
-      serverCalendarItems.length === 0 &&
-      serverCalendarOverrides.length === 0;
-
-    if (!neverSyncedCalendar) {
-      const sanitized = serverCalendarItems
-        .map(sanitizeEvent)
-        .filter((e): e is CalendarEventItem => e !== null);
-      const sanitizedOverrides = serverCalendarOverrides
-        .map(sanitizeOccurrenceOverride)
-        .filter((o): o is CalendarOccurrenceOverride => o !== null && o.parentId !== '');
-      setState('calendar', 'events', sanitized);
-      setState('calendar', 'occurrenceOverrides', sanitizedOverrides);
-      saveState();
-    } else if (!scope || scope === 'all') {
-      // Brand-new account, no cloud calendar yet: never drop local events.
-      // Make sure the (fresh or restored) list is pushed so the cloud copy
-      // is created on the first successful sync.
-      scheduleCloudSync();
-    }
+    // The calendar (events + occurrence overrides) is NOT part of this
+    // plaintext endpoint - it is merged from the end-to-end encrypted privacy
+    // blob pulled by loadBudgetFromCloud() above.
 
     const p = data.progress;
     if (!p) {
@@ -1201,7 +1677,10 @@ export function setUserAccount(user: UserAccount | null) {
       if (prevRegistered) {
         localStorage.removeItem(ACTIVE_USER_KEY);
       }
+      forgetBudgetKey();
       resetStateInMemory();
+    } else if (!nextRegistered) {
+      forgetBudgetKey();
     }
     setState('user', user);
 
@@ -1212,6 +1691,9 @@ export function setUserAccount(user: UserAccount | null) {
       if (saved) applyStoredState(JSON.parse(saved));
       // Keep the freshly-issued session/account from the auth response.
       setState('user', user);
+      // Auto-unlock the encrypted cloud backup with this account's persisted
+      // key (no password needed on this device).
+      void restoreStoredBudgetKey();
     }
 
     saveState();
@@ -1886,4 +2368,253 @@ const [leaderboardModalOpen, setLeaderboardModalOpen] = createSignal(false);
 export const isLeaderboardOpen = leaderboardModalOpen;
 export const openLeaderboard = () => setLeaderboardModalOpen(true);
 export const closeLeaderboard = () => setLeaderboardModalOpen(false);
+
+// ---------------------------------------------------------------------------
+// Weekly Time Budget (habits/tasks with min / target / danger hour budgets)
+// ---------------------------------------------------------------------------
+
+function syntheticActivityId(): string {
+  return `act-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Rolls logged minutes over whenever the configured reset boundary passes.
+ * The full session history is preserved as an archive; only the weekly
+ * counter is zeroed. Returns true when at least one activity was reset.
+ */
+export function ensureWeeklyReset(): boolean {
+  const settings = state.timebudget.settings;
+  const key = getCurrentBudgetWeek(new Date(), settings.resetDay, settings.resetHour);
+  const activities = state.timebudget.activities;
+  const needsReset = activities.some(a => a.lastResetWeek !== key);
+  if (!needsReset) return false;
+  setState('timebudget', 'activities', acts =>
+    acts.map(a => (a.lastResetWeek === key ? a : { ...a, lastResetWeek: key, currentMinutes: 0 }))
+  );
+  saveState();
+  return true;
+}
+
+function milestoneMessageFor(zone: ActivityZone, name: string, minutes: number): string | null {
+  switch (zone) {
+    case 'progress':
+      return `🚩 ${name}: baseline met (${Math.round(minutes / 60)}h) — keep going!`;
+    case 'target':
+      return `🎯 ${name} hit its weekly target! Great job, senpai!`;
+    case 'danger':
+      return `⚠️ ${name} entered overdrive — consider taking a break soon.`;
+    default:
+      return null;
+  }
+}
+
+function fireMilestoneNotification(message: string, zone: ActivityZone) {
+  showToast(message);
+  if (zone === 'danger') {
+    triggerWaifuResponse(message, 'pout');
+  } else if (zone === 'target') {
+    triggerWaifuResponse(message, 'happy');
+  }
+  if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted' && state.timebudget.settings.notifications) {
+    try {
+      const n = new Notification('WaifuSpace · Time Budget', { body: message, icon: '/favicon.svg' });
+      n.onclick = () => {
+        if (typeof window !== 'undefined') window.focus();
+      };
+    } catch {
+      // System notification denied/unavailable — toasts still cover it.
+    }
+  }
+}
+
+/** Logs `minutes` of progress to an activity and fires milestone notifications. */
+export function logTime(activityId: string, minutes: number, note?: string): boolean {
+  const amount = clampMinutes(minutes);
+  if (amount <= 0) return false;
+  ensureWeeklyReset();
+  const activity = state.timebudget.activities.find(a => a.id === activityId);
+  if (!activity) return false;
+
+  const before = getActivityZone(activity);
+  const next = clampMinutes(activity.currentMinutes) + amount;
+  const entry: TimeLogEntry = {
+    timestamp: new Date().toISOString(),
+    minutes: amount,
+    ...(note && note.trim() ? { note: note.trim().slice(0, 500) } : {})
+  };
+
+  setState('timebudget', 'activities', a => a.id === activityId, 'currentMinutes', next);
+  setState('timebudget', 'activities', a => a.id === activityId, 'history', h => [entry, ...(h || [])]);
+  saveState();
+
+  const after = getActivityZone({ ...activity, currentMinutes: next });
+  const msg = milestoneMessageFor(after, activity.name, next);
+  if (msg && after !== before && state.timebudget.settings.notifications) {
+    fireMilestoneNotification(msg, after);
+  }
+  return true;
+}
+
+/** Removes the most recent logged session and restores the counter. */
+export function undoLastLog(activityId: string): boolean {
+  ensureWeeklyReset();
+  const activity = state.timebudget.activities.find(a => a.id === activityId);
+  if (!activity) return false;
+  const last = (activity.history || [])[0];
+  if (!last) return false;
+
+  setState('timebudget', 'activities', a => a.id === activityId, 'history', h => (h || []).slice(1));
+  setState('timebudget', 'activities', a => a.id === activityId, 'currentMinutes', c =>
+    clampMinutes(c) - Math.min(clampMinutes(c), last.minutes)
+  );
+  saveState();
+  return true;
+}
+
+export interface TimeBudgetActivityInput {
+  name: string;
+  minHours: number;
+  targetHours: number;
+  dangerHours: number | null;
+  priority?: number;
+  icon?: string;
+  color?: string;
+}
+
+const VALID_ICON_RE = /^[a-z0-9-]{1,40}$/;
+
+function cleanIcon(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const icon = raw.trim().toLowerCase();
+  return VALID_ICON_RE.test(icon) ? icon : undefined;
+}
+
+/** Creates a new weekly-budget activity with a clean weekly counter. */
+export function addTimeBudgetActivity(input: TimeBudgetActivityInput): TimeBudgetActivity | null {
+  const name = (input.name || '').trim().slice(0, 60);
+  if (!name) return null;
+  if (state.timebudget.activities.length >= MAX_ACTIVITIES) {
+    showToast(`Activity limit reached (${MAX_ACTIVITIES}).`);
+    return null;
+  }
+  const settings = state.timebudget.settings;
+  const activity: TimeBudgetActivity = {
+    id: syntheticActivityId(),
+    name,
+    minHours: clampHours(input.minHours, 0),
+    targetHours: Math.max(clampHours(input.targetHours, 1), clampHours(input.minHours, 0), 1),
+    dangerHours: input.dangerHours !== null && input.dangerHours !== undefined && input.dangerHours > 0
+      ? Math.max(clampHours(input.dangerHours), Math.max(clampHours(input.targetHours, 1), clampHours(input.minHours, 0)))
+      : null,
+    currentMinutes: 0,
+    history: [],
+    lastResetWeek: getCurrentBudgetWeek(new Date(), settings.resetDay, settings.resetHour),
+    priority: Number.isFinite(input.priority) ? Math.max(1, Math.min(10, Math.floor(input.priority ?? 5))) : 5,
+    ...(typeof input.icon === 'string' && VALID_ICON_RE.test(input.icon) ? { icon: input.icon } : {}),
+    ...(typeof input.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(input.color) ? { color: input.color } : {})
+  };
+  setState('timebudget', 'activities', acts => [...acts, activity]);
+  saveState();
+  return activity;
+}
+
+export function updateTimeBudgetActivity(id: string, patch: Partial<TimeBudgetActivityInput>): boolean {
+  const existing = state.timebudget.activities.find(a => a.id === id);
+  if (!existing) return false;
+
+  const next: Partial<TimeBudgetActivity> = {};
+  if (patch.name !== undefined) {
+    const name = (patch.name || '').trim().slice(0, 60);
+    if (!name) return false;
+    next.name = name;
+  }
+  if (patch.minHours !== undefined) next.minHours = clampHours(patch.minHours, existing.minHours);
+  if (patch.targetHours !== undefined) next.targetHours = Math.max(clampHours(patch.targetHours, existing.targetHours), next.minHours ?? existing.minHours, 1);
+  if (patch.dangerHours !== undefined) {
+    next.dangerHours =
+      patch.dangerHours === null || patch.dangerHours === undefined || patch.dangerHours <= 0
+        ? null
+        : Math.max(clampHours(patch.dangerHours), next.targetHours ?? existing.targetHours);
+  }
+  if (patch.priority !== undefined) next.priority = Math.max(1, Math.min(10, Math.floor(patch.priority)));
+  if (patch.icon !== undefined) next.icon = cleanIcon(patch.icon);
+  if (patch.color !== undefined) {
+    next.color = typeof patch.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(patch.color) ? patch.color : undefined;
+  }
+
+  setState('timebudget', 'activities', acts => acts.map(a => (a.id === id ? { ...a, ...next } : a)));
+  saveState();
+  return true;
+}
+
+/** Moves one activity so it sits right before another in the display order. */
+export function reorderTimeBudgetActivities(sourceId: string, targetId: string): boolean {
+  const acts = state.timebudget.activities;
+  const from = acts.findIndex(a => a.id === sourceId);
+  const to = acts.findIndex(a => a.id === targetId);
+  if (from === -1 || to === -1 || from === to) return false;
+  const next = [...acts];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  setState('timebudget', 'activities', next);
+  saveState();
+  return true;
+}
+
+export function deleteTimeBudgetActivity(id: string): void {
+  setState('timebudget', 'activities', acts => acts.filter(a => a.id !== id));
+  saveState();
+}
+
+export function setTimeBudgetSettings(patch: Partial<TimeBudgetSettings>): void {
+  setState('timebudget', 'settings', prev => ({
+    ...prev,
+    ...patch
+  }));
+  saveState();
+  ensureWeeklyReset();
+}
+
+/**
+ * Mid-week catch-up reminder for high-priority habits that are significantly
+ * behind schedule. Fires at most once per activity per week while the page is
+ * open; the interval drives it from the planner.
+ */
+const remindedThisWeek = new Set<string>();
+export function clearCatchUpReminderMemory(): void {
+  remindedThisWeek.clear();
+}
+
+export function checkCatchUpReminders(): boolean {
+  if (!state.timebudget.settings.catchUpReminders) return false;
+  if (typeof window === 'undefined') return false;
+  const settings = state.timebudget.settings;
+  const progress = getWeekProgress(new Date(), settings.resetDay, settings.resetHour);
+  if (progress < 0.5) return false; // only mid-week onwards
+  const week = getCurrentBudgetWeek(new Date(), settings.resetDay, settings.resetHour);
+  let fired = false;
+  for (const a of state.timebudget.activities) {
+    if (a.priority > 3) continue; // only high-priority habits
+    const expectedByNow = a.minHours * 60 * progress;
+    if (a.currentMinutes >= expectedByNow * 0.5) continue; // >= half of expected
+    const key = `${week}:${a.id}`;
+    if (remindedThisWeek.has(key)) continue;
+    remindedThisWeek.add(key);
+    showToast(`⏰ ${a.name} is behind schedule this week (${Math.round(a.currentMinutes / 60)}h / expected ${Math.ceil(expectedByNow / 60)}h). Catch up soon!`);
+    fired = true;
+  }
+  return fired;
+}
+
+/** Requests the browser notification permission (used on first visit). */
+export function requestNotificationPermission(): void {
+  if (typeof window === 'undefined') return;
+  if (!('Notification' in window)) return;
+  if (window.Notification.permission === 'default') {
+    void window.Notification.requestPermission().catch(() => {});
+  }
+}
+
+export { getActivityZone, getCurrentBudgetWeek, getWeekProgress };
+export type { TimeBudgetActivity, TimeBudgetSettings, TimeLogEntry, ActivityZone };
 

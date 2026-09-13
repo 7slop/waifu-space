@@ -3,8 +3,6 @@ import { verifySessionToken, getSessionTokenFromRequest } from '../../../lib/ser
 import { getSupabaseServerClient, isSupabaseConfigured } from '../../../lib/server/supabase';
 import { COSMETIC_CATALOG, AFFECTION_MILESTONES } from '../../../lib/store';
 import { MAX_COINS } from '../../../lib/economy';
-import { EVENT_TYPES, RECURRENCE_RULES, isHexColor } from '../../../lib/validation';
-import { sanitizeOccurrenceOverride, type CalendarOccurrenceOverride } from '../../../lib/validate';
 import { checkRateLimit } from '../../../lib/server/rate-limit';
 
 const itemRarity = (itemId: string): string =>
@@ -81,9 +79,6 @@ export async function POST(event: { request: Request }) {
       payload.reward !== undefined ||
       payload.rewards !== undefined ||
       payload.trust !== undefined ||
-      (Array.isArray(payload.calendar) && payload.calendar.some((e: any) =>
-        e && (e.xp !== undefined || e.coins !== undefined || e.reward !== undefined || e.bondExp !== undefined)
-      )) ||
       (Array.isArray(payload.tasks) && payload.tasks.some((t: any) =>
         t && (t.xp !== undefined || t.coins !== undefined || t.reward !== undefined || t.bondExp !== undefined)
       )) ||
@@ -181,71 +176,10 @@ export async function POST(event: { request: Request }) {
           throw new Error(`Showcase sync failed: ${showcaseErr.message}`);
         }
       }
-
-      // Sync calendar events/tasks. The client's calendar list is private and
-      // authoritative on push. This runs through the sync_calendar_items RPC,
-      // which upserts incoming rows and deletes absent rows inside ONE
-      // transaction — so a partial/malformed push can never leave the user's
-      // calendar half-wiped. Setting calendar_synced_at marks the cloud list
-      // as authoritative (even when empty after a full delete).
-      if (Array.isArray(payload.calendar)) {
-        const nowIso = new Date().toISOString();
-        const rows = payload.calendar
-          .filter(
-            (e: any) =>
-              e && typeof e.title === 'string' && e.title.trim() !== '' &&
-              typeof e.start === 'string' && !Number.isNaN(new Date(e.start).getTime())
-          )
-          .slice(0, 5000)
-          .map((e: any) => {
-            const start = new Date(e.start).toISOString();
-            const end = e.end && !Number.isNaN(new Date(e.end).getTime()) ? new Date(e.end).toISOString() : start;
-            return {
-              item_id: typeof e.id === 'string' && e.id.trim() ? e.id.slice(0, 100) : `${session.userId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-              title: e.title.trim().slice(0, 200),
-              start_at: start,
-              end_at: end,
-              all_day: e.allDay === true,
-              type: (EVENT_TYPES as readonly string[]).includes(e.type) ? e.type : 'event',
-              completed: e.completed === true,
-              rewarded: e._rewarded === true,
-              color: isHexColor(e.color) ? e.color : '#ff6584',
-              description: typeof e.description === 'string' ? e.description.slice(0, 2000) : '',
-              location: typeof e.location === 'string' ? e.location.slice(0, 500) : '',
-              recurrence: (RECURRENCE_RULES as readonly string[]).includes(e.recurrence) ? e.recurrence : 'none'
-            };
-          });
-
-        const { error: syncCalErr } = await supabase.rpc('sync_calendar_items', {
-          p_user_id: session.userId,
-          p_items: rows,
-          p_updated_at: nowIso
-        });
-        if (syncCalErr) {
-          throw new Error(`Calendar sync failed: ${syncCalErr.message}`);
-        }
-
-        await supabase.from('user_progress').upsert({
-          user_id: session.userId,
-          calendar_synced_at: nowIso
-        });
-      }
-
-      // Persist occurrence overrides (per-occurrence edits / deletions for
-      // repeating events). The client sends the full current overrides list;
-      // we store it as a clamped JSONB blob on the user_progress row.
-      if (Array.isArray(payload.calendarOverrides)) {
-        const rawOverrides: unknown[] = Array.isArray(payload.calendarOverrides) ? payload.calendarOverrides : [];
-      const sanitizedOverrides: CalendarOccurrenceOverride[] = rawOverrides
-        .map(o => sanitizeOccurrenceOverride(o))
-        .filter((o): o is CalendarOccurrenceOverride => o !== null)
-        .slice(0, 2000);
-
-        await supabase.from('user_progress').upsert({
-          user_id: session.userId,
-          calendar_overrides: sanitizedOverrides
-        });
-      }
+      // NOTE: the calendar (events + occurrence overrides) is no longer synced
+      // through this plaintext endpoint. It is end-to-end encrypted on the
+      // client and stored as an opaque blob via /api/timebudget/sync - this
+      // endpoint can never see the user's calendar events.
     }
 
     return json({ success: true, syncedAt: new Date().toISOString() });
@@ -254,7 +188,7 @@ export async function POST(event: { request: Request }) {
   }
 }
 
-// Fetch progress from cloud database with optional scope support (?scope=all|profile|calendar|rpg)
+// Fetch progress from cloud database with optional scope support (?scope=all|profile|rpg)
 export async function GET(event: { request: Request }) {
   const token = getSessionTokenFromRequest(event.request);
   const session = verifySessionToken(token);
@@ -269,44 +203,6 @@ export async function GET(event: { request: Request }) {
   if (isSupabaseConfigured()) {
     const supabase = getSupabaseServerClient()!;
 
-    let progress: any = null;
-    let showcaseItems: string[] = [];
-    let inventory: any[] = [];
-    let calendarItems: any[] = [];
-    let calendarOverrides: any[] = [];
-
-    if (scope === 'calendar') {
-      const [{ data: cal }, { data: p }] = await Promise.all([
-        supabase.from('calendar_items').select('*').eq('user_id', session.userId).order('start_at'),
-        supabase.from('user_progress').select('calendar_overrides, calendar_synced_at').eq('user_id', session.userId).maybeSingle()
-      ]);
-      calendarItems = (cal || []).map((r: any) => ({
-        id: r.item_id,
-        title: r.title,
-        start: r.start_at,
-        end: r.end_at,
-        allDay: r.all_day,
-        type: r.type,
-        completed: r.completed,
-        _rewarded: r.rewarded === true,
-        color: r.color,
-        description: r.description || undefined,
-        location: r.location || undefined,
-        recurrence: r.recurrence
-      }));
-      calendarOverrides = p?.calendar_overrides ?? [];
-
-      return json({
-        success: true,
-        progress: null,
-        showcaseItems: [],
-        inventory: [],
-        calendarItems,
-        calendarOverrides,
-        calendarSyncedAt: p?.calendar_synced_at ?? null
-      });
-    }
-
     if (scope === 'rpg') {
       const [{ data: p }, { data: inv }, { data: sc }] = await Promise.all([
         supabase.from('user_progress').select('coins, bond_level, bond_exp, claimed_milestones, defense_high_wave, defense_victories, goblins_defeated').eq('user_id', session.userId).maybeSingle(),
@@ -318,50 +214,24 @@ export async function GET(event: { request: Request }) {
         success: true,
         progress: p || null,
         showcaseItems: sc ? sc.map((s: any) => s.item_id) : [],
-        inventory: inv || [],
-        calendarItems: [],
-        calendarOverrides: []
+        inventory: inv || []
       });
     }
 
     // Default: 'all' or 'profile'
-    const [progressRes, showcaseRes, inventoryRes, calendarRes] = await Promise.all([
+    const [progressRes, showcaseRes, inventoryRes] = await Promise.all([
       supabase.from('user_progress').select('*').eq('user_id', session.userId).maybeSingle(),
       supabase.from('user_showcase').select('*').eq('user_id', session.userId).order('slot_index'),
-      supabase.from('user_inventory').select('item_id, category, rarity').eq('user_id', session.userId),
-      scope === 'profile'
-        ? Promise.resolve({ data: [] })
-        : supabase.from('calendar_items').select('*').eq('user_id', session.userId).order('start_at')
+      supabase.from('user_inventory').select('item_id, category, rarity').eq('user_id', session.userId)
     ]);
-
-    progress = progressRes.data;
-    showcaseItems = showcaseRes.data ? showcaseRes.data.map((s: any) => s.item_id) : [];
-    inventory = inventoryRes.data || [];
-    calendarItems = (calendarRes.data || []).map((r: any) => ({
-      id: r.item_id,
-      title: r.title,
-      start: r.start_at,
-      end: r.end_at,
-      allDay: r.all_day,
-      type: r.type,
-      completed: r.completed,
-      _rewarded: r.rewarded === true,
-      color: r.color,
-      description: r.description || undefined,
-      location: r.location || undefined,
-      recurrence: r.recurrence
-    }));
-    calendarOverrides = progress?.calendar_overrides ?? [];
 
     return json({
       success: true,
-      progress,
-      showcaseItems,
-      inventory,
-      calendarItems,
-      calendarOverrides
+      progress: progressRes.data,
+      showcaseItems: showcaseRes.data ? showcaseRes.data.map((s: any) => s.item_id) : [],
+      inventory: inventoryRes.data || []
     });
   }
 
-  return json({ success: true, progress: null, showcaseItems: [], inventory: [], calendarItems: [], calendarOverrides: [] });
+  return json({ success: true, progress: null, showcaseItems: [], inventory: [] });
 }

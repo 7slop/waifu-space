@@ -843,5 +843,98 @@
       "rampage": "RAMPAGE!",
       "unstoppable": "UNSTOPPABLE!"
     }
+  },
+  "timebudget": {
+    "title": "Time Budget",
+    "subtitle": "Weekly hour budgets with workload zones — log time, hit your targets, avoid burnout.",
+    "nav": "Time Budget",
+    "weekLabel": "Week {week}",
+    "resetAgo": "Resets {day} at {hour}:00",
+    "addActivity": "New Activity",
+    "editActivity": "Edit Activity",
+    "deleteActivity": "Delete Activity",
+    "activityName": "Name",
+    "activityNamePlaceholder": "e.g. C++, Guitar, Gym…",
+    "minHours": "Min hours / week",
+    "targetHours": "Target hours / week",
+    "dangerHours": "Danger hours (optional)",
+    "icon": "Icon",
+    "noIcon": "No icon",
+    "priority": "Priority",
+    "priorityHigh": "High",
+    "priorityMedium": "Medium",
+    "priorityLow": "Low",
+    "logMinutes": "Logged minutes",
+    "manualLogTitle": "Log session for {name}",
+    "manualLogNote": "Note (optional)",
+    "addTime": "Add time",
+    "quickAdd15": "+15m",
+    "quickAdd30": "+30m",
+    "quickAdd60": "+1h",
+    "undo": "Undo",
+    "undoToast": "Last {minutes} removed from {name}.",
+    "nothingToUndo": "Nothing to undo for {name}.",
+    "timeLogged": "{logged} / {target}",
+    "completion": "{pct}% of target",
+    "remainingToTarget": "{remaining} left to target",
+    "behindNote": "Below minimum",
+    "settingsTitle": "Budget Settings",
+    "resetDay": "Weekly reset day",
+    "resetHour": "Reset time (hour)",
+    "notifications": "Milestone notifications",
+    "catchUp": "Mid-week catch-up reminders",
+    "cloud": {
+      "offline": "Offline",
+      "syncError": "Sync error",
+      "locked": "Encrypted data locked",
+      "unlockHint": "This device found saved time budget + calendar data from another device. Enter your account password once to unlock it.",
+      "unlockPlaceholder": "Account password",
+      "unlockButton": "Unlock",
+      "unlocking": "Unlocking…",
+      "unlockError": "Could not unlock. Check the password and try again.",
+      "unlocked": "Unlocked. Your time budget and calendar are now syncing."
+    },
+    "calPanel": {
+      "week": "W{week}",
+      "open": "Open time budget"
+    },
+    "import": "Import JSON",
+    "export": "Export JSON",
+    "importSuccess": "Imported {count} activities.",
+    "importFailed": "Import failed: invalid data.",
+    "exportSuccess": "Time budget exported as JSON.",
+    "empty": "No activities yet. Add your first habit or task!",
+    "conflictDays": [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday"
+    ],
+    "zone": {
+      "deficit": "Deficit",
+      "progress": "On Track",
+      "target": "Target Met",
+      "danger": "Overdrive"
+    },
+    "toasts": {
+      "activityAdded": "Added \"{name}\" to your time budget.",
+      "activityUpdated": "\"{name}\" updated.",
+      "activityDeleted": "Removed \"{name}\".",
+      "logAdded": "+{minutes} on {name}.",
+      "milestoneMin": "🚩 {name}: baseline met ({hours}h) — keep going!",
+      "milestoneTarget": "🎯 Target hit! {name} reached its weekly goal.",
+      "milestoneDanger": "⚠️ {name} entered overdrive — consider a break soon.",
+      "weekReset": "New budget week started — counters reset for {count} activities.",
+      "catchUp": "⏰ {name} is behind schedule this week. Think about a catch-up session!"
+    },
+    "resetLegend": {
+      "min": "Min",
+      "target": "Target",
+      "danger": "Danger",
+      "logged": "Logged"
+    }
   }
 }

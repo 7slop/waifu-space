@@ -185,9 +185,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) FROM anon;
-REVOKE ALL ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) TO service_role;
+GRANT EXECUTE ON FUNCTION public.sync_calendar_items(uuid, jsonb, timestamptz) TO anon, authenticated, service_role;
 
 -- ==========================================================
 -- Showcase Sync (atomic replace, prevents item-loss races)
@@ -209,6 +207,13 @@ DECLARE
 BEGIN
   IF jsonb_typeof(p_items) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'p_items must be a JSON array';
+  END IF;
+
+  -- SECURITY DEFINER bypasses RLS, so a caller presenting a user JWT must only
+  -- ever target their own rows. The server route calls this with no JWT
+  -- (auth.uid() is null) and always passes the verified session user id.
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
   END IF;
 
   DELETE FROM public.user_showcase
@@ -233,9 +238,84 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.sync_showcase_items(uuid, jsonb) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.sync_showcase_items(uuid, jsonb) FROM anon;
-REVOKE ALL ON FUNCTION public.sync_showcase_items(uuid, jsonb) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.sync_showcase_items(uuid, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.sync_showcase_items(uuid, jsonb) TO anon, authenticated, service_role;
+
+-- ==========================================================
+-- Time Budget & Calendar Sync (end-to-end encrypted blob)
+-- ==========================================================
+-- The time budget + calendar live together in a single END-TO-END encrypted
+-- blob (AES-256-GCM, key derived per account on-device). The server never sees
+-- plaintext; it stores the opaque ciphertext keyed by user. Direct table reads
+-- require a live user JWT (see the RLS policy in the RLS section), but the
+-- /api/timebudget/sync route runs as the anon role in dev/anon-key deployments
+-- with no JWT, so it calls these SECURITY DEFINER RPCs -- the same pattern as
+-- sync_showcase_items/sync_calendar_items. Each function verifies that a caller
+-- presenting a user JWT only ever touches their own row.
+CREATE TABLE IF NOT EXISTS public.time_budget_sync (
+  user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+  blob_version INTEGER NOT NULL DEFAULT 1,
+  kdf_salt TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc'::text, NOW())
+);
+
+CREATE OR REPLACE FUNCTION public.save_time_budget_blob(
+  p_user_id uuid,
+  p_blob_version int,
+  p_kdf_salt text,
+  p_iv text,
+  p_ciphertext text,
+  p_updated_at timestamptz
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  INSERT INTO public.time_budget_sync (user_id, blob_version, kdf_salt, iv, ciphertext, updated_at)
+  VALUES (p_user_id, p_blob_version, p_kdf_salt, p_iv, p_ciphertext, p_updated_at)
+  ON CONFLICT (user_id) DO UPDATE SET
+    blob_version = EXCLUDED.blob_version,
+    kdf_salt     = EXCLUDED.kdf_salt,
+    iv           = EXCLUDED.iv,
+    ciphertext   = EXCLUDED.ciphertext,
+    updated_at   = EXCLUDED.updated_at;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_time_budget_blob(p_user_id uuid)
+RETURNS TABLE (
+  blob_version int,
+  kdf_salt text,
+  iv text,
+  ciphertext text,
+  updated_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  RETURN QUERY
+    SELECT b.blob_version, b.kdf_salt, b.iv, b.ciphertext, b.updated_at
+    FROM public.time_budget_sync b
+    WHERE b.user_id = p_user_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.save_time_budget_blob(uuid, int, text, text, text, timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.save_time_budget_blob(uuid, int, text, text, text, timestamptz) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_time_budget_blob(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_time_budget_blob(uuid) TO anon, authenticated, service_role;
 
 -- 6. Audit & Action Logs (tracks server rolls & anti-cheat records)
 CREATE TABLE IF NOT EXISTS public.action_logs (
@@ -259,6 +339,7 @@ ALTER TABLE public.user_inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_showcase ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.calendar_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.action_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.time_budget_sync ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: Anyone can view usernames and avatars
 DROP POLICY IF EXISTS "Profiles are publicly readable" ON public.profiles;
@@ -322,6 +403,13 @@ CREATE POLICY "Users manage own showcase"
 DROP POLICY IF EXISTS "Users manage own calendar items" ON public.calendar_items;
 CREATE POLICY "Users manage own calendar items"
   ON public.calendar_items FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Time Budget Sync: encrypted blob, private to the owner
+DROP POLICY IF EXISTS "Users manage own time budget sync" ON public.time_budget_sync;
+CREATE POLICY "Users manage own time budget sync"
+  ON public.time_budget_sync FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
