@@ -197,6 +197,7 @@ export interface AppState {
     wallpaperDim: number;
     sakuraParticles: boolean;
     theme: string;
+    themeMode: 'auto' | 'dark' | 'light';
     customAccent: string;
     soundEffects: boolean;
     ttsEnabled: boolean;
@@ -334,8 +335,9 @@ export const DEFAULT_STATE: AppState = {
     wallpaperBlur: 2,
     wallpaperDim: 45,
     sakuraParticles: true,
-    theme: 'sakura',
-    customAccent: '#ff6584',
+    theme: 'catppuccin',
+    themeMode: 'auto',
+    customAccent: '',
     soundEffects: true,
     ttsEnabled: false,
     ttsVoice: '',

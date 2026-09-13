@@ -526,8 +526,14 @@
       "changedToast": "壁紙を{name}に変更しました"
     },
     "themes": {
-      "title": "カラーパレット＆すりガラス",
-      "subtitle": "お好みのカラーパレットテーマを選択してください。",
+      "title": "カラーパレット＆モード",
+      "subtitle": "パレットを選び、ライト / ダークモードを選択してください。",
+      "palette": "パレット",
+      "mode": "表示モード",
+      "modeDesc": "自動でOS設定に従うか、ライト / ダークを選択",
+      "modeAuto": "自動",
+      "modeDark": "ダークモード",
+      "modeLight": "ライトモード",
       "customAccent": "カスタムアクセントカラー",
       "customAccentDesc": "主要ボタンやハイライト色を上書きします",
       "themeSetToast": "テーマを{name}に設定しました"

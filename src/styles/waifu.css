@@ -15,10 +15,8 @@
   display: flex;
   flex-direction: column;
   background: var(--surface-1);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   box-shadow: var(--card-shadow);
   padding: 24px;
   position: relative;
@@ -53,7 +51,7 @@
   border: 1px solid var(--border-color);
   color: var(--primary-accent);
   padding: 4px 10px;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
 }
 
 /* AFFECTION / BOND CARD */
@@ -62,7 +60,7 @@
   flex-direction: column;
   gap: 6px;
   min-width: 140px;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--surface-2);
   padding: 8px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
@@ -88,15 +86,15 @@
 .affection-progress-bar {
   width: 100%;
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  background: var(--hover-bg);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .affection-fill {
   height: 100%;
-  background: linear-gradient(90deg, #ff7597, var(--primary-accent));
-  border-radius: 6px;
+  background: var(--primary-accent);
+  border-radius: var(--radius-sm);
   transition: width 0.4s ease;
 }
 
@@ -215,17 +213,16 @@
   transform: translateX(-50%) translateY(-10px);
   background: var(--surface-2);
   border: 1px solid var(--border-color);
-  backdrop-filter: blur(14px);
   padding: 12px 20px;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius-md);
+  box-shadow: var(--card-shadow);
   max-width: 90%;
   font-size: 14px;
   line-height: 1.45;
-  color: #fff;
+  color: var(--text-primary);
   opacity: 0;
   pointer-events: none;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.3s ease;
   z-index: 10;
 }
 
@@ -264,16 +261,15 @@
   font-family: inherit;
   font-size: 13px;
   padding: 6px 14px;
-  border-radius: 20px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .stage-action-chip:hover {
   background: var(--primary-accent);
-  color: #fff;
+  color: var(--accent-contrast);
   border-color: var(--primary-accent);
-  transform: translateY(-1px);
 }
 
 /* ---------------- CHAT PANEL (RIGHT) ---------------- */
@@ -281,10 +277,8 @@
   display: flex;
   flex-direction: column;
   background: var(--surface-1);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   box-shadow: var(--card-shadow);
   padding: 20px;
   height: 100%;
@@ -311,9 +305,8 @@
 .chat-status-dot.online {
   width: 8px;
   height: 8px;
-  background: #00cec9;
+  background: var(--success);
   border-radius: 50%;
-  box-shadow: 0 0 8px #00cec9;
 }
 
 .chat-icon-btn {
@@ -326,7 +319,7 @@
 }
 
 .chat-icon-btn:hover {
-  color: #ff4757;
+  color: var(--danger);
 }
 
 /* MESSAGES SCROLL AREA */
@@ -389,7 +382,7 @@
 
 .chat-bubble-text {
   padding: 10px 16px;
-  border-radius: 16px;
+  border-radius: 10px;
   font-size: 14px;
   line-height: 1.45;
   word-break: break-word;
@@ -399,14 +392,13 @@
   background: var(--surface-2);
   color: #fff;
   border: 1px solid var(--border-color);
-  border-top-left-radius: 4px;
+  border-top-left-radius: 3px;
 }
 
 .chat-bubble-row.user-row .chat-bubble-text {
   background: var(--primary-accent);
   color: #fff;
-  border-top-right-radius: 4px;
-  box-shadow: 0 4px 14px var(--primary-glow);
+  border-top-right-radius: 3px;
 }
 
 .chat-bubble-time {
@@ -454,13 +446,13 @@
 }
 
 .suggestion-chip {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   font-family: inherit;
   font-size: 12px;
   padding: 5px 12px;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
@@ -470,7 +462,6 @@
   background: var(--primary-accent);
   color: #fff;
   border-color: var(--primary-accent);
-  transform: translateY(-1px);
 }
 
 /* CHAT INPUT FORM */
@@ -483,10 +474,10 @@
 .chat-input {
   flex: 1;
   padding: 12px 18px;
-  border-radius: 30px;
-  background: rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius-md);
+  background: var(--hover-bg);
   border: 1px solid var(--border-color);
-  color: #fff;
+  color: var(--text-primary);
   font-family: inherit;
   font-size: 14px;
   outline: none;
@@ -500,7 +491,7 @@
 .chat-send-btn {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   border: none;
   background: var(--primary-accent);
   color: #fff;
@@ -509,7 +500,6 @@
   justify-content: center;
   font-size: 16px;
   cursor: pointer;
-  box-shadow: 0 4px 14px var(--primary-glow);
   transition: all 0.2s ease;
 }
 

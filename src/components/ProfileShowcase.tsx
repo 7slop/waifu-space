@@ -22,6 +22,7 @@ import {
   getPersonalityName
 } from '../lib/i18n';
 import { compressImage } from '../lib/image-compress';
+import { WallpaperBackground } from './WallpaperBackground';
 import { WaifuAvatar } from './WaifuAvatar';
 import { AvatarFrameOverlay } from './AvatarFrame';
 import {
@@ -39,7 +40,6 @@ import {
   PhAlien,
   PhHeart,
   PhTrophy,
-  PhDress,
   PhBackpack,
   PhChartBar,
   PhSparkle,
@@ -48,6 +48,7 @@ import {
   PhStar,
   PhX,
   PhSword,
+  PhDress,
   PhTarget,
   PhSkull,
   PhLightning,
@@ -90,7 +91,7 @@ function getUrlParam(key: string): string | null {
 export function ProfileShowcase() {
   const [urlUser, setUrlUser] = createSignal<string | null>(getUrlParam('user') || getUrlParam('username'));
   const [copiedLink, setCopiedLink] = createSignal(false);
-  const [activeTab, setActiveTab] = createSignal<'showcase' | 'wardrobe' | 'inventory' | 'stats' | 'settings'>('showcase');
+  const [activeTab, setActiveTab] = createSignal<'showcase' | 'inventory' | 'stats' | 'settings'>('showcase');
 
   const targetUser = (): string | null => {
     try {
@@ -358,6 +359,8 @@ export function ProfileShowcase() {
 
   return (
     <div class="profile-showcase-container" data-testid="profile-showcase">
+      {/* AMBIENT WALLPAPER (profile page only) */}
+      <WallpaperBackground />
       {/* PUBLIC PROFILE BANNER (when visiting someone else's page) */}
       <Show when={isViewingPublic()}>
         <div class="public-profile-banner">
@@ -433,7 +436,7 @@ export function ProfileShowcase() {
 
             <div class="profile-stats-row">
               <div class="p-stat">
-                <span class="p-stat-val">🪙 {statsInfo().coins}</span>
+                <span class="p-stat-val"><PhCoins /> {statsInfo().coins}</span>
                 <span class="p-stat-lbl">{t('rpg.dashboard.goldCoins')}</span>
               </div>
               <div class="p-stat">
@@ -462,13 +465,7 @@ export function ProfileShowcase() {
               <span><PhTrophy /></span>
               <span>{t('profile.tabs.showcase')}</span>
             </button>
-            <button
-              class={`p-tab-btn ${activeTab() === 'wardrobe' ? 'active' : ''}`}
-              onClick={() => setActiveTab('wardrobe')}
-            >
-              <span><PhDress /></span>
-              <span>{t('profile.tabs.wardrobe')}</span>
-            </button>
+
             <button
               class={`p-tab-btn ${activeTab() === 'inventory' ? 'active' : ''}`}
               data-testid="profile-tab-inventory"
@@ -552,7 +549,7 @@ export function ProfileShowcase() {
             {/* COMPANION LIVE CARD */}
             <div class="profile-companion-card">
               <div class="box-header">
-                <h3>✨ {t('profile.companionTitle')}</h3>
+                <h3><PhSparkle /> {t('profile.companionTitle')}</h3>
                 <span class="companion-tag">{waifuInfo().name}</span>
               </div>
               <div class="profile-waifu-preview">
@@ -574,118 +571,16 @@ export function ProfileShowcase() {
           </div>
         </Show>
 
-        {/* TAB 2: WARDROBE (Own profile only) */}
-        <Show when={!isViewingPublic() && activeTab() === 'wardrobe'}>
-          <div class="tab-pane wardrobe-pane">
-            <div class="wardrobe-layout">
-              {/* CATALOG GRID */}
-              <div class="wardrobe-catalog">
-                <div class="catalog-filters">
-                  <button
-                    class={`filter-btn ${filterCategory() === 'all' ? 'active' : ''}`}
-                    onClick={() => setFilterCategory('all')}
-                  >
-                    {t('rpg.wardrobe.allItems')}
-                  </button>
-                  <button
-                    class={`filter-btn ${filterCategory() === 'outfit' ? 'active' : ''}`}
-                    onClick={() => setFilterCategory('outfit')}
-                  >
-                    {t('rpg.wardrobe.outfits')}
-                  </button>
-                  <button
-                    class={`filter-btn ${filterCategory() === 'accessory' ? 'active' : ''}`}
-                    onClick={() => setFilterCategory('accessory')}
-                  >
-                    {t('rpg.wardrobe.accessories')}
-                  </button>
-                  <button
-                    class={`filter-btn ${filterCategory() === 'hairstyle' ? 'active' : ''}`}
-                    onClick={() => setFilterCategory('hairstyle')}
-                  >
-                    {t('rpg.wardrobe.hairstyles')}
-                  </button>
-                  <button
-                    class={`filter-btn ${filterCategory() === 'avatar_frame' ? 'active' : ''}`}
-                    onClick={() => setFilterCategory('avatar_frame')}
-                  >
-                    {t('rpg.wardrobe.avatarFrames')}
-                  </button>
-                </div>
-
-                <div class="cosmetics-grid">
-                  <For each={filteredCatalog()}>
-                    {item => {
-                      const unlocked = () => isCosmeticUnlocked(item.id);
-                      const isEquipped = () =>
-                        (item.category === 'outfit' && state.waifu?.appearance?.outfit === item.id) ||
-                        (item.category === 'accessory' && state.waifu?.appearance?.accessory === item.id) ||
-                        (item.category === 'hairstyle' && state.waifu?.appearance?.hairstyle === item.id) ||
-                        (item.category === 'avatar_frame' && state.waifu?.appearance?.avatarFrame === item.id);
-
-                      return (
-                        <div class={`cosmetic-card ${getRarityClass(item.rarity)} ${unlocked() ? 'unlocked' : 'locked'}`}>
-                          <div class="cosmetic-icon-wrap">
-                            <span class="cosmetic-icon">{item.icon}</span>
-                            <span class={`rarity-pill ${getRarityClass(item.rarity)}`}>
-                              {getRarityName(item.rarity)}
-                            </span>
-                          </div>
-
-                          <div class="cosmetic-details">
-                            <h4 class="cosmetic-name">{getCosmeticName(item.id, item.name)}</h4>
-                            <p class="cosmetic-desc">{getCosmeticDesc(item.id, item.description)}</p>
-                            <small class="cosmetic-source">{t('rpg.wardrobe.unlockHint', { desc: getCosmeticDesc(item.id, item.description) })}</small>
-                          </div>
-
-                          <div class="cosmetic-btn-wrap">
-                            <Show when={unlocked()}>
-                              <button
-                                class={`btn-equip ${isEquipped() ? 'equipped' : ''}`}
-                                disabled={isEquipped()}
-                                onClick={() => equipCosmetic(item)}
-                              >
-                                {isEquipped() ? t('rpg.wardrobe.equipped') : t('rpg.wardrobe.equip')}
-                              </button>
-                            </Show>
-                            <Show when={!unlocked()}>
-                              <span class="locked-badge">🔒 {t('rpg.wardrobe.locked')}</span>
-                            </Show>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  </For>
-                </div>
-              </div>
-
-              {/* LIVE WAIFU PREVIEW */}
-              <div class="wardrobe-preview-panel">
-                <h3>{t('rpg.wardrobe.livePreview')}</h3>
-                <div class="preview-avatar-box">
-                  <WaifuAvatar scale={1.1} />
-                </div>
-                <div class="preview-active-specs">
-                  <div><strong>{t('rpg.wardrobe.outfitLabel')}:</strong> {getCosmeticName(state.waifu?.appearance?.outfit || 'seifuku')}</div>
-                  <div><strong>{t('rpg.wardrobe.accessoryLabel')}:</strong> {getCosmeticName(state.waifu?.appearance?.accessory || 'none')}</div>
-                  <div><strong>{t('rpg.wardrobe.hairstyleLabel')}:</strong> {getCosmeticName(state.waifu?.appearance?.hairstyle || 'twintails')}</div>
-                  <div><strong>{t('rpg.wardrobe.avatarFrameLabel')}:</strong> {getCosmeticName(state.waifu?.appearance?.avatarFrame || 'none')}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Show>
-
-        {/* TAB 3: INVENTORY (Own profile only) */}
+        {/* TAB 2: INVENTORY (Own profile only) */}
         <Show when={!isViewingPublic() && activeTab() === 'inventory'}>
           <div class="tab-pane inventory-pane" data-testid="inventory-pane">
             <div class="inventory-header-banner">
               <div>
-                <h2>🎒 {t('rpg.inventory.title', { count: ownedItems().length })}</h2>
+                <h2><PhBackpack /> {t('rpg.inventory.title', { count: ownedItems().length })}</h2>
                 <p>{t('rpg.inventory.subtitle')}</p>
               </div>
               <div class="showcase-summary-pill">
-                <span>🏆 {t('rpg.inventory.showcaseSlots')}:</span>
+                <span><PhTrophy /> {t('rpg.inventory.showcaseSlots')}:</span>
                 <strong>{(state.rpg?.showcaseItems || []).length} / 6</strong>
               </div>
             </div>
@@ -693,7 +588,7 @@ export function ProfileShowcase() {
             {/* SHOWCASE DISPLAY CASE */}
             <div class="inventory-showcase-section">
               <div class="showcase-section-title">
-                <h3>✨ {t('rpg.inventory.featuredShowcase')}</h3>
+                <h3><PhSparkle /> {t('rpg.inventory.featuredShowcase')}</h3>
                 <small>{t('rpg.inventory.showcaseHint')}</small>
               </div>
 
@@ -791,7 +686,7 @@ export function ProfileShowcase() {
             <div class="inventory-items-grid">
               <Show when={ownedItems().length === 0}>
                 <div class="empty-inventory-notice">
-                  <span>📦</span>
+                  <span class="empty-icon"><PhPackage /></span>
                   <p>{t('rpg.inventory.noItemsFound')}</p>
                 </div>
               </Show>
@@ -823,7 +718,7 @@ export function ProfileShowcase() {
                           disabled={isEquipped()}
                           onClick={() => equipCosmetic(item)}
                         >
-                          {isEquipped() ? `✨ ${t('common.equipped')}` : t('common.equip')}
+                          {isEquipped() ? <><PhSparkle /> {t('common.equipped')}</> : t('common.equip')}
                         </button>
 
                         <button
@@ -831,7 +726,7 @@ export function ProfileShowcase() {
                           onClick={() => toggleShowcaseItem(item.id)}
                           title={inShowcase() ? 'Remove from Showcase' : 'Feature in Showcase'}
                         >
-                          {inShowcase() ? '🏆 ' + t('rpg.inventory.featured') : '⭐ ' + t('rpg.inventory.showcaseBtn')}
+                          {inShowcase() ? <><PhTrophy /> {t('rpg.inventory.featured')}</> : <><PhStar /> {t('rpg.inventory.showcaseBtn')}</>}
                         </button>
                       </div>
                     </div>
@@ -847,70 +742,70 @@ export function ProfileShowcase() {
           <div class="profile-stats-pane">
             <div class="stats-overview-grid">
               <div class="stats-card">
-                <span class="stats-card-icon">🪙</span>
+                <span class="stats-card-icon"><PhCoins /></span>
                 <div class="stats-card-info">
                   <h3>{statsInfo().coins}</h3>
                   <p>{t('rpg.dashboard.goldCoins')}</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">🛡️</span>
+                <span class="stats-card-icon"><PhShieldCheck /></span>
                 <div class="stats-card-info">
                   <h3>Wave {statsInfo().defenseHighWave}</h3>
                   <p>{t('rpg.dashboard.defenseHighScore')}</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">👹</span>
+                <span class="stats-card-icon"><PhAlien /></span>
                 <div class="stats-card-info">
                   <h3>{statsInfo().goblinsDefeated}</h3>
                   <p>{t('profile.goblinsKilled')}</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">⚔️</span>
+                <span class="stats-card-icon"><PhSword /></span>
                 <div class="stats-card-info">
                   <h3>{statsInfo().totalVictories}</h3>
                   <p>{t('profile.defenseVictories')}</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">💖</span>
+                <span class="stats-card-icon"><PhHeart /></span>
                 <div class="stats-card-info">
                   <h3>Lv. {statsInfo().bondLevel}</h3>
                   <p>{t('companion.affectionLevel')} ({state.waifu?.bondExp || 0} / {getBondExpNeeded(state.waifu?.bondLevel || 1)} XP)</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">👗</span>
+                <span class="stats-card-icon"><PhDress /></span>
                 <div class="stats-card-info">
                   <h3>{statsInfo().cosmeticsUnlocked} / {COSMETIC_CATALOG.length}</h3>
                   <p>{t('rpg.dashboard.cosmeticsUnlocked')}</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">🏆</span>
+                <span class="stats-card-icon"><PhTrophy /></span>
                 <div class="stats-card-info">
                   <h3>{state.rpg?.claimedAffectionMilestones?.length || 0} / {AFFECTION_MILESTONES.length}</h3>
                   <p>{t('profile.milestonesClaimed')}</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">🎯</span>
+                <span class="stats-card-icon"><PhTarget /></span>
                 <div class="stats-card-info">
                   <h3>{(state.settings as any)?.waifuStrike?.kills || 0}</h3>
                   <p>{t('strike.totalKills') || 'Strike Kills'}</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">💀</span>
+                <span class="stats-card-icon"><PhSkull /></span>
                 <div class="stats-card-info">
                   <h3>{(state.settings as any)?.waifuStrike?.headshots || 0}</h3>
                   <p>{t('strike.headshots') || 'Headshots'}</p>
                 </div>
               </div>
               <div class="stats-card">
-                <span class="stats-card-icon">⚡</span>
+                <span class="stats-card-icon"><PhLightning /></span>
                 <div class="stats-card-info">
                   <h3>{(state.settings as any)?.waifuStrike?.bestStreak || 0}</h3>
                   <p>{t('strike.bestStreak') || 'Best Frag Streak'}</p>
@@ -924,7 +819,7 @@ export function ProfileShowcase() {
         <Show when={!isViewingPublic() && activeTab() === 'settings'}>
           <div class="profile-settings-pane">
             <div class="profile-edit-card">
-              <h3>⚙️ {t('profile.editProfile')}</h3>
+              <h3><PhGearSix /> {t('profile.editProfile')}</h3>
               
               <div class="setting-row">
                 <div class="setting-label">
@@ -977,10 +872,10 @@ export function ProfileShowcase() {
 
               <div class="profile-edit-actions">
                 <button class="btn-save-profile" onClick={handleSaveProfileSettings}>
-                  💾 {t('profile.saveChanges')}
+                  <PhFloppyDisk /> {t('profile.saveChanges')}
                 </button>
                 <a href="/settings" class="btn-toggle-app-settings">
-                  ⚙️ {t('profile.openAppSettings')} ➡️
+                  <PhGearSix /> {t('profile.openAppSettings')} <PhArrowRight />
                 </a>
               </div>
             </div>

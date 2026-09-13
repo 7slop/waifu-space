@@ -280,9 +280,8 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
             )}
 
             {/* Drag-to-create Ghost Preview Box */}
-            <Show when={dragCreate()}>
-              {(dcAccessor) => {
-                const dc = dcAccessor();
+            <Show when={dragCreate()} keyed>
+              {(dc) => {
                 const start = Math.min(dc.startMin, dc.currentMin);
                 const end = Math.max(dc.startMin, dc.currentMin, start + 15);
                 const topPct = (start / 1440) * 100;

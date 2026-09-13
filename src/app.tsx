@@ -13,7 +13,6 @@ import {
 } from './lib/store';
 import { defenseGameActive, setDefenseGameActive } from './lib/defense-bridge';
 import { t } from './lib/i18n';
-import { WallpaperBackground } from './components/WallpaperBackground';
 import { SakuraCanvas } from './components/SakuraCanvas';
 import { ToastNotification } from './components/ToastNotification';
 import { AuthModal } from './components/AuthModal';
@@ -38,6 +37,41 @@ import './styles/waifu.css';
 import './styles/calendar.css';
 import './styles/settings.css';
 import './styles/rpg.css';
+
+// Legacy theme names from older builds map onto the new palettes.
+const LEGACY_THEME_MAP: Record<string, string> = {
+  sakura: 'catppuccin',
+  amoled: 'catppuccin',
+  cyberpunk: 'dracula',
+  midnight: 'rose-pine',
+  matcha: 'nord',
+  sunset: 'gruvbox'
+};
+
+function normalizeTheme(theme: string | undefined): string {
+  if (!theme) return 'catppuccin';
+  return LEGACY_THEME_MAP[theme] ?? theme;
+}
+
+function resolveThemeMode(): 'dark' | 'light' {
+  const mode = state.settings.themeMode;
+  if (mode === 'auto') {
+    return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  return mode;
+}
+
+function applyTheme() {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  root.setAttribute('data-theme', normalizeTheme(state.settings.theme));
+  root.setAttribute('data-mode', resolveThemeMode());
+  if (state.settings.customAccent) {
+    root.style.setProperty('--primary-accent', state.settings.customAccent);
+  } else {
+    root.style.removeProperty('--primary-accent');
+  }
+}
 
 function AppLayout(props: { children: any }) {
   const navigate = useNavigate();
@@ -103,10 +137,14 @@ function AppLayout(props: { children: any }) {
     void restoreSession();
 
     // Apply theme
-    document.documentElement.setAttribute('data-theme', state.settings.theme || 'sakura');
-    if (state.settings.customAccent) {
-      document.documentElement.style.setProperty('--primary-accent', state.settings.customAccent);
-    }
+    applyTheme();
+
+    // Re-resolve 'auto' theme mode when the OS light/dark preference changes
+    const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: light)');
+    const onColorSchemeChange = () => {
+      if (state.settings.themeMode === 'auto') applyTheme();
+    };
+    colorSchemeQuery.addEventListener('change', onColorSchemeChange);
 
     // Impending task deadline alerts
     deadlineInterval = setInterval(() => {
@@ -131,18 +169,14 @@ function AppLayout(props: { children: any }) {
     }, 60000);
 
     onCleanup(() => {
+      colorSchemeQuery.removeEventListener('change', onColorSchemeChange);
       clearInterval(deadlineInterval);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     });
   });
 
   createEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', state.settings.theme || 'sakura');
-      if (state.settings.customAccent) {
-        document.documentElement.style.setProperty('--primary-accent', state.settings.customAccent);
-      }
-    }
+    applyTheme();
   });
 
   const authModalOpen = () => !isAuthChecking() && (!state.user || showAuthModal());
@@ -150,8 +184,7 @@ function AppLayout(props: { children: any }) {
 
   return (
     <div class="app-shell">
-      {/* BACKGROUND WALLPAPER & AMBIENT LAYERS */}
-      <WallpaperBackground />
+      {/* AMBIENT LAYERS (wallpapers render on the profile page only) */}
       <SakuraCanvas />
 
       {/* TOP NAVIGATION BAR */}

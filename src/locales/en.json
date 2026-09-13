@@ -526,8 +526,14 @@
       "changedToast": "Changed wallpaper to {name}"
     },
     "themes": {
-      "title": "Color Palette & Glassmorphism",
-      "subtitle": "Select your favorite aesthetic color palette.",
+      "title": "Color Palette & Mode",
+      "subtitle": "Pick a palette, then choose light or dark mode.",
+      "palette": "Palette",
+      "mode": "Display Mode",
+      "modeDesc": "Auto follows your system setting, or pick light or dark",
+      "modeAuto": "Auto",
+      "modeDark": "Dark Mode",
+      "modeLight": "Light Mode",
       "customAccent": "Custom Primary Accent Color",
       "customAccentDesc": "Overrides primary button and highlight colors",
       "themeSetToast": "Theme set to {name}"

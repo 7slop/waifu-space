@@ -206,7 +206,7 @@ export function EventModal(props: {
               : t('calendar.modal.addEvent')}
           </h3>
           <button class="modal-close-btn" type="button" onClick={props.onClose} aria-label={t('common.close')}>
-            ✕
+            <PhX />
           </button>
         </div>
 

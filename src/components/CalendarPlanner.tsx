@@ -392,9 +392,9 @@ const sidebarTasks = createMemo(() => {
               onClick={() => setCreateMenuOpen(!createMenuOpen())}
               title={t('calendar.toolbar.createTooltip')}
             >
-              <span class="btn-icon">➕</span>
+              <span class="btn-icon"><PhPlus /></span>
               <span class="btn-text">{t('calendar.toolbar.create')}</span>
-              <span class="create-caret">▾</span>
+              <span class="create-caret"><PhCaretDown /></span>
             </button>
             <Show when={createMenuOpen()}>
               <div class="create-dropdown-menu">
@@ -420,7 +420,7 @@ const sidebarTasks = createMemo(() => {
                     openCreateModal(currentDate(), 'task');
                   }}
                 >
-                  <span class="dropdown-item-icon">☑️</span>
+                  <span class="dropdown-item-icon"><PhCheckSquare /></span>
                   <div class="dropdown-item-text">
                     <span class="dropdown-item-title">{t('calendar.menu.task')}</span>
                     <span class="dropdown-item-desc">{t('calendar.menu.taskDesc')}</span>
@@ -627,7 +627,7 @@ const sidebarTasks = createMemo(() => {
                           handleDeleteEvent(tk);
                         }}
                       >
-                        ✕
+                        <PhX />
                       </button>
                     </div>
                   );
@@ -729,7 +729,7 @@ const sidebarTasks = createMemo(() => {
                   onClick={cancelDelete}
                   aria-label={t('common.close')}
                 >
-                  ✕
+                  <PhX />
                 </button>
               </div>
               <div class="repeat-scope-body">
