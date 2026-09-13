@@ -824,11 +824,11 @@ export function SettingsStudio() {
               <div class="themes-grid">
                 <For
                   each={[
-                    { id: 'catppuccin', name: 'Catppuccin', color: '#89b4fa' },
-                    { id: 'rose-pine', name: 'Rose Pine', color: '#eb6f92' },
-                    { id: 'nord', name: 'Nord', color: '#88c0d0' },
+                    { id: 'catppuccin', name: 'Catppuccin', color: '#f5c2e7' },
+                    { id: 'rose-pine', name: 'Rose Pine', color: '#f6c177' },
+                    { id: 'nord', name: 'Nord', color: '#b48ead' },
                     { id: 'dracula', name: 'Dracula', color: '#bd93f9' },
-                    { id: 'gruvbox', name: 'Gruvbox', color: '#fabd2f' }
+                    { id: 'gruvbox', name: 'Gruvbox', color: '#fe8019' }
                   ]}
                 >
                   {thm => {

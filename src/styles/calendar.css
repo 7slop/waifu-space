@@ -1060,6 +1060,17 @@
   z-index: 10;
 }
 
+.event-resize-handle.top {
+  bottom: auto;
+  top: 0;
+}
+
+.week-event-card.is-resizing {
+  transition: none !important;
+  filter: brightness(1.08);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
+}
+
 .event-resize-handle:hover, .is-resizing-event .event-resize-handle {
   background: rgba(255, 255, 255, 0.35);
 }
