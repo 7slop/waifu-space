@@ -885,7 +885,14 @@
     "catchUp": "Mid-week catch-up reminders",
     "cloud": {
       "offline": "Offline",
-      "syncError": "Sync error"
+      "syncError": "Sync error",
+      "locked": "Encrypted data locked",
+      "unlockHint": "This device found saved time budget + calendar data from another device. Enter your account password once to unlock it.",
+      "unlockPlaceholder": "Account password",
+      "unlockButton": "Unlock",
+      "unlocking": "Unlocking…",
+      "unlockError": "Could not unlock. Check the password and try again.",
+      "unlocked": "Unlocked. Your time budget and calendar are now syncing."
     },
     "calPanel": {
       "week": "W{week}",

@@ -779,6 +779,68 @@
   background: color-mix(in srgb, #ef4444 12%, transparent);
 }
 
+/* One-time unlock bar (shown only when cloud data is present but the account
+   password was never entered on this device) */
+.tb-locked-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 4px 0 14px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+}
+
+.tb-locked-icon { font-size: 1.3rem; }
+
+.tb-locked-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  flex: 1;
+}
+
+.tb-locked-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.tb-locked-hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.tb-unlock-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tb-unlock-input {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  background: var(--bg, #1e1e2e);
+  color: var(--text, inherit);
+  font-size: 0.9rem;
+  min-width: 180px;
+}
+
+.tb-unlock-input:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
+.tb-locked-error {
+  width: 100%;
+  font-size: 0.82rem;
+  color: #ef4444;
+}
+
 @media (max-width: 640px) {
   .timebudget-layout { padding: 18px 14px 48px; }
   .timebudget-grid { grid-template-columns: 1fr; }

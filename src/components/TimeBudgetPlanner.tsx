@@ -14,7 +14,8 @@ import {
   reorderTimeBudgetActivities,
   clearCatchUpReminderMemory,
   budgetCloudStatus,
-  budgetKeyReady
+  budgetKeyReady,
+  unlockBudgetKey
 } from '../lib/store';
 import {
   TimeBudgetActivity,
@@ -38,6 +39,34 @@ export function TimeBudgetPlanner() {
   const [editTarget, setEditTarget] = createSignal<TimeBudgetActivity | null>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [deleteTarget, setDeleteTarget] = createSignal<TimeBudgetActivity | null>(null);
+
+  // One-time unlock for devices that found cloud data but never had the account
+  // password entered (auto-restored sessions). After this succeeds once, the
+  // derived key is persisted and every later boot unlocks automatically.
+  const [unlockPassword, setUnlockPassword] = createSignal('');
+  const [unlockBusy, setUnlockBusy] = createSignal(false);
+  const [unlockError, setUnlockError] = createSignal('');
+
+  const locked = () => budgetCloudStatus() === 'locked' && !!state.user;
+
+  const handleUnlock = async () => {
+    if (unlockBusy() || !unlockPassword()) return;
+    setUnlockBusy(true);
+    setUnlockError('');
+    try {
+      const ok = await unlockBudgetKey(unlockPassword());
+      if (ok) {
+        setUnlockPassword('');
+        showToast(t('timebudget.cloud.unlocked'));
+      } else {
+        setUnlockError(t('timebudget.cloud.unlockError'));
+      }
+    } catch {
+      setUnlockError(t('timebudget.cloud.unlockError'));
+    } finally {
+      setUnlockBusy(false);
+    }
+  };
 
   // Drag & drop reorder state
   const [dragId, setDragId] = createSignal<string | null>(null);
@@ -165,6 +194,36 @@ export function TimeBudgetPlanner() {
           </label>
         </div>
       </div>
+
+      {/* Locked state: a cloud copy exists that this device could not decrypt
+          because the account password was never entered here. Asking once is the
+          only way a second device can ever read the encrypted data. */}
+      <Show when={locked()}>
+        <div class="tb-locked-bar" data-testid="tb-locked-bar">
+          <div class="tb-locked-icon">🔒</div>
+          <div class="tb-locked-copy">
+            <span class="tb-locked-title">{t('timebudget.cloud.locked')}</span>
+            <span class="tb-locked-hint">{t('timebudget.cloud.unlockHint')}</span>
+          </div>
+          <form class="tb-unlock-form" onSubmit={e => { e.preventDefault(); void handleUnlock(); }}>
+            <input
+              type="password"
+              class="tb-unlock-input"
+              value={unlockPassword()}
+              onInput={e => { setUnlockPassword((e.target as HTMLInputElement).value); setUnlockError(''); }}
+              placeholder={t('timebudget.cloud.unlockPlaceholder')}
+              aria-label={t('timebudget.cloud.unlockPlaceholder')}
+              autocomplete="current-password"
+            />
+            <button type="submit" class="timebudget-btn" disabled={unlockBusy() || !unlockPassword()}>
+              {unlockBusy() ? t('timebudget.cloud.unlocking') : t('timebudget.cloud.unlockButton')}
+            </button>
+          </form>
+          <Show when={unlockError()}>
+            <span class="tb-locked-error">{unlockError()}</span>
+          </Show>
+        </div>
+      </Show>
 
       {/* Stats strip */}
       <div class="timebudget-stats">
