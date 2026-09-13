@@ -153,20 +153,23 @@ export async function POST(event: { request: Request }) {
         }
       }
 
-      // Update showcase slots from validated inventory items
+      // Update showcase slots from validated inventory items. This runs through
+      // the sync_showcase_items RPC so the delete-and-replace happens inside ONE
+      // transaction - a partial or racing push can never leave the showcase
+      // half-wiped, which previously caused showcase items to disappear.
       const rawShowcase = Array.isArray(showcaseItems) ? showcaseItems : Array.isArray(payload.rpg?.showcaseItems) ? payload.rpg.showcaseItems : null;
       if (Array.isArray(rawShowcase)) {
-        await supabase.from('user_showcase').delete().eq('user_id', session.userId);
         const validIds = new Set(COSMETIC_CATALOG.map(c => c.id));
         const inserts = rawShowcase.slice(0, 6)
           .filter((itemId: unknown) => typeof itemId === 'string' && validIds.has(itemId))
-          .map((itemId: string, slotIndex: number) => ({
-            user_id: session.userId,
-            slot_index: slotIndex,
-            item_id: itemId
-          }));
-        if (inserts.length > 0) {
-          await supabase.from('user_showcase').insert(inserts);
+          .map((itemId: string, slotIndex: number) => ({ slot_index: slotIndex, item_id: itemId }));
+
+        const { error: showcaseErr } = await supabase.rpc('sync_showcase_items', {
+          p_user_id: session.userId,
+          p_items: inserts
+        });
+        if (showcaseErr) {
+          throw new Error(`Showcase sync failed: ${showcaseErr.message}`);
         }
       }
 

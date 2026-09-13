@@ -379,6 +379,12 @@ export type CloudSyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error
 
 export const [cloudSyncStatus, setCloudSyncStatus] = createSignal<CloudSyncStatus>('idle');
 
+// Becomes true only once the account's cloud snapshot has been pulled at least
+// once. Until then we never push the showcase list, because on a fresh device
+// the local showcase is still just the empty default and pushing it would wipe
+// the showcase the user has saved in the cloud.
+let cloudSnapshotLoaded = false;
+
 function isOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
 }
@@ -393,7 +399,11 @@ function buildSyncSnapshot() {
     settings: state.settings,
     calendar: state.calendar.events.map(e => ({ ...e })),
     calendarOverrides: state.calendar.occurrenceOverrides.map(o => ({ ...o })),
-    showcaseItems: state.rpg.showcaseItems,
+    // Only ship the showcase once the account's cloud snapshot has been pulled,
+    // so a fresh-login push can never replace the user's saved showcase with an
+    // empty default array. JSON.stringify drops this key when undefined, and the
+    // server leaves the showcase untouched when it is absent.
+    showcaseItems: cloudSnapshotLoaded ? state.rpg.showcaseItems : undefined,
     rpg: {
       claimedAffectionMilestones: state.rpg?.claimedAffectionMilestones || []
     }
@@ -551,6 +561,10 @@ export async function loadCloudProgress(token?: string, scope?: 'all' | 'profile
 
     setCloudSyncStatus('synced');
 
+    // The pull succeeded, so from now on the local showcase is trustworthy and
+    // may be pushed back to the cloud.
+    cloudSnapshotLoaded = true;
+
     // The cloud calendar is authoritative once it has EVER been synced,
     // including when the list is now empty (e.g. the user deleted everything).
     // A push records calendar_synced_at exactly for that reason. Before the
@@ -640,7 +654,11 @@ export async function loadCloudProgress(token?: string, scope?: 'all' | 'profile
         s.rpg.unlockedAccessories = [...unlockedAccessories];
         s.rpg.unlockedHairstyles = [...unlockedHairstyles];
         s.rpg.unlockedAvatarFrames = [...unlockedAvatarFrames];
-        if (showcaseItems.length > 0) s.rpg.showcaseItems = showcaseItems;
+        // The server showcase is authoritative - including the empty list, so a
+        // showcase cleared on another device is cleared everywhere. (The
+        // cloudSnapshotLoaded guard above makes sure a fresh login never pushes
+        // the empty default before this pull runs.)
+        s.rpg.showcaseItems = showcaseItems;
       })
     );
     saveState();
@@ -1043,8 +1061,10 @@ export function toggleShowcaseItem(itemId: string): boolean {
 function resetStateInMemory() {
   const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE)) as AppState;
   fresh.calendar.events = [];
-  fresh.calendar.occurrenceOverrides = [];
   setState(fresh);
+  // The fresh state mirrors a brand-new account/guest, so nothing that depends
+  // on a pulled cloud snapshot may be pushed until the next successful pull.
+  cloudSnapshotLoaded = false;
 }
 
 export function resetAccountProgress() {
