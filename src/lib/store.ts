@@ -27,6 +27,20 @@ import {
 import { getLootboxCost, rollLootRarity, DUPLICATE_COMPENSATION, getDefenseCoinsReward, getDefenseExpReward } from './economy';
 import { t, getMilestoneRewardLabel } from './i18n';
 import { AVATAR_FRAME_CATALOG } from './avatar-frames';
+import {
+  TimeBudgetActivity,
+  TimeBudgetState,
+  TimeLogEntry,
+  ActivityZone,
+  getCurrentBudgetWeek,
+  getWeekProgress,
+  getActivityZone,
+  clampMinutes,
+  clampHours,
+  MAX_ACTIVITIES,
+  getDefaultTimeBudgetState
+} from './timebudget';
+import type { TimeBudgetSettings } from './timebudget';
 
 export const STORAGE_KEY = 'waifu_space_data_v1';
 
@@ -225,6 +239,7 @@ export interface AppState {
     suggestions: string[];
     isTyping: boolean;
   };
+  timebudget: TimeBudgetState;
 }
 
 // New accounts (and logged-out guests) start with a completely empty calendar.
@@ -320,7 +335,8 @@ export const DEFAULT_STATE: AppState = {
       "Tell me a joke"
     ],
     isTyping: false
-  }
+  },
+  timebudget: getDefaultTimeBudgetState()
 };
 
 // Global reactive store
@@ -358,6 +374,7 @@ export function saveState() {
       settings: state.settings,
       calendar: state.calendar,
       chat: state.chat,
+      timebudget: state.timebudget,
       waifu: {
         name: state.waifu.name,
         personality: state.waifu.personality,
@@ -1886,4 +1903,249 @@ const [leaderboardModalOpen, setLeaderboardModalOpen] = createSignal(false);
 export const isLeaderboardOpen = leaderboardModalOpen;
 export const openLeaderboard = () => setLeaderboardModalOpen(true);
 export const closeLeaderboard = () => setLeaderboardModalOpen(false);
+
+// ---------------------------------------------------------------------------
+// Weekly Time Budget (habits/tasks with min / target / danger hour budgets)
+// ---------------------------------------------------------------------------
+
+function syntheticActivityId(): string {
+  return `act-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Rolls logged minutes over whenever the configured reset boundary passes.
+ * The full session history is preserved as an archive; only the weekly
+ * counter is zeroed. Returns true when at least one activity was reset.
+ */
+export function ensureWeeklyReset(): boolean {
+  const settings = state.timebudget.settings;
+  const key = getCurrentBudgetWeek(new Date(), settings.resetDay, settings.resetHour);
+  const activities = state.timebudget.activities;
+  const needsReset = activities.some(a => a.lastResetWeek !== key);
+  if (!needsReset) return false;
+  setState('timebudget', 'activities', acts =>
+    acts.map(a => (a.lastResetWeek === key ? a : { ...a, lastResetWeek: key, currentMinutes: 0 }))
+  );
+  saveState();
+  return true;
+}
+
+function milestoneMessageFor(zone: ActivityZone, name: string, minutes: number): string | null {
+  switch (zone) {
+    case 'progress':
+      return `🚩 ${name}: baseline met (${Math.round(minutes / 60)}h) — keep going!`;
+    case 'target':
+      return `🎯 ${name} hit its weekly target! Great job, senpai!`;
+    case 'danger':
+      return `⚠️ ${name} entered overdrive — consider taking a break soon.`;
+    default:
+      return null;
+  }
+}
+
+function fireMilestoneNotification(message: string, zone: ActivityZone) {
+  showToast(message);
+  if (zone === 'danger') {
+    triggerWaifuResponse(message, 'pout');
+  } else if (zone === 'target') {
+    triggerWaifuResponse(message, 'happy');
+  }
+  if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted' && state.timebudget.settings.notifications) {
+    try {
+      const n = new Notification('WaifuSpace · Time Budget', { body: message, icon: '/favicon.svg' });
+      n.onclick = () => {
+        if (typeof window !== 'undefined') window.focus();
+      };
+    } catch {
+      // System notification denied/unavailable — toasts still cover it.
+    }
+  }
+}
+
+/** Logs `minutes` of progress to an activity and fires milestone notifications. */
+export function logTime(activityId: string, minutes: number, note?: string): boolean {
+  const amount = clampMinutes(minutes);
+  if (amount <= 0) return false;
+  ensureWeeklyReset();
+  const activity = state.timebudget.activities.find(a => a.id === activityId);
+  if (!activity) return false;
+
+  const before = getActivityZone(activity);
+  const next = clampMinutes(activity.currentMinutes) + amount;
+  const entry: TimeLogEntry = {
+    timestamp: new Date().toISOString(),
+    minutes: amount,
+    ...(note && note.trim() ? { note: note.trim().slice(0, 500) } : {})
+  };
+
+  setState('timebudget', 'activities', a => a.id === activityId, 'currentMinutes', next);
+  setState('timebudget', 'activities', a => a.id === activityId, 'history', h => [entry, ...(h || [])]);
+  saveState();
+
+  const after = getActivityZone({ ...activity, currentMinutes: next });
+  const msg = milestoneMessageFor(after, activity.name, next);
+  if (msg && after !== before && state.timebudget.settings.notifications) {
+    fireMilestoneNotification(msg, after);
+  }
+  return true;
+}
+
+/** Removes the most recent logged session and restores the counter. */
+export function undoLastLog(activityId: string): boolean {
+  ensureWeeklyReset();
+  const activity = state.timebudget.activities.find(a => a.id === activityId);
+  if (!activity) return false;
+  const last = (activity.history || [])[0];
+  if (!last) return false;
+
+  setState('timebudget', 'activities', a => a.id === activityId, 'history', h => (h || []).slice(1));
+  setState('timebudget', 'activities', a => a.id === activityId, 'currentMinutes', c =>
+    clampMinutes(c) - Math.min(clampMinutes(c), last.minutes)
+  );
+  saveState();
+  return true;
+}
+
+export interface TimeBudgetActivityInput {
+  name: string;
+  minHours: number;
+  targetHours: number;
+  dangerHours: number | null;
+  tags?: string[];
+  priority?: number;
+  color?: string;
+}
+
+const VALID_TAG_RE = /^[a-zA-Z0-9_\- ]{1,20}$/;
+
+function cleanTags(raw: unknown): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item !== 'string') continue;
+      const tag = item.trim().toLowerCase();
+      if (!tag || !VALID_TAG_RE.test(tag) || seen.has(tag)) continue;
+      seen.add(tag);
+      out.push(tag);
+      if (out.length >= 10) break;
+    }
+  }
+  return out;
+}
+
+/** Creates a new weekly-budget activity with a clean weekly counter. */
+export function addTimeBudgetActivity(input: TimeBudgetActivityInput): TimeBudgetActivity | null {
+  const name = (input.name || '').trim().slice(0, 60);
+  if (!name) return null;
+  if (state.timebudget.activities.length >= MAX_ACTIVITIES) {
+    showToast(`Activity limit reached (${MAX_ACTIVITIES}).`);
+    return null;
+  }
+  const settings = state.timebudget.settings;
+  const activity: TimeBudgetActivity = {
+    id: syntheticActivityId(),
+    name,
+    minHours: clampHours(input.minHours, 0),
+    targetHours: Math.max(clampHours(input.targetHours, 1), clampHours(input.minHours, 0), 1),
+    dangerHours: input.dangerHours !== null && input.dangerHours !== undefined && input.dangerHours > 0
+      ? Math.max(clampHours(input.dangerHours), Math.max(clampHours(input.targetHours, 1), clampHours(input.minHours, 0)))
+      : null,
+    currentMinutes: 0,
+    history: [],
+    lastResetWeek: getCurrentBudgetWeek(new Date(), settings.resetDay, settings.resetHour),
+    tags: cleanTags(input.tags),
+    priority: Number.isFinite(input.priority) ? Math.max(1, Math.min(10, Math.floor(input.priority ?? 5))) : 5,
+    ...(typeof input.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(input.color) ? { color: input.color } : {})
+  };
+  setState('timebudget', 'activities', acts => [...acts, activity]);
+  saveState();
+  return activity;
+}
+
+export function updateTimeBudgetActivity(id: string, patch: Partial<TimeBudgetActivityInput>): boolean {
+  const existing = state.timebudget.activities.find(a => a.id === id);
+  if (!existing) return false;
+
+  const next: Partial<TimeBudgetActivity> = {};
+  if (patch.name !== undefined) {
+    const name = (patch.name || '').trim().slice(0, 60);
+    if (!name) return false;
+    next.name = name;
+  }
+  if (patch.minHours !== undefined) next.minHours = clampHours(patch.minHours, existing.minHours);
+  if (patch.targetHours !== undefined) next.targetHours = Math.max(clampHours(patch.targetHours, existing.targetHours), next.minHours ?? existing.minHours, 1);
+  if (patch.dangerHours !== undefined) {
+    next.dangerHours =
+      patch.dangerHours === null || patch.dangerHours === undefined || patch.dangerHours <= 0
+        ? null
+        : Math.max(clampHours(patch.dangerHours), next.targetHours ?? existing.targetHours);
+  }
+  if (patch.tags !== undefined) next.tags = cleanTags(patch.tags);
+  if (patch.priority !== undefined) next.priority = Math.max(1, Math.min(10, Math.floor(patch.priority)));
+  if (patch.color !== undefined) {
+    next.color = typeof patch.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(patch.color) ? patch.color : undefined;
+  }
+
+  setState('timebudget', 'activities', acts => acts.map(a => (a.id === id ? { ...a, ...next } : a)));
+  saveState();
+  return true;
+}
+
+export function deleteTimeBudgetActivity(id: string): void {
+  setState('timebudget', 'activities', acts => acts.filter(a => a.id !== id));
+  saveState();
+}
+
+export function setTimeBudgetSettings(patch: Partial<TimeBudgetSettings>): void {
+  setState('timebudget', 'settings', prev => ({
+    ...prev,
+    ...patch
+  }));
+  saveState();
+  ensureWeeklyReset();
+}
+
+/**
+ * Mid-week catch-up reminder for high-priority habits that are significantly
+ * behind schedule. Fires at most once per activity per week while the page is
+ * open; the interval drives it from the planner.
+ */
+const remindedThisWeek = new Set<string>();
+export function clearCatchUpReminderMemory(): void {
+  remindedThisWeek.clear();
+}
+
+export function checkCatchUpReminders(): boolean {
+  if (!state.timebudget.settings.catchUpReminders) return false;
+  if (typeof window === 'undefined') return false;
+  const settings = state.timebudget.settings;
+  const progress = getWeekProgress(new Date(), settings.resetDay, settings.resetHour);
+  if (progress < 0.5) return false; // only mid-week onwards
+  const week = getCurrentBudgetWeek(new Date(), settings.resetDay, settings.resetHour);
+  let fired = false;
+  for (const a of state.timebudget.activities) {
+    if (a.priority > 3) continue; // only high-priority habits
+    const expectedByNow = a.minHours * 60 * progress;
+    if (a.currentMinutes >= expectedByNow * 0.5) continue; // >= half of expected
+    const key = `${week}:${a.id}`;
+    if (remindedThisWeek.has(key)) continue;
+    remindedThisWeek.add(key);
+    showToast(`⏰ ${a.name} is behind schedule this week (${Math.round(a.currentMinutes / 60)}h / expected ${Math.ceil(expectedByNow / 60)}h). Catch up soon!`);
+    fired = true;
+  }
+  return fired;
+}
+
+/** Requests the browser notification permission (used on first visit). */
+export function requestNotificationPermission(): void {
+  if (typeof window === 'undefined') return;
+  if (!('Notification' in window)) return;
+  if (window.Notification.permission === 'default') {
+    void window.Notification.requestPermission().catch(() => {});
+  }
+}
+
+export { getActivityZone, getCurrentBudgetWeek, getWeekProgress };
+export type { TimeBudgetActivity, TimeBudgetSettings, TimeLogEntry, ActivityZone };
 

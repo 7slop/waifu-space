@@ -9,6 +9,7 @@ import type { AppState, ChatMessage, RpgState, UserAccount } from './store';
 import type { CalendarEventItem, CalendarOccurrenceOverride } from './ical';
 export type { CalendarOccurrenceOverride } from './ical';
 import { PERSONALITIES } from './personality';
+import type { TimeBudgetActivity, TimeBudgetState } from './timebudget';
 import {
   sanitizeSettings,
   isValidDateString,
@@ -191,6 +192,67 @@ function sanitizeRpg(raw: unknown): RpgState {
   };
 }
 
+const TIME_BUDGET_TAG_RE = /^[a-zA-Z0-9_\- ]{1,20}$/;
+
+function sanitizeTimeLogEntry(raw: unknown): TimeBudgetActivity['history'][number] | null {
+  if (!isRecord(raw)) return null;
+  const timestamp = validDateString(raw.timestamp, nowIso());
+  const minutes = toNonNegativeInt(raw.minutes, 0);
+  if (minutes <= 0) return null;
+  const entry: TimeBudgetActivity['history'][number] = { timestamp, minutes };
+  if (typeof raw.note === 'string' && raw.note.trim()) entry.note = raw.note.trim().slice(0, 500);
+  return entry;
+}
+
+function sanitizeTimeBudgetActivity(raw: unknown): TimeBudgetActivity | null {
+  if (!isRecord(raw) || typeof raw.name !== 'string' || !raw.name.trim()) return null;
+  const minHours = toNonNegativeNum(raw.minHours, 0);
+  const targetHours = Math.max(1, toNonNegativeNum(raw.targetHours, 1), minHours);
+  const dangerRaw = toNonNegativeNum(raw.dangerHours, 0);
+  const history = Array.isArray(raw.history)
+    ? raw.history.map(sanitizeTimeLogEntry).filter((e): e is TimeBudgetActivity['history'][number] => e !== null).slice(0, 2000)
+    : [];
+  const tags: string[] = dedupeStrings(raw.tags).filter(tag => TIME_BUDGET_TAG_RE.test(tag)).slice(0, 10);
+
+  const activity: TimeBudgetActivity = {
+    id: toStr(raw.id, syntheticId('act')),
+    name: (raw.name as string).trim().slice(0, 60),
+    minHours,
+    targetHours,
+    dangerHours: dangerRaw > 0 ? Math.max(dangerRaw, targetHours) : null,
+    currentMinutes: toNonNegativeInt(raw.currentMinutes, 0),
+    history,
+    lastResetWeek: typeof raw.lastResetWeek === 'string' ? raw.lastResetWeek : '',
+    tags,
+    priority: toPositiveInt(raw.priority, 5)
+  };
+  if (isHexColor(raw.color)) activity.color = raw.color as string;
+  return activity;
+}
+
+function sanitizeTimeBudget(raw: unknown): TimeBudgetState {
+  const src = isRecord(raw) ? raw : {};
+  const settings = isRecord(src.settings) ? src.settings : {};
+  const activities = Array.isArray(src.activities)
+    ? src.activities.map(sanitizeTimeBudgetActivity).filter((a): a is TimeBudgetActivity => a !== null).slice(0, 60)
+    : [];
+  return {
+    activities,
+    settings: {
+      resetDay: (() => {
+        const day = toPositiveInt(settings.resetDay, 1);
+        return day <= 7 ? day : 1;
+      })(),
+      resetHour: (() => {
+        const hour = toNonNegativeInt(settings.resetHour, 0);
+        return hour <= 23 ? hour : 0;
+      })(),
+      notifications: toBool(settings.notifications, true),
+      catchUpReminders: toBool(settings.catchUpReminders, true)
+    }
+  };
+}
+
 /**
  * Validates and cleans an arbitrary JSON-parsed value into a safe partial
  * `AppState`. Returns zeroed slices for missing keys so callers can simply
@@ -272,6 +334,10 @@ export function sanitizeRawState(raw: unknown): SanitizeResult {
       suggestions: dedupeStrings(raw.chat.suggestions),
       isTyping: toBool(raw.chat.isTyping, false)
     };
+  }
+
+  if (isRecord(raw.timebudget)) {
+    data.timebudget = sanitizeTimeBudget(raw.timebudget);
   }
 
   return { data, issues };
