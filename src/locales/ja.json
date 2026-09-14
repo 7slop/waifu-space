@@ -993,6 +993,8 @@
     "sendTooltip": "送信",
     "mutedTooltip": "ミュート解除",
     "unmutedTooltip": "ミュート",
+    "deafenTooltip": "消音",
+    "undeafenTooltip": "消音解除",
     "gifTooltip": "GIFを送信",
     "emojiTooltip": "絵文字を追加",
     "emojiCatSmileys": "顔文字",

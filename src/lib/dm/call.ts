@@ -360,6 +360,12 @@ export class CallManager {
     return !!this.localStream && this.localStream.getAudioTracks().every(t => !t.enabled);
   }
 
+  /** Enables/disables audio playback of the remote stream (used for deafen). */
+  setRemoteAudioEnabled(enabled: boolean): void {
+    if (!this.remoteStream) return;
+    for (const t of this.remoteStream.getAudioTracks()) t.enabled = enabled;
+  }
+
   /** Tracks whether the video is currently disabled. */
   isVideoOff(): boolean {
     const tracks = this.localStream?.getVideoTracks();

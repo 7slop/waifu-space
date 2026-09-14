@@ -993,6 +993,8 @@
     "sendTooltip": "Send message",
     "mutedTooltip": "Unmute",
     "unmutedTooltip": "Mute",
+    "deafenTooltip": "Deafen",
+    "undeafenTooltip": "Undeafen",
     "gifTooltip": "Send a GIF",
     "emojiTooltip": "Add emoji",
     "emojiCatSmileys": "Smileys",

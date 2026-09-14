@@ -1206,6 +1206,11 @@
   color: var(--text-primary, #cdd6f4);
 }
 
+.dm-call-action.deafen.active {
+  background: var(--accent-green, #a6e3a1);
+  color: #11111b;
+}
+
 .dm-call-action.ctrl.active {
   background: var(--accent-soft, rgba(245, 194, 231, 0.14));
   color: var(--primary-accent, #f5c2e7);

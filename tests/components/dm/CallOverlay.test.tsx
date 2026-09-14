@@ -37,6 +37,7 @@ vi.mock('../../../src/lib/dm/call', () => ({
       this.muted = true;
       return true;
     }
+    setRemoteAudioEnabled(): void {}
     toggleVideo(): boolean {
       this.videoOff = this.videoOff ? false : false;
       return true;
@@ -184,6 +185,26 @@ describe('CallOverlay', () => {
     await flush();
     expect(dmState.call?.muted).toBe(true);
     expect(container.querySelector('[data-testid="dm-call-muted-badge"]')).toBeInTheDocument();
+    restore();
+  });
+
+  it('deafen toggles the headphones state and badge', async () => {
+    const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    expect(dmState.call?.deafened).toBe(false);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);
+    await flush();
+    expect(dmState.call?.deafened).toBe(true);
+    expect(dmState.call?.muted).toBe(true);
+    expect(container.querySelector('[data-testid="dm-call-deafened-badge"]')).toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);
+    await flush();
+    expect(dmState.call?.deafened).toBe(false);
+    expect(container.querySelector('[data-testid="dm-call-deafened-badge"]')).not.toBeInTheDocument();
     restore();
   });
 

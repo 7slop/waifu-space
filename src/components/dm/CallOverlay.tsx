@@ -8,6 +8,7 @@ import {
   dmState,
   hangUpCall,
   markCallBusyAndReject,
+  toggleDeafen,
   toggleMute,
   toggleScreenShare
 } from '../../lib/dm/store';
@@ -191,6 +192,7 @@ function ActiveCallBar() {
           <div class="dm-call-avatar-slot mine">
             <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
             <AvatarBadge show={call().muted} kind="muted" />
+            <AvatarBadge show={call().deafened} kind="deafened" />
           </div>
           <div class="dm-call-avatar-slot remote">
             <Show when={ringing()}>
@@ -217,6 +219,14 @@ function ActiveCallBar() {
             onClick={toggleMute}
           >
             {call().muted ? <PhMicrophoneSlash /> : <PhMicrophone />}
+          </button>
+          <button
+            class={`dm-call-action ctrl deafen${call().deafened ? ' active' : ''}`}
+            data-testid="dm-call-deafen"
+            title={call().deafened ? t('dm.undeafenTooltip') : t('dm.deafenTooltip')}
+            onClick={toggleDeafen}
+          >
+            <PhHeadphones />
           </button>
           <button
             class={`dm-call-action ctrl${call().videoOff && !call().screenSharing ? ' active' : ''}`}

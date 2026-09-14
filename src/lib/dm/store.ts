@@ -75,6 +75,8 @@ export interface DmCallUi {
   muted: boolean;
   videoOff: boolean;
   screenSharing: boolean;
+  /** Discord-style "deafen": all audio muted (incoming + outgoing). */
+  deafened: boolean;
 }
 
 export interface DmStoreState {
@@ -115,6 +117,7 @@ interface DmRuntime {
   realtime: DmRealtime | null;
   call: CallManager | null;
   pendingAccept: PendingIncomingCall | null;
+  mutedBeforeDeafen: boolean;
   lastTypingEmit: number;
 }
 
@@ -123,6 +126,7 @@ const runtime: DmRuntime = {
   realtime: null,
   call: null,
   pendingAccept: null,
+  mutedBeforeDeafen: false,
   lastTypingEmit: 0
 };
 
@@ -773,7 +777,7 @@ export async function startCall(type: CallType): Promise<boolean> {
       return false;
     }
     wireCallManager(call, manager);
-    setDmState('call', { call, direction: 'outgoing', remoteName: conv.otherUser.username, callState: 'ringing', muted: false, videoOff: type !== 'video', screenSharing: false });
+    setDmState('call', { call, direction: 'outgoing', remoteName: conv.otherUser.username, callState: 'ringing', muted: false, videoOff: type !== 'video', screenSharing: false, deafened: false });
     const offer = await manager.createOffer(call.id, otherId);
     if (offer) {
       sendSignal('offer', call.id, conv.id, { sdp: offer });
@@ -798,7 +802,7 @@ export async function acceptIncomingCall(): Promise<boolean> {
     return false;
   }
   wireCallManager(call, manager);
-  setDmState({ incomingCall: null, call: { call, direction: 'incoming', remoteName: callerName, callState: 'ringing', muted: false, videoOff: call.callType !== 'video', screenSharing: false } });
+  setDmState({ incomingCall: null, call: { call, direction: 'incoming', remoteName: callerName, callState: 'ringing', muted: false, videoOff: call.callType !== 'video', screenSharing: false, deafened: false } });
   void runtime.realtime?.subscribeConversation(call.conversationId);
   // Mark the call as answered on the server so both timelines get the
   // "call started" system message and the call session reflects the state.
@@ -914,6 +918,24 @@ export async function cameraButtonPressed(): Promise<void> {
     await manager.ensureCamera();
   }
   setDmState('call', (prev) => (prev ? { ...prev, videoOff: manager.isVideoOff(), screenSharing: manager.isScreenSharing() } : prev));
+}
+
+/** Discord-style deafen: silences all audio and force-mutes the mic. */
+export function toggleDeafen(): boolean {
+  const manager = runtime.call;
+  if (!manager) return false;
+  const prev = dmState.call?.deafened ?? false;
+  if (!prev) {
+    runtime.mutedBeforeDeafen = manager.isMuted();
+    if (!runtime.mutedBeforeDeafen) manager.toggleMute();
+    manager.setRemoteAudioEnabled(false);
+    setDmState('call', (c) => (c ? { ...c, deafened: true, muted: true } : c));
+  } else {
+    manager.setRemoteAudioEnabled(true);
+    if (!runtime.mutedBeforeDeafen) manager.toggleMute();
+    setDmState('call', (c) => (c ? { ...c, deafened: false, muted: manager.isMuted() } : c));
+  }
+  return !prev;
 }
 
 export function resetDmStore(): void {
