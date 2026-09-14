@@ -3,6 +3,7 @@ import { CalendarEventItem } from '../lib/ical';
 import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate, startOfWeek } from '../lib/store';
 import { state } from '../lib/store';
 import { layoutTimedEvents } from '../lib/calendar-layout';
+import { minuteFromClientY, snapMinute } from '../lib/calendar-drag';
 import { t, getLocale, holidayTooltip, hourMinute, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
@@ -47,11 +48,17 @@ export function CalendarWeekView(props: {
   };
 
   const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
-    if (!e.dataTransfer) return;
     if (ev._holiday) {
       e.preventDefault();
       return;
     }
+    // Timed events/tasks use the pointer-based move-drag with a live placement
+    // preview (see startEventDrag); only all-day pills route through native DnD.
+    if (!ev.allDay) {
+      e.preventDefault();
+      return;
+    }
+    if (!e.dataTransfer) return;
     e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'calendar-event', id: ev.id, dateKey: ev.dateKey }));
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -62,14 +69,12 @@ export function CalendarWeekView(props: {
   };
 
   // Resolve a drop anywhere inside a day column to a day minute (0..1439) with
-  // 15-minute precision. Conservative clamping keeps drops on the bottom edge
+  // 5-minute precision. Conservative clamping keeps drops on the bottom edge
   // from wrapping into the next day.
   const minuteFromColumn = (e: DragEvent | MouseEvent): number => {
     const colEl = (e.target as HTMLElement).closest('.week-day-column') as HTMLElement | null;
     if (!colEl) return 0;
-    const rect = colEl.getBoundingClientRect();
-    const relY = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
-    return Math.max(0, Math.min(1425, Math.round((relY / rect.height) * 96) * 15));
+    return Math.min(1425, minuteFromClientY(e.clientY, colEl));
   };
 
   const handleDrop = (e: DragEvent, targetDay: Date) => {
@@ -119,6 +124,126 @@ export function CalendarWeekView(props: {
     }
   };
 
+  // ---- Event move-drag with live placement preview (5-min snap) ----
+  interface DragMoveState {
+    id: string;
+    dateKey?: string;
+    title: string;
+    color: string;
+    durationMin: number;
+    dayIndex: number;
+    startMin: number;
+    moved: boolean;
+  }
+  const [dragMove, setDragMove] = createSignal<DragMoveState | null>(null);
+  // A real drag also produces a click on release; swallow that click so the
+  // event modal does not pop open right after a move.
+  let suppressClickAfterDrag = false;
+
+  const activeDrag = () => {
+    const d = dragMove();
+    return d && d.moved ? d : null;
+  };
+
+  const startEventDrag = (e: MouseEvent, ev: CalendarEventItem) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.event-resize-handle') || target.tagName === 'INPUT' || target.tagName === 'BUTTON') return;
+    if (ev._holiday) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const s = new Date(ev.start);
+    const e2 = new Date(ev.end || ev.start);
+    const durationMin = Math.max(30, Math.round((e2.getTime() - s.getTime()) / 60000));
+    const colEl = (e.currentTarget as HTMLElement).closest('.week-day-column') as HTMLElement | null;
+    const dayIndex = colEl ? Number(colEl.dataset.dayIndex ?? 0) : 0;
+
+    setDragMove({
+      id: ev.id,
+      dateKey: ev.dateKey,
+      title: ev.title,
+      color: ev.color || '#ff6584',
+      durationMin,
+      dayIndex,
+      startMin: snapMinute(s.getHours() * 60 + s.getMinutes()),
+      moved: false
+    });
+
+    const onMove = (moveEv: MouseEvent) => {
+      if (typeof document !== 'undefined') document.body.classList.add('is-dragging-event');
+      const colEl = (moveEv.target as HTMLElement).closest('.week-day-column') as HTMLElement | null;
+      setDragMove(prev => {
+        if (!prev || !colEl) return prev;
+        const idx = Number(colEl.dataset.dayIndex ?? prev.dayIndex);
+        const snapped = minuteFromClientY(moveEv.clientY, colEl);
+        const maxStart = 1440 - prev.durationMin;
+        return {
+          ...prev,
+          dayIndex: idx,
+          startMin: Math.max(0, Math.min(maxStart, snapMinute(snapped))),
+          moved: true
+        };
+      });
+    };
+
+    const onKey = (k: KeyboardEvent) => {
+      if (k.key !== 'Escape') return;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('keydown', onKey);
+      }
+      if (typeof document !== 'undefined') document.body.classList.remove('is-dragging-event');
+      setDragMove(null);
+    };
+
+    const onUp = () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('keydown', onKey);
+      }
+      if (typeof document !== 'undefined') document.body.classList.remove('is-dragging-event');
+
+      const d = dragMove();
+      setDragMove(null);
+      if (!d || !d.moved) return; // not a drag, plain click
+
+      const evt = props.events.find(x => x.id === d.id);
+      if (!evt || evt._holiday) return;
+      const targetDay = weekDays()[d.dayIndex];
+      if (!targetDay) return; // dragged outside the grid — cancel
+
+      const minute = Math.min(d.startMin, 1425);
+      const newStart = new Date(targetDay);
+      newStart.setHours(0, 0, 0, 0);
+      newStart.setMinutes(minute);
+      const newEnd = new Date(newStart.getTime() + d.durationMin * 60000);
+
+      suppressClickAfterDrag = true;
+
+      const m60 = minute % 60;
+      const dateStr = `${newStart.toLocaleDateString(getLocale())} ${Math.floor(minute / 60)}:${m60 < 10 ? '0' + m60 : m60}`;
+
+      if (d.dateKey && evt.recurrence && evt.recurrence !== 'none' && props.onRequestMove) {
+        props.onRequestMove(evt, newStart, newEnd, d.dateKey);
+      } else {
+        updateCalendarEvent(evt.id, {
+          start: newStart.toISOString(),
+          end: newEnd.toISOString()
+        });
+      }
+      showToast(t('calendar.toasts.rescheduled', { title: evt.title, date: dateStr }));
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      window.addEventListener('keydown', onKey);
+    }
+  };
+
   // ---- Event resize (Google Calendar style) ----
   interface ResizeState {
     id: string;
@@ -152,7 +277,7 @@ export function CalendarWeekView(props: {
     const onMove = (moveEv: MouseEvent) => {
       const rect = colEl.getBoundingClientRect();
       const relY = Math.max(0, Math.min(rect.height - 1, moveEv.clientY - rect.top));
-      const minute = Math.max(0, Math.min(1425, Math.round((relY / rect.height) * 96) * 15));
+      const minute = Math.min(1425, snapMinute((relY / rect.height) * 1440));
       setResize(prev => {
         if (!prev) return prev;
         let { newStartMin, newEndMin } = prev;
@@ -231,7 +356,7 @@ export function CalendarWeekView(props: {
     const relY = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
     const fraction = relY / rect.height;
     const exactMin = fraction * 1440;
-    const snappedMin = Math.floor(exactMin / 15) * 15;
+    const snappedMin = snapMinute(exactMin);
 
     const initial = {
       day,
@@ -246,7 +371,7 @@ export function CalendarWeekView(props: {
       const currRelY = Math.max(0, Math.min(currRect.height - 1, moveEv.clientY - currRect.top));
       const currFrac = currRelY / currRect.height;
       const currExactMin = currFrac * 1440;
-      const currSnappedMin = Math.round(currExactMin / 15) * 15;
+      const currSnappedMin = snapMinute(currExactMin);
 
       setDragCreate(prev => {
         if (!prev) return null;
@@ -392,7 +517,7 @@ export function CalendarWeekView(props: {
 
         <div class="week-columns-wrapper">
           <For each={weekDays()}>
-            {day => {
+            {(day, idx) => {
               const isT = isSameDay(day, today);
               const dayEvents = () => getEventsForDate(props.events, day);
               const timedLayouts = () => layoutTimedEvents(dayEvents().filter(ev => !ev.allDay));
@@ -400,6 +525,7 @@ export function CalendarWeekView(props: {
               return (
                 <div
                   class={`week-day-column ${isT ? 'today-col' : ''}`}
+                  data-day-index={idx()}
                   onMouseDown={e => startDragCreate(e, day)}
                   onDragOver={handleDragOver}
                   onDrop={e => handleDrop(e, day)}
@@ -446,6 +572,31 @@ export function CalendarWeekView(props: {
                     }}
                   </Show>
 
+                  {/* Drag-to-move placement preview (event snaps to the target slot) */}
+                  <Show when={activeDrag()}>
+                    {(drag) => {
+                      const d = drag();
+                      if (d.dayIndex !== idx()) return null;
+                      const topPct = (d.startMin / 1440) * 100;
+                      const heightPct = Math.max(2.2, (d.durationMin / 1440) * 100);
+                      return (
+                        <div
+                          class="drag-move-preview"
+                          style={{
+                            top: `${topPct}%`,
+                            height: `${heightPct}%`,
+                            background: d.color
+                          }}
+                        >
+                          <span class="drag-preview-title">{d.title}</span>
+                          <span class="drag-preview-time">
+                            {formatDragTime(d.startMin)} – {formatDragTime(d.startMin + d.durationMin)}
+                          </span>
+                        </div>
+                      );
+                    }}
+                  </Show>
+
                   <div class="week-events-layer">
                     <For each={timedLayouts()}>
                       {layout => {
@@ -459,7 +610,7 @@ export function CalendarWeekView(props: {
 
                             return (
                               <div
-                                class={`week-event-card ${ev.type === 'task' && ev.completed ? 'completed' : ''} ${isResizing ? 'is-resizing' : ''}`}
+                                class={`week-event-card ${ev.type === 'task' && ev.completed ? 'completed' : ''} ${isResizing ? 'is-resizing' : ''} ${dragMove()?.id === ev.id && dragMove()?.moved ? 'is-dragging-source' : ''}`}
                                 style={{
                                   top: `${preview.topPct}%`,
                                   height: `${preview.heightPct}%`,
@@ -470,18 +621,13 @@ export function CalendarWeekView(props: {
                                 role="button"
                                 tabindex="0"
                                 aria-label={t('calendar.a11y.openEvent', { title: ev.title })}
-                                draggable={!ev._holiday}
-                                onDragStart={e => handleDragStart(e, ev)}
-                                onDragOver={e => {
-                                  e.stopPropagation();
-                                  handleDragOver(e);
-                                }}
-                                onDrop={e => {
-                                  e.stopPropagation();
-                                  handleDrop(e, day);
-                                }}
+                                onMouseDown={e => startEventDrag(e, ev)}
                                 onClick={e => {
                                   e.stopPropagation();
+                                  if (suppressClickAfterDrag) {
+                                    suppressClickAfterDrag = false;
+                                    return;
+                                  }
                                   props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                                 }}
                                 onContextMenu={e => {

@@ -16,10 +16,6 @@ import {
   holidayLoading,
   refreshHolidayEvents,
 } from '../lib/store';
-import {
-  startNotificationScheduler,
-  stopNotificationScheduler,
-} from '../lib/notifications';
 import { CalendarEventItem } from '../lib/ical';
 import { buildCulturalHolidayEvents } from '../lib/countries';
 import { MiniCalendar } from './MiniCalendar';
@@ -77,16 +73,10 @@ export function CalendarPlanner() {
   const hasOpenOverlay = () =>
     holidaysModalOpen() || isModalOpen() || repeatScopeRequest() !== null || pendingDelete() !== null;
 
-  // Runs the browser-notification scheduler while the feature is enabled.
-  // `createEffect` never runs during SSR, and the scheduler itself is a no-op
-  // outside the browser, so this is safe on the server.
-  createEffect(() => {
-    if (state.settings.notificationsEnabled) {
-      startNotificationScheduler();
-    } else {
-      stopNotificationScheduler();
-    }
-  });
+  // The browser-notification scheduler now lives in the global AppLayout so it
+  // keeps running across every page of WaifuSpace, not just while the calendar
+  // route is mounted. It stays safe on the server (createEffect never runs
+  // during SSR and the scheduler no-ops outside the browser).
 
   // Filtered events
   const filteredEvents = createMemo(() => {

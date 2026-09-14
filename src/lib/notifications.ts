@@ -36,6 +36,16 @@ export type SentMap = Record<string, number>;
 let sent: SentMap = {};
 let timer: ReturnType<typeof setInterval> | null = null;
 
+/** Immediate catch-up scan when the tab regains visibility/focus. */
+function onVisibilityChange(): void {
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    runNotificationCheck();
+  }
+}
+function onWindowFocus(): void {
+  runNotificationCheck();
+}
+
 function loadSent(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -288,17 +298,32 @@ export function runNotificationCheck(): void {
 export function startNotificationScheduler(): void {
   if (typeof window === 'undefined' || timer) return;
   loadSent();
+  // Background tabs get their interval throttled hard by the browser (down to
+  // once a minute after a few minutes hidden), so also run an immediate catch-up
+  // check whenever the tab regains visibility/focus. This keeps a notification
+  // that should have fired while hidden from being lost — it lands the moment
+  // the user looks at WaifuSpace again.
+  const onVisibilityChange = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      runNotificationCheck();
+    }
+  };
+  const onFocus = () => runNotificationCheck();
+
   try {
     runNotificationCheck();
   } catch (e) {
     console.warn('Notification scheduler failed its first check:', e);
   }
   timer = setInterval(runNotificationCheck, CHECK_INTERVAL_MS);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('focus', onWindowFocus);
 }
 
 export function stopNotificationScheduler(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
+  if (typeof window === 'undefined' || !timer) return;
+  clearInterval(timer);
+  timer = null;
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  window.removeEventListener('focus', onWindowFocus);
 }

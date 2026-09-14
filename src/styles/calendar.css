@@ -659,6 +659,19 @@
   opacity: 0.4;
 }
 
+/* The event being moved stays put in the grid (it keeps its layout slot) but is
+   hidden while the drag-move preview shows where it will land. */
+.week-event-card.is-dragging-source {
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.is-dragging-event,
+body.is-dragging-event .week-event-card {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
 .card-title {
   font-weight: 700;
   margin-bottom: 2px;
@@ -1212,7 +1225,39 @@ body.is-resizing-event {
 .drag-create-time {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
+}
+
+/* DRAG-TO-MOVE PLACEMENT PREVIEW (event/task move) */
+/* Opaque, real-sized copy of the event rendered in the target column so the
+   user sees exactly where the item will land, snapped to the 5-minute grid. */
+.drag-move-preview {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  z-index: 45;
+  pointer-events: none;
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  outline: 2px dashed rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.drag-preview-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.drag-preview-time {
+  font-size: 10px;
+  opacity: 0.92;
+  color: #fff;
 }
 
 /* RECURRENCE BADGES */

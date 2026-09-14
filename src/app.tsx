@@ -13,6 +13,7 @@ import {
 } from './lib/store';
 import { defenseGameActive, setDefenseGameActive } from './lib/defense-bridge';
 import { t } from './lib/i18n';
+import { startNotificationScheduler, stopNotificationScheduler } from './lib/notifications';
 import { SakuraCanvas } from './components/SakuraCanvas';
 import { ToastNotification } from './components/ToastNotification';
 import { AuthModal } from './components/AuthModal';
@@ -177,6 +178,18 @@ function AppLayout(props: { children: any }) {
 
   createEffect(() => {
     applyTheme();
+  });
+
+  // Browser-notification scheduler runs globally (every page of the SPA), so a
+  // task/event reminder fires whether or not the calendar tab is the active one.
+  // The scheduler owns its own visibility/focus catch-up. createEffect never
+  // runs during SSR, so this is safe on the server.
+  createEffect(() => {
+    if (state.settings.notificationsEnabled) {
+      startNotificationScheduler();
+    } else {
+      stopNotificationScheduler();
+    }
   });
 
   const authModalOpen = () => !isAuthChecking() && (!state.user || showAuthModal());

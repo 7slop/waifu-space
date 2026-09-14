@@ -124,6 +124,31 @@ describe('Browser notifications (notifications.ts)', () => {
     expect(captured.length).toBe(1);
   });
 
+  it('re-checks immediately when the tab regains visibility, delivering reminders missed while hidden', () => {
+    addEvent({ title: 'Gym', type: 'task', start: new Date(FIXED_NOW) });
+    startNotificationScheduler(); // initial check fires the already-started task
+    expect(captured.length).toBe(1);
+    captured.length = 0;
+
+    // A task created after the last interval tick would otherwise sit silent
+    // until the (throttled) next tick; returning to the tab must catch it now.
+    addEvent({ title: 'Email boss', type: 'task', start: new Date(FIXED_NOW) });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(captured.length).toBe(1);
+    expect(captured[0].title).toBe('Email boss');
+  });
+
+  it('re-checks immediately when the window regains focus', () => {
+    addEvent({ title: 'Background first', type: 'task', start: new Date(FIXED_NOW) });
+    startNotificationScheduler();
+    captured.length = 0;
+
+    addEvent({ title: 'Focus catch-up', type: 'task', start: new Date(FIXED_NOW) });
+    window.dispatchEvent(new Event('focus'));
+    expect(captured.length).toBe(1);
+    expect(captured[0].title).toBe('Focus catch-up');
+  });
+
   it('falls back to an in-app toast instead of a native notification when permission is denied', () => {
     class DeniedNotification {
       static permission: NotificationPermission = 'denied';
