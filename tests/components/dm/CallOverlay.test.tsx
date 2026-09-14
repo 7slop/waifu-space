@@ -197,7 +197,7 @@ describe('CallOverlay', () => {
     await flush();
     expect(dmState.call?.videoOff).toBe(false);
     expect(container.querySelector('.dm-call-remote-video')).toBeInTheDocument();
-    expect(container.querySelector('.dm-call-local-video')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-pip-video')).toBeInTheDocument();
   });
 
   it('screen share toggles on and shows in the bar', async () => {
@@ -214,6 +214,11 @@ describe('CallOverlay', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-call-screen-toggle"]')!);
     await flush();
     expect(dmState.call?.screenSharing).toBe(true);
+    // While sharing, the big stage hosts the shared feed and the square
+    // camera PiP gets the .screen modifier; the dock reports the share.
+    expect(container.querySelector('.dm-call-pip-video.screen')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-dock.has-video')).toBeInTheDocument();
+    expect(container.textContent).toContain('Sharing');
     fireEvent.click(container.querySelector('[data-testid="dm-call-screen-toggle"]')!);
     await flush();
     expect(dmState.call?.screenSharing).toBe(false);

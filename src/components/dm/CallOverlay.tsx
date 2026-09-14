@@ -122,8 +122,14 @@ function ActiveCallBar() {
   const peer = () => peerInfo();
   const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
 
+  // When the local user shares their screen the shared feed (local stream)
+  // fills the big stage, so the remote camera becomes a square PiP.
+  const sharing = () => call().screenSharing;
+  const mainStream = () => (sharing() ? local() : screen());
+  const pipStream = () => (sharing() ? screen() : local());
+
   return (
-    <div class={`dm-call-dock dm-call-active${screen() ? ' has-video' : ''}`} data-testid="dm-active-call">
+    <div class={`dm-call-dock dm-call-active${videoActive() ? ' has-video' : ''}`} data-testid="dm-active-call">
       <div class="dm-call-bar">
         <div class="dm-call-avatars" data-testid="dm-call-avatars">
           <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
@@ -178,8 +184,12 @@ function ActiveCallBar() {
       <Show when={videoActive()}>
         <div class="dm-call-video-row">
           <div class="dm-call-video-stage">
-            <DmVideoView stream={() => screen()} class="dm-call-remote-video" />
-            <DmVideoView stream={() => local()} muted class="dm-call-local-video" />
+            <DmVideoView stream={mainStream} class="dm-call-remote-video" />
+            <DmVideoView
+              stream={pipStream}
+              muted={!sharing()}
+              class={sharing() ? 'dm-call-pip-video screen' : 'dm-call-pip-video'}
+            />
           </div>
         </div>
       </Show>

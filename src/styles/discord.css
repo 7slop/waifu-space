@@ -1202,16 +1202,18 @@
 .dm-call-remote-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: #000;
 }
 
-.dm-call-local-video {
+/* Square PiP when sharing: remote camera in the corner of the big stage. */
+.dm-call-pip-video {
   position: absolute;
   right: 12px;
   bottom: 12px;
   width: 160px;
   max-width: 30%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
   border: 2px solid rgba(255, 255, 255, 0.4);
   border-radius: 10px;
