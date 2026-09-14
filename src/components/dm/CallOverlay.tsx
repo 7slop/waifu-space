@@ -82,21 +82,22 @@ function IncomingCallBar() {
   return (
     <div class="dm-call-dock dm-call-incoming" data-testid="dm-incoming-call">
       <div class="dm-call-avatars ringing" data-testid="dm-call-avatars">
-        <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
-        <span class="dm-call-ring" aria-hidden="true" />
-        <DmAvatar
-          name={incoming().callerName || peer().name}
-          avatarUrl={callerIsPeer() ? peer().avatar : undefined}
-          size="44px"
-          class="dm-call-avatar remote"
-        />
+        <div class="dm-call-avatar-slot mine">
+          <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
+        </div>
+        <div class="dm-call-avatar-slot remote">
+          <span class="dm-call-ring" aria-hidden="true" />
+          <DmAvatar
+            name={incoming().callerName || peer().name}
+            avatarUrl={callerIsPeer() ? peer().avatar : undefined}
+            size="44px"
+            class="dm-call-avatar remote"
+          />
+        </div>
       </div>
       <div class="dm-call-info">
         <span class="dm-call-name">{incoming().callerName}</span>
-        <span class="dm-call-sub">
-          {isVideo() ? t('dm.callVideoLabel') : t('dm.callVoiceLabel')}
-          {' · '}{t('dm.callingLabel')}
-        </span>
+        <span class="dm-call-sub">{isVideo() ? t('dm.callVideoLabel') : t('dm.callVoiceLabel')}{' · '}{t('dm.callingLabel')}</span>
       </div>
       <div class="dm-call-actions">
         <button class="dm-call-action decline" data-testid="dm-call-decline" title={t('dm.decline')} onClick={() => void declineIncomingCall()}>
@@ -163,11 +164,15 @@ function ActiveCallBar() {
     >
       <div class="dm-call-bar">
         <div class="dm-call-avatars" data-testid="dm-call-avatars">
-          <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
-          <Show when={ringing()}>
-            <span class="dm-call-ring" aria-hidden="true" />
-          </Show>
-          <DmAvatar name={call().remoteName || peer().name} avatarUrl={peer().avatar} size="44px" class="dm-call-avatar remote" />
+          <div class="dm-call-avatar-slot mine">
+            <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
+          </div>
+          <div class="dm-call-avatar-slot remote">
+            <Show when={ringing()}>
+              <span class="dm-call-ring" aria-hidden="true" />
+            </Show>
+            <DmAvatar name={call().remoteName || peer().name} avatarUrl={peer().avatar} size="44px" class="dm-call-avatar remote" />
+          </div>
         </div>
 
         <div class="dm-call-info">
