@@ -16,6 +16,12 @@ Every line of code, SVG path, CSS animation, dialogue tree, and UI element in **
 
 ---
 
+https://github.com/user-attachments/assets/1470f881-2ad7-4534-82c2-df7281cbc197
+
+https://github.com/user-attachments/assets/b94714fc-9bfa-49da-9af5-933e19a86565
+
+---
+
 ## ⚡ Quick Start with Bun
 
 ### Prerequisites
