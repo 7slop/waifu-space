@@ -1,0 +1,99 @@
+import { json } from '@solidjs/router';
+import { resolveDmContext, badRequestResponse } from '../../../../../lib/server/dm-context';
+import type { DmMessage, MessageType } from '../../../../../lib/dm/types';
+
+const MAX_MESSAGE_LENGTH = 4000;
+
+export async function GET(event: { request: Request; params: Record<string, string> }) {
+  const ctx = resolveDmContext(event.request);
+  if (ctx instanceof Response) return ctx;
+
+  const conversationId = event.params.id;
+  if (!conversationId) return badRequestResponse('conversation id is required');
+
+  const url = new URL(event.request.url);
+  const before = url.searchParams.get('before') || undefined;
+  const rawLimit = Number(url.searchParams.get('limit') || 50);
+  const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 50;
+
+  const { data, error } = await ctx.supabase.rpc('get_dm_messages', {
+    p_user_id: ctx.session.userId,
+    p_conversation_id: conversationId,
+    p_before: before || null,
+    p_limit: limit
+  });
+
+  if (error) {
+    if (error.message.includes('not a participant')) {
+      return json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+    return json({ success: false, error: error.message }, { status: 500 });
+  }
+
+  const messages: DmMessage[] = (Array.isArray(data) ? data : []).map((m: any) => ({
+    id: m.id,
+    conversationId: m.conversationId,
+    senderId: m.senderId,
+    content: m.content ?? '',
+    messageType: m.messageType === 'gif' ? 'gif' : 'text',
+    mediaUrl: m.mediaUrl ?? null,
+    createdAt: m.createdAt
+  }));
+
+  return json({ success: true, messages });
+}
+
+export async function POST(event: { request: Request; params: Record<string, string> }) {
+  const ctx = resolveDmContext(event.request);
+  if (ctx instanceof Response) return ctx;
+
+  const conversationId = event.params.id;
+  if (!conversationId) return badRequestResponse('conversation id is required');
+
+  let body: any;
+  try {
+    body = await event.request.json();
+  } catch {
+    return badRequestResponse('Invalid JSON body');
+  }
+
+  const rawType = body?.messageType;
+  const messageType: MessageType = rawType === 'gif' ? 'gif' : 'text';
+  const content = typeof body?.content === 'string' ? body.content.slice(0, MAX_MESSAGE_LENGTH) : '';
+  const mediaUrl = typeof body?.mediaUrl === 'string' ? body.mediaUrl.slice(0, 2048) : null;
+
+  if (messageType === 'text' && content.trim() === '') {
+    return badRequestResponse('Message cannot be empty');
+  }
+  if (messageType === 'gif' && !mediaUrl) {
+    return badRequestResponse('GIF messages require a media URL');
+  }
+
+  const { data, error } = await ctx.supabase.rpc('send_dm_message', {
+    p_user_id: ctx.session.userId,
+    p_conversation_id: conversationId,
+    p_content: messageType === 'text' ? content : '',
+    p_message_type: messageType,
+    p_media_url: mediaUrl
+  });
+
+  if (error) {
+    if (error.message.includes('not a participant')) {
+      return json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+    return json({ success: false, error: error.message }, { status: 500 });
+  }
+
+  const m = data as any;
+  const message: DmMessage = {
+    id: m.id,
+    conversationId: m.conversationId,
+    senderId: m.senderId,
+    content: m.content ?? '',
+    messageType: m.messageType === 'gif' ? 'gif' : 'text',
+    mediaUrl: m.mediaUrl ?? null,
+    createdAt: m.createdAt
+  };
+
+  return json({ success: true, message }, { status: 201 });
+}
