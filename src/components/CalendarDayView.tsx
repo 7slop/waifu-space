@@ -1,4 +1,4 @@
-import { For, Show, onMount, createSignal } from 'solid-js';
+import { For, Show, onMount, createSignal, createMemo } from 'solid-js';
 import { CalendarEventItem } from '../lib/ical';
 import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate } from '../lib/store';
 import { layoutTimedEvents } from '../lib/calendar-layout';
@@ -313,6 +313,11 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                   e.stopPropagation();
                   props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                 }}
+                onContextMenu={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
+                }}
                 onKeyDown={e => onActivateKey(e, () => props.onOpenEvent(ev))}
               >
                 {ev.type === 'task' && (
@@ -339,10 +344,12 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
           <For each={Array.from({ length: 24 })}>
             {(_, idx) => {
               const h = idx();
-              const label = h === 0 ? '' : hourMinute(h, 0);
+              // Memoized so the gutter re-renders instantly when the
+              // 12h/24h setting changes (a plain read inside <For> wouldn't).
+              const label = createMemo(() => (h === 0 ? '' : hourMinute(h, 0)));
               return (
                 <div class="time-slot-label">
-                  <span>{label}</span>
+                  <span>{label()}</span>
                 </div>
               );
             }}
@@ -404,7 +411,9 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                   const ev = layout.ev;
                   const s = new Date(ev.start);
                   const e = new Date(ev.end || ev.start);
-                  const timeStr = `${formatClock(s)} - ${formatClock(e)}`;
+                  // Memoized so the label updates in place when the time format
+                  // setting is switched (avoids a full card re-creation).
+                  const timeStr = createMemo(() => `${formatClock(s)} - ${formatClock(e)}`);
                   const isResizing = resize()?.id === ev.id;
                   const preview = applyResizePreview(ev, layout);
 
@@ -435,6 +444,11 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                         e.stopPropagation();
                         props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                       }}
+                      onContextMenu={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
+                      }}
                       onKeyDown={e => onActivateKey(e, () => props.onOpenEvent(ev))}
                     >
                       <div
@@ -459,7 +473,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                           <span class="card-repeat-icon" title={`Repeats: ${ev.recurrence}`}><PhArrowsClockwise /></span>
                         )}
                       </div>
-                      <span class="card-time">{timeStr}</span>
+                      <span class="card-time">{timeStr()}</span>
                       {ev.location && <span class="card-loc"><PhMapPin /> {ev.location}</span>}
                       <div
                         class="event-resize-handle"

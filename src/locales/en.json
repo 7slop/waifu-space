@@ -145,7 +145,9 @@
     "views": {
       "month": "Month",
       "week": "Week",
-      "day": "Day"
+      "day": "Day",
+      "fourDay": "4 days",
+      "schedule": "Schedule"
     },
     "toolbar": {
       "create": "Create",
@@ -317,7 +319,17 @@
       "permissionDenied": "Blocked in browser settings",
       "test": "Send test notification",
       "testDelivered": "Test notification sent to your device",
-      "testFallback": "Native delivery not possible here — showing an in-app notice instead"
+      "testFallback": "Native delivery not possible here — showing an in-app notice instead",
+      "sound": "Notification sound",
+      "soundDesc": "Play a bell when a reminder arrives",
+      "weekStart": "Start of week",
+      "weekStartDesc": "Which day the calendar week begins on",
+      "weekStartSun": "Sunday",
+      "weekStartMon": "Monday",
+      "weekStartSat": "Saturday"
+    },
+    "schedule": {
+      "noEvents": "Nothing scheduled for this day"
     }
   },
   "notifications": {

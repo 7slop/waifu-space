@@ -172,7 +172,7 @@ describe('CalendarPlanner Component & SSR Safety (Issue #11)', () => {
     expect(screen.queryByTitle('Delete Event')).not.toBeInTheDocument();
   });
 
-  it('renders the full Sun..Sat range in the week view title across the fall-back DST weekend', () => {
+  it('renders the full Mon..Sun range in the week view title across the fall-back DST weekend', () => {
     // The fixed-24h arithmetic (start + 6*86400000) showed "Oct 25 – Oct 30"
     // and skipped the Saturday. October 2026 is only in future/recent time in
     // the reference environment, so when Oct 2026 has passed this assertion is
@@ -197,7 +197,7 @@ describe('CalendarPlanner Component & SSR Safety (Issue #11)', () => {
     expect(thirtyFirst).toBeTruthy();
     fireEvent.click(thirtyFirst!);
 
-    expect(container.querySelector('.gcal-title')?.textContent).toBe('Oct 25 – Oct 31, 2026');
+    expect(container.querySelector('.gcal-title')?.textContent).toBe('Oct 26 – Nov 1, 2026');
   });
 
   it('handles keyboard shortcuts (Escape closes popover/modal)', () => {

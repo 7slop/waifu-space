@@ -1,10 +1,13 @@
-import { For } from 'solid-js';
+import { For, createMemo } from 'solid-js';
 import { CalendarEventItem } from '../lib/ical';
-import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate } from '../lib/store';
+import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate, weekdayOrder } from '../lib/store';
+import { state } from '../lib/store';
 import { t, formatDate, holidayTooltip, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
 import { PhCake, PhArrowsClockwise, GlyphText } from './icons';
+
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 export function CalendarMonthView(props: {
   currentDate: Date;
@@ -22,7 +25,8 @@ export function CalendarMonthView(props: {
     const firstDay = new Date(y, m, 1);
     const lastDay = new Date(y, m + 1, 0);
 
-    const startIdx = firstDay.getDay();
+    const order = weekdayOrder(state.settings.weekStart ?? 0);
+    const startIdx = order.indexOf(firstDay.getDay());
     const totalDays = lastDay.getDate();
     const prevMonthDays = new Date(y, m, 0).getDate();
 
@@ -107,13 +111,9 @@ export function CalendarMonthView(props: {
   return (
     <div class="month-grid-container">
       <div class="month-header-row">
-        <div class="month-col-header">{t('calendar.weekdays.sun')}</div>
-        <div class="month-col-header">{t('calendar.weekdays.mon')}</div>
-        <div class="month-col-header">{t('calendar.weekdays.tue')}</div>
-        <div class="month-col-header">{t('calendar.weekdays.wed')}</div>
-        <div class="month-col-header">{t('calendar.weekdays.thu')}</div>
-        <div class="month-col-header">{t('calendar.weekdays.fri')}</div>
-        <div class="month-col-header">{t('calendar.weekdays.sat')}</div>
+        {weekdayOrder(state.settings.weekStart ?? 0).map(dow => (
+          <div class="month-col-header">{t(`calendar.weekdays.${DAY_KEYS[dow]}`)}</div>
+        ))}
       </div>
 
       <div class="month-days-grid">
@@ -143,9 +143,11 @@ export function CalendarMonthView(props: {
                 <div class="day-events-wrapper">
                   <For each={dayEvts().slice(0, 4)}>
                     {ev => {
-                      const startTime = ev.allDay
-                        ? ''
-                        : formatClock(ev.start);
+                      // Memoized so the label updates in place when the
+                      // 12h/24h setting is switched.
+                      const startTime = createMemo(() =>
+                        ev.allDay ? '' : formatClock(ev.start)
+                      );
 
                       return (
                         <div
@@ -169,6 +171,11 @@ export function CalendarMonthView(props: {
                             e.stopPropagation();
                             props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                           }}
+                          onContextMenu={e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
+                          }}
                           onKeyDown={e => onActivateKey(e, () => props.onOpenEvent(ev))}
                         >
                           {ev.type === 'task' && (
@@ -185,7 +192,7 @@ export function CalendarMonthView(props: {
                           {ev.type === 'birthday' && <span class="pill-icon"><PhCake /></span>}
                           {ev._holiday && <span class="pill-holiday-flag"><GlyphText text={ev._holiday.culture ? '🎉' : countryFlagEmoji(ev._holiday.countryCode)} /></span>}
                           <span class="pill-title">
-                            {startTime && <small>{startTime} </small>}
+                            {startTime() && <small>{startTime()} </small>}
                             {ev.title}
                             {ev.recurrence && ev.recurrence !== 'none' && (
                               <span class="pill-repeat-icon" title={t('calendar.sidebar.repeats', { rule: ev.recurrence })}> <PhArrowsClockwise /></span>

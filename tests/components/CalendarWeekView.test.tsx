@@ -28,15 +28,15 @@ function renderWeekAt(saturday: Date) {
 }
 
 describe('CalendarWeekView daylight-saving safety (Issue: Oct 31 missing)', () => {
-  it('renders all seven consecutive day columns Sun..Sat across the Oct 2026 fall-back weekend', () => {
+  it('renders all seven consecutive day columns Mon..Sun across the Oct 2026 fall-back weekend', () => {
     const { container } = renderWeekAt(new Date(2026, 9, 31)); // Saturday Oct 31, 2026
 
     const numbers = Array.from(container.querySelectorAll('.week-day-num')).map(el => el.textContent);
     // With the old fixed-24h arithmetic this week produced "25 25 26 27 28 29 30".
-    expect(numbers).toEqual(['25', '26', '27', '28', '29', '30', '31']);
+    expect(numbers).toEqual(['26', '27', '28', '29', '30', '31', '1']);
 
     const names = Array.from(container.querySelectorAll('.week-day-name')).map(el => el.textContent);
-    expect(names).toEqual(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
+    expect(names).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
   });
 
   it('keeps the grid and allday strip in sync for the same week', () => {

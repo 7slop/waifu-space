@@ -1,6 +1,7 @@
-import { For, Show, onMount, createSignal } from 'solid-js';
+import { For, Show, onMount, createSignal, createMemo } from 'solid-js';
 import { CalendarEventItem } from '../lib/ical';
-import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate } from '../lib/store';
+import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate, startOfWeek } from '../lib/store';
+import { state } from '../lib/store';
 import { layoutTimedEvents } from '../lib/calendar-layout';
 import { t, getLocale, holidayTooltip, hourMinute, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
@@ -10,6 +11,7 @@ import { PhArrowsClockwise, PhMapPin, GlyphText } from './icons';
 export function CalendarWeekView(props: {
   currentDate: Date;
   events: CalendarEventItem[];
+  dayCount?: number;
   onSelectSlot: (d: Date) => void;
   onSelectRange?: (range: { start: Date; end: Date }) => void;
   onOpenEvent: (ev: CalendarEventItem, anchorRect?: DOMRect) => void;
@@ -23,18 +25,12 @@ export function CalendarWeekView(props: {
     }
   });
 
-  const getStartOfWeek = (d: Date) => {
-    const res = new Date(d);
-    const day = res.getDay();
-    res.setDate(res.getDate() - day);
-    res.setHours(0, 0, 0, 0);
-    return res;
-  };
+  const getStartOfWeek = (d: Date) => startOfWeek(d, state.settings.weekStart ?? 0);
 
   const weekDays = () => {
     const start = getStartOfWeek(props.currentDate);
     const days: Date[] = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < (props.dayCount ?? 7); i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       days.push(d);
@@ -347,6 +343,11 @@ export function CalendarWeekView(props: {
                         e.stopPropagation();
                         props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                       }}
+                      onContextMenu={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
+                      }}
                       onKeyDown={e => onActivateKey(e, () => props.onOpenEvent(ev))}
                     >
                       {ev.type === 'task' && (
@@ -373,14 +374,16 @@ export function CalendarWeekView(props: {
 
       {/* 24-Hour Time Grid */}
       <div class="week-time-grid" ref={scrollContainerRef}>
-        <div class="time-gutter">
+<div class="time-gutter">
           <For each={Array.from({ length: 24 })}>
             {(_, idx) => {
               const h = idx();
-              const label = h === 0 ? '' : hourMinute(h, 0);
+              // Memoized so the gutter re-renders instantly when the
+              // 12h/24h setting changes (a plain read inside <For> wouldn't).
+              const label = createMemo(() => (h === 0 ? '' : hourMinute(h, 0)));
               return (
                 <div class="time-slot-label">
-                  <span>{label}</span>
+                  <span>{label()}</span>
                 </div>
               );
             }}
@@ -448,7 +451,9 @@ export function CalendarWeekView(props: {
                       {layout => {
                             const ev = layout.ev;
                             const s = new Date(ev.start);
-                            const timeStr = `${formatClock(s)}`;
+                            // Memoized so the label updates in place when the
+                            // time format setting is switched.
+                            const timeStr = createMemo(() => `${formatClock(s)}`);
                             const isResizing = resize()?.id === ev.id;
                             const preview = applyResizePreview(ev, layout);
 
@@ -479,6 +484,11 @@ export function CalendarWeekView(props: {
                                   e.stopPropagation();
                                   props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                                 }}
+                                onContextMenu={e => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
+                                }}
                                 onKeyDown={e => onActivateKey(e, () => props.onOpenEvent(ev))}
                               >
                                 <div
@@ -503,7 +513,7 @@ export function CalendarWeekView(props: {
                                     <span class="card-repeat-icon" title={`Repeats: ${ev.recurrence}`}><PhArrowsClockwise /></span>
                                   )}
                                 </div>
-                                <span class="card-time">{timeStr}</span>
+                                <span class="card-time">{timeStr()}</span>
                                 {ev.location && <span class="card-loc"><PhMapPin /> {ev.location}</span>}
                                 <div
                                   class="event-resize-handle"

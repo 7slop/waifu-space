@@ -145,7 +145,9 @@
     "views": {
       "month": "月",
       "week": "週",
-      "day": "日"
+      "day": "日",
+      "fourDay": "4日",
+      "schedule": "スケジュール"
     },
     "toolbar": {
       "create": "作成",
@@ -317,7 +319,17 @@
       "permissionDenied": "ブラウザ設定でブロックされています",
       "test": "テスト通知を送信",
       "testDelivered": "端末にテスト通知を送信しました",
-      "testFallback": "ネイティブ通知を利用できないため、代わりに画面内通知を表示しました"
+      "testFallback": "ネイティブ通知を利用できないため、代わりに画面内通知を表示しました",
+      "sound": "通知サウンド",
+      "soundDesc": "通知の到着時にベルを鳴らします",
+      "weekStart": "週の開始日",
+      "weekStartDesc": "カレンダーの週が始まる曜日",
+      "weekStartSun": "日曜日",
+      "weekStartMon": "月曜日",
+      "weekStartSat": "土曜日"
+    },
+    "schedule": {
+      "noEvents": "この日の予定はありません"
     }
   },
   "notifications": {
