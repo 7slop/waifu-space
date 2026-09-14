@@ -106,8 +106,8 @@ export class DmRealtime {
   }
 
   private async handlePresenceBroadcast(channel: RealtimeChannel, payload: RealtimePresencePayload): Promise<void> {
+    if (!payload?.userId) return;
     const { userId } = payload;
-    if (!userId) return;
     const state = (channel.presenceState() as Record<string, Array<{ payload: RealtimePresencePayload }>>)[userId] ?? [];
     // A user is present only while they have an active tracked presence.
     const current = state.map(e => e?.payload).find(p => p?.userId === userId);
@@ -135,11 +135,16 @@ export class DmRealtime {
     const presence = this.presenceChannel as unknown as PresenceBindable;
     presence.on('presence', { event: 'sync' }, () => this.handlePresenceState());
     presence.on('presence', { event: 'join' }, (_ctx, presencePayload) => {
-      void this.handlePresenceBroadcast(this.presenceChannel!, presencePayload as RealtimePresencePayload);
+      const payload = presencePayload as RealtimePresencePayload | undefined;
+      if (payload?.userId) {
+        void this.handlePresenceBroadcast(this.presenceChannel!, payload);
+      }
     });
     presence.on('presence', { event: 'leave' }, (_ctx, presencePayload) => {
-      const payload = presencePayload as RealtimePresencePayload;
-      void this.applyPresenceEntry(payload.userId, null);
+      const payload = presencePayload as RealtimePresencePayload | undefined;
+      if (payload?.userId) {
+        void this.applyPresenceEntry(payload.userId, null);
+      }
     });
     this.presenceChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
