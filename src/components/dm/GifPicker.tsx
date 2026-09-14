@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from 'solid-js';
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { dmState, gifLoadFavorites, gifSearch, gifToggleFavorite, isGifFavorited, sendGif, setGifOpen, setGifTab } from '../../lib/dm/store';
 import { gifKeyOfUrl } from '../../lib/dm/api';
 import { t } from '../../lib/i18n';
@@ -13,7 +13,17 @@ export function GifPicker() {
   const [query, setQuery] = createSignal('');
   let debounce: ReturnType<typeof setTimeout> | undefined;
 
-  onMount(() => void gifLoadFavorites());
+  onMount(() => {
+    void gifLoadFavorites();
+    document.addEventListener('pointerdown', closeOnClickAway);
+  });
+
+  onCleanup(() => document.removeEventListener('pointerdown', closeOnClickAway));
+
+  const closeOnClickAway = (e: PointerEvent) => {
+    const el = e.target as HTMLElement | null;
+    if (!el || !el.closest('.dm-gif-picker') && !el.closest('.dm-gif-btn')) setGifOpen(false);
+  };
 
   const runSearch = (value: string) => {
     setGifTab('search');

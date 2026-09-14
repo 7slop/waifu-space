@@ -15,7 +15,7 @@ import { DmPresenceStatusMenu } from './DmPresenceStatusMenu';
  */
 export function DmSidebar() {
   const [query, setQuery] = createSignal('');
-  const [profileOpen, setProfileOpen] = createSignal(false);
+  const [profileTarget, setProfileTarget] = createSignal<{ userId: string; anchor: () => DOMRect | null } | null>(null);
   let userPanelRef: HTMLDivElement | undefined;
 
   const onQuery = (value: string) => {
@@ -28,13 +28,20 @@ export function DmSidebar() {
     clearSearch();
   };
 
-  const openProfile = (e: MouseEvent) => {
+  const openOwnProfile = (e: MouseEvent) => {
     if ((e.target as HTMLElement).closest('.dm-status-wrap')) return;
-    setProfileOpen((v) => !v);
+    if (profileTarget()) {
+      setProfileTarget(null);
+    } else {
+      setProfileTarget({ userId: state.user?.id ?? '', anchor: () => (userPanelRef ? userPanelRef.getBoundingClientRect() : new DOMRect(0, 0, 0, 0)) });
+    }
   };
 
-  const ownId = () => state.user?.id ?? null;
-  const anchor = () => (userPanelRef ? userPanelRef.getBoundingClientRect() : new DOMRect(0, 0, 0, 0));
+  const openUserProfile = (userId: string, el: HTMLElement) => {
+    setProfileTarget((prev) => (prev?.userId === userId ? null : { userId, anchor: () => (el ? el.getBoundingClientRect() : new DOMRect(0, 0, 0, 0)) }));
+  };
+
+  const closeProfile = () => setProfileTarget(null);
 
   return (
     <aside class="dm-sidebar" data-testid="dm-sidebar">
@@ -56,10 +63,10 @@ export function DmSidebar() {
       </div>
 
       <div class="dm-list-scroll">
-        <DmChannelList />
+        <DmChannelList onUserClick={openUserProfile} />
       </div>
 
-      <div class="dm-user-panel" data-testid="dm-user-panel" ref={userPanelRef} onClick={openProfile}>
+      <div class="dm-user-panel" data-testid="dm-user-panel" ref={userPanelRef} onClick={openOwnProfile}>
         <DmAvatar
           name={state.user?.username ?? '?'}
           avatarUrl={state.user?.avatarUrl}
@@ -72,8 +79,8 @@ export function DmSidebar() {
         </div>
       </div>
 
-      <Show when={profileOpen() && ownId()}>
-        <DmProfilePopover userId={ownId()!} anchor={anchor} onClose={() => setProfileOpen(false)} />
+      <Show when={profileTarget()}>
+        <DmProfilePopover userId={profileTarget()!.userId} anchor={profileTarget()!.anchor} onClose={closeProfile} />
       </Show>
     </aside>
   );

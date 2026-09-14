@@ -44,7 +44,7 @@ function PresenceChip(props: { user: DmUserLite }) {
  * most recent message. While a search is active (query set + results loaded)
  * it renders user search results instead, which open a conversation on click.
  */
-export function DmChannelList() {
+export function DmChannelList(props: { onUserClick?: (userId: string, el: HTMLElement) => void }) {
   const searching = () => dmState.searchQuery.trim().length >= 2;
 
   const sorted = () =>
@@ -59,7 +59,7 @@ export function DmChannelList() {
 
   return (
     <div class="dm-channel-list" data-testid="dm-channel-list">
-      <Show when={searching()} fallback={<For each={sorted()}>{(conv) => <ChannelRow conv={conv} />}</For>}>
+      <Show when={searching()} fallback={<For each={sorted()}>{(conv) => <ChannelRow conv={conv} onUserClick={props.onUserClick} />}</For>}>
         <Show
           when={dmState.searchResults.length > 0}
           fallback={<div class="dm-list-hint">{t('dm.searchHint')} / {t('dm.searchNoResults')}</div>}
@@ -67,7 +67,17 @@ export function DmChannelList() {
           <For each={dmState.searchResults}>
             {(user) => (
               <button class="dm-conv-row" data-testid={`dm-search-user-${user.id}`} onClick={() => void openConversation(user.id)}>
-                <DmAvatar name={user.username} avatarUrl={user.avatarUrl} status={user.presenceStatus ?? 'offline'} size="36px" />
+                <span
+                  class="dm-avatar-btn"
+                  role="button"
+                  data-testid={`dm-search-avatar-${user.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    props.onUserClick?.(user.id, e.currentTarget);
+                  }}
+                >
+                  <DmAvatar name={user.username} avatarUrl={user.avatarUrl} status={user.presenceStatus ?? 'offline'} size="36px" />
+                </span>
                 <span class="dm-conv-body">
                   <span class="dm-conv-name">{user.username}</span>
                   <Show when={user.customStatus}>
@@ -85,7 +95,7 @@ export function DmChannelList() {
   );
 }
 
-function ChannelRow(props: { conv: DmConversationSummary }) {
+function ChannelRow(props: { conv: DmConversationSummary; onUserClick?: (userId: string, el: HTMLElement) => void }) {
   const status = () => statusForUserId(props.conv.otherUser.id, dmState.presence, realtimeStatusMap());
   const active = () => dmState.activeConversationId === props.conv.id;
   const unread = () => props.conv.unreadCount ?? 0;
@@ -97,12 +107,22 @@ function ChannelRow(props: { conv: DmConversationSummary }) {
       data-testid={`dm-conv-${props.conv.id}`}
       onClick={() => void selectConversation(props.conv.id)}
     >
-      <DmAvatar
-        name={props.conv.otherUser.username || props.conv.otherUser.id}
-        avatarUrl={props.conv.otherUser.avatarUrl}
-        status={status()}
-        size="36px"
-      />
+      <span
+        class="dm-avatar-btn"
+        role="button"
+        data-testid={`dm-conv-avatar-${props.conv.id}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onUserClick?.(props.conv.otherUser.id, e.currentTarget);
+        }}
+      >
+        <DmAvatar
+          name={props.conv.otherUser.username || props.conv.otherUser.id}
+          avatarUrl={props.conv.otherUser.avatarUrl}
+          status={status()}
+          size="36px"
+        />
+      </span>
       <span class="dm-conv-body">
         <span class="dm-conv-top">
           <span class="dm-conv-name">{props.conv.otherUser.username || props.conv.otherUser.id}</span>

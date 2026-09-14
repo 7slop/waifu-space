@@ -53,15 +53,21 @@ export function DmProfilePopover(props: { userId: string; anchor: () => DOMRect 
     setPos({ top, left, openUp });
   };
 
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') props.onClose();
+  };
+
   onMount(() => {
     recompute();
     window.addEventListener('resize', recompute);
     window.addEventListener('scroll', recompute, true);
+    document.addEventListener('keydown', onKeyDown);
   });
 
   onCleanup(() => {
     window.removeEventListener('resize', recompute);
     window.removeEventListener('scroll', recompute, true);
+    document.removeEventListener('keydown', onKeyDown);
   });
 
   return (

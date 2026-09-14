@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { dmState, setOwnPresence } from '../../lib/dm/store';
 import { isStorableStatus, statusColor } from '../../lib/dm/presence';
 import { t } from '../../lib/i18n';
@@ -39,6 +39,25 @@ export function DmPresenceStatusMenu() {
     void setOwnPresence(status, dmState.myPresence?.customStatus ?? null);
     setOpen(false);
   };
+
+  const closeOnClickAway = (e: PointerEvent) => {
+    const el = e.target as HTMLElement | null;
+    if (open() && (!el || !el.closest('.dm-status-wrap'))) setOpen(false);
+  };
+
+  const closeOnKey = (e: KeyboardEvent) => {
+    if (open() && e.key === 'Escape') setOpen(false);
+  };
+
+  onMount(() => {
+    document.addEventListener('pointerdown', closeOnClickAway);
+    document.addEventListener('keydown', closeOnKey);
+  });
+
+  onCleanup(() => {
+    document.removeEventListener('pointerdown', closeOnClickAway);
+    document.removeEventListener('keydown', closeOnKey);
+  });
 
   const saveCustom = () => {
     const value = custom().trim();
