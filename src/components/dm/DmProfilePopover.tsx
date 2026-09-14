@@ -33,7 +33,6 @@ export function DmProfilePopover(props: { userId: string; anchor: () => DOMRect 
     }
   );
 
-  const own = () => state.user?.id === props.userId;
   const presence = () => {
     const realtime = dmState.realtimePresence[props.userId]?.status;
     return statusForUserId(props.userId, dmState.presence, { [props.userId]: realtime });
@@ -92,10 +91,10 @@ export function DmProfilePopover(props: { userId: string; anchor: () => DOMRect 
         />
 
         <h3 class="dm-profile-name" data-testid="dm-profile-name">
-          {profile()?.username ?? dmState.conversations.find((c) => c.otherUser.id === props.userId)?.otherUser?.username ?? '…'}
-          <Show when={own()}>
-            <span class="dm-msg-you"> ({t('chat.you')})</span>
-          </Show>
+          {profile()?.username
+            ?? dmState.conversations.find((c) => c.otherUser.id === props.userId)?.otherUser?.username
+            ?? (state.user?.id === props.userId ? state.user?.username : null)
+            ?? '…'}
         </h3>
         <span class="dm-popover-status" data-testid="dm-popover-status">
           <span class="dm-status-dot" style={{ background: statusColor(presence()) }} />

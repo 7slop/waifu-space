@@ -122,7 +122,7 @@ describe('DmSidebar', () => {
     const { container } = render(() => <DmSidebar />);
     fireEvent.click(container.querySelector('.dm-user-panel')!);
     expect(container.querySelector('[data-testid="dm-profile-popover"]')).toBeInTheDocument();
-    expect(container.textContent).toContain('You');
+    expect(container.querySelector('[data-testid="dm-profile-name"]')).toHaveTextContent('me');
     restore();
   });
 });

@@ -47,7 +47,7 @@ describe('DmMessageGroup', () => {
     ));
     const row = container.querySelector('.dm-msg');
     expect(row).toHaveClass('dm-msg-own');
-    expect(container.querySelector('.dm-msg-you')).toHaveTextContent('(You)');
+    expect(container.querySelector('.dm-msg-you')).not.toBeInTheDocument();
   });
 
   it('renders a gif message as an embedded image', () => {

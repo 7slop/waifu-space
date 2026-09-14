@@ -1,7 +1,6 @@
-import { createSignal, Show } from 'solid-js';
+import { Show } from 'solid-js';
 import { isOwnMessage, mediaSourceOf, gifKeyOfUrl, formatMessageTime, MediaKind } from '../../lib/dm/api';
 import { gifToggleFavoriteByUrl, isGifFavorited } from '../../lib/dm/store';
-import { t } from '../../lib/i18n';
 import { GlyphText, PhHeart, PhHeartFill } from '../icons';
 import { DmAvatar } from './DmAvatar';
 import type { DmMessage } from '../../lib/dm/types';
@@ -49,9 +48,6 @@ export function DmMessageGroup(props: {
             >
               {props.senderName}
             </button>
-            <Show when={own()}>
-              <span class="dm-msg-you">({t('chat.you')})</span>
-            </Show>
             <span class="dm-msg-time" title={new Date(props.message.createdAt).toLocaleString()}>
               {formatMessageTime(props.message.createdAt)}
             </span>
