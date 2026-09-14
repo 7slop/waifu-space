@@ -129,6 +129,21 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings({ customAccent: '#abc' }).customAccent).toBe('#abc');
   });
 
+  it('sanitizes soundEnabled as a boolean (non-booleans fall back)', () => {
+    expect(sanitizeSettings({ soundEnabled: false }).soundEnabled).toBe(false);
+    expect(sanitizeSettings({ soundEnabled: true }).soundEnabled).toBe(true);
+    expect(sanitizeSettings({ soundEnabled: 0 }).soundEnabled).toBe(true); // 0 is not a boolean -> default true
+  });
+
+  it('accepts only week starts of 0 (Sun), 1 (Mon) or 6 (Sat)', () => {
+    expect(sanitizeSettings({ weekStart: 0 }).weekStart).toBe(0);
+    expect(sanitizeSettings({ weekStart: 1 }).weekStart).toBe(1);
+    expect(sanitizeSettings({ weekStart: 6 }).weekStart).toBe(6);
+    expect(sanitizeSettings({ weekStart: 3 }).weekStart).toBe(1);
+    expect(sanitizeSettings({ weekStart: 2 }).weekStart).toBe(1);
+    expect(sanitizeSettings({ weekStart: '6' }).weekStart).toBe(6);
+  });
+
   it('returns empty object for completely empty input', () => {
     expect(sanitizeSettings({})).toEqual({});
   });

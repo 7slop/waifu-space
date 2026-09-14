@@ -20,6 +20,7 @@ import {
   stopNotificationScheduler,
   sendTestNotification,
   canNotifyNatively,
+  playNotificationSound,
 } from '../../src/lib/notifications';
 
 type CapturedNotification = { title: string; body: string };
@@ -204,5 +205,64 @@ describe('Browser notifications (notifications.ts)', () => {
     // Calling stop again (or after the effect re-runs) is a no-op.
     stopNotificationScheduler();
     expect(clearSpy).toHaveBeenCalledTimes(1);
+  });
+
+  describe('notification chime (playNotificationSound)', () => {
+    class FakeAudioContext {
+      state = 'running';
+      currentTime = 0;
+      destination: Record<string, never> = {};
+      createOscillator() {
+        return {
+          type: '',
+          connect: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+          frequency: { setValueAtTime: vi.fn() },
+        };
+      }
+      createGain() {
+        return {
+          connect: vi.fn(),
+          gain: {
+            setValueAtTime: vi.fn(),
+            exponentialRampToValueAtTime: vi.fn(),
+          },
+        };
+      }
+    }
+
+    beforeEach(() => {
+      // Fresh module graph so the module's cached AudioContext (created by
+      // happy-dom during earlier deliver() calls) doesn't shadow our stub.
+      vi.resetModules();
+      vi.stubGlobal('Notification', FakeNotification);
+    });
+
+    it('plays the two-tone bell when sound is enabled', async () => {
+      const osc = vi.spyOn(FakeAudioContext.prototype, 'createOscillator');
+      const gain = vi.spyOn(FakeAudioContext.prototype, 'createGain');
+      vi.stubGlobal('AudioContext', FakeAudioContext);
+      const { playNotificationSound } = await import('../../src/lib/notifications');
+      playNotificationSound();
+      expect(osc).toHaveBeenCalledTimes(2);
+      expect(gain).toHaveBeenCalledTimes(1);
+    });
+
+    it('is silent when the sound setting is disabled', async () => {
+      const osc = vi.spyOn(FakeAudioContext.prototype, 'createOscillator');
+      vi.stubGlobal('AudioContext', FakeAudioContext);
+      const { setState } = await import('../../src/lib/store');
+      const { playNotificationSound } = await import('../../src/lib/notifications');
+      setState('settings', 'soundEnabled', false);
+      playNotificationSound();
+      expect(osc).not.toHaveBeenCalled();
+    });
+
+    it('never throws when the browser has no audio context', async () => {
+      vi.stubGlobal('AudioContext', undefined);
+      const { playNotificationSound } = await import('../../src/lib/notifications');
+      expect(() => playNotificationSound()).not.toThrow();
+    });
   });
 });

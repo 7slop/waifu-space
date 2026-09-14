@@ -81,6 +81,63 @@ export function getNotificationSentMap(): SentMap {
 
 export type NotificationPermissionStatus = NotificationPermission | 'unsupported';
 
+let audioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!audioCtx) audioCtx = new Ctor();
+    if (audioCtx.state === 'closed') return null;
+    return audioCtx;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Plays a short two-tone bell chime through the Web Audio API (no asset file
+ * needed). Suppressed when `state.settings.soundEnabled` is off or when no
+ * audio output is available. The context is created lazily/wrapped in guards
+ * so autoplay policies or missing hardware never throw.
+ */
+export function playNotificationSound(): void {
+  if (typeof window === 'undefined') return;
+  if (!state.settings.soundEnabled) return;
+  let ctx: AudioContext | null;
+  try {
+    ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') void ctx.resume();
+  } catch {
+    return;
+  }
+  const now = ctx.currentTime;
+  try {
+    const master = ctx.createGain();
+    master.connect(ctx.destination);
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(0.16, now + 0.03);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+
+    const notes: Array<{ f: number; t: number; dur: number }> = [
+      { f: 880, t: 0, dur: 0.3 },
+      { f: 1318.5, t: 0.14, dur: 0.35 }
+    ];
+    for (const note of notes) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(note.f, now + note.t);
+      osc.connect(master);
+      osc.start(now + note.t);
+      osc.stop(now + note.t + note.dur);
+    }
+  } catch {
+    // Audio unavailable: silently skip the chime.
+  }
+}
+
 /** True when the browser can actually pop a native notification right now. */
 export function canNotifyNatively(): boolean {
   return (
@@ -110,6 +167,7 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
  * message so no reminder is ever silently dropped.
  */
 function deliver(title: string, body: string): void {
+  playNotificationSound();
   if (canNotifyNatively()) {
     try {
       new Notification(title, { body });
@@ -129,6 +187,7 @@ function deliver(title: string, body: string): void {
 export function sendTestNotification(): 'native' | 'toast' {
   const title = t('notifications.testTitle');
   const body = t('notifications.testBody');
+  playNotificationSound();
   if (canNotifyNatively()) {
     try {
       new Notification(title, { body });

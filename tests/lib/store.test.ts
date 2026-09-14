@@ -23,6 +23,8 @@ import {
   dateKeyOf,
   pokeAvatar,
   headpatWaifu,
+  weekdayOrder,
+  startOfWeek,
   loadCloudProgress,
   pushProgressToCloud,
   resetAccountProgress,
@@ -244,6 +246,41 @@ describe('Global Store & RPG State (store.ts)', () => {
       toggleTask(task.id); // un-complete
       toggleTask(task.id); // complete again -> no second reward
       expect(state.rpg.coins).toBe(coinsAfterFirst);
+    });
+  });
+
+  describe('Week-start helpers (weekdayOrder / startOfWeek)', () => {
+    it('orders weekday indexes from the configured week start', () => {
+      expect(weekdayOrder(0)).toEqual([0, 1, 2, 3, 4, 5, 6]); // Sun..Sat
+      expect(weekdayOrder(1)).toEqual([1, 2, 3, 4, 5, 6, 0]); // Mon..Sun
+      expect(weekdayOrder(6)).toEqual([6, 0, 1, 2, 3, 4, 5]); // Sat..Fri
+    });
+
+    it('returns the Monday-start week containing the given date', () => {
+      // Wednesday Oct 14 2026 -> Monday Oct 12.
+      expect(startOfWeek(new Date(2026, 9, 14), 1).getDay()).toBe(1);
+      expect(startOfWeek(new Date(2026, 9, 14), 1).getDate()).toBe(12);
+    });
+
+    it('returns the Sunday-start week containing the given date', () => {
+      // Wednesday Oct 14 2026 -> Sunday Oct 11.
+      expect(startOfWeek(new Date(2026, 9, 14), 0).getDay()).toBe(0);
+      expect(startOfWeek(new Date(2026, 9, 14), 0).getDate()).toBe(11);
+    });
+
+    it('returns the Saturday-start week containing the given date', () => {
+      // Saturday Oct 31 2026 -> itself; Friday Nov 6 2026 -> Oct 31.
+      expect(startOfWeek(new Date(2026, 9, 31), 6).getDate()).toBe(31);
+      expect(startOfWeek(new Date(2026, 10, 6), 6).getDate()).toBe(31);
+    });
+
+    it('never shifts the selected date itself for its own week start', () => {
+      for (const ws of [0, 1, 6]) {
+        const d = new Date(2026, 9, 14);
+        const s = startOfWeek(d, ws);
+        expect(Number.isFinite(s.getTime())).toBe(true);
+        expect(s <= d).toBe(true);
+      }
     });
   });
 

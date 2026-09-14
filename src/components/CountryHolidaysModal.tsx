@@ -98,6 +98,18 @@ export function CountryHolidaysModal(props: { isOpen: boolean; onClose: () => vo
     saveState();
   };
 
+  const setWeekStart = (ws: 0 | 1 | 6) => {
+    if (state.settings.weekStart === ws) return;
+    setState('settings', 'weekStart', ws);
+    saveState();
+  };
+
+  const toggleSound = (checked: boolean) => {
+    if (state.settings.soundEnabled === checked) return;
+    setState('settings', 'soundEnabled', checked);
+    saveState();
+  };
+
   const handleTestNotification = async () => {
     let permission = getNotificationPermission();
     if (permission === 'default' || permission === 'unsupported') {
@@ -191,6 +203,50 @@ export function CountryHolidaysModal(props: { isOpen: boolean; onClose: () => vo
               <button type="button" class="vs-test-btn" onClick={() => void handleTestNotification()}>
                 {t('calendar.viewSettings.test')}
               </button>
+            </div>
+
+            <div class="vs-row">
+              <div class="vs-label-wrap">
+                <span class="vs-title">{t('calendar.viewSettings.sound')}</span>
+                <span class="vs-desc">{t('calendar.viewSettings.soundDesc')}</span>
+              </div>
+              <input
+                type="checkbox"
+                class="vs-switch"
+                checked={state.settings.soundEnabled}
+                onChange={e => toggleSound(e.currentTarget.checked)}
+                aria-label={t('calendar.viewSettings.sound')}
+              />
+            </div>
+
+            <div class="vs-row">
+              <div class="vs-label-wrap">
+                <span class="vs-title">{t('calendar.viewSettings.weekStart')}</span>
+                <span class="vs-desc">{t('calendar.viewSettings.weekStartDesc')}</span>
+              </div>
+              <div class="vs-options">
+                <button
+                  type="button"
+                  class={`vs-option ${state.settings.weekStart === 0 ? 'active' : ''}`}
+                  onClick={() => setWeekStart(0)}
+                >
+                  {t('calendar.viewSettings.weekStartSun')}
+                </button>
+                <button
+                  type="button"
+                  class={`vs-option ${state.settings.weekStart === 1 ? 'active' : ''}`}
+                  onClick={() => setWeekStart(1)}
+                >
+                  {t('calendar.viewSettings.weekStartMon')}
+                </button>
+                <button
+                  type="button"
+                  class={`vs-option ${state.settings.weekStart === 6 ? 'active' : ''}`}
+                  onClick={() => setWeekStart(6)}
+                >
+                  {t('calendar.viewSettings.weekStartSat')}
+                </button>
+              </div>
             </div>
           </section>
 
