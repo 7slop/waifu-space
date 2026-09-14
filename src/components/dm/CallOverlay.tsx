@@ -117,17 +117,21 @@ function IncomingCallBar() {
 function ActiveCallBar() {
   const call = () => dmState.call!;
   const ringing = () => call().callState === 'ringing';
-  const videoActive = () => call().callState === 'connected' && !call().videoOff;
-  const screen = createMemo<MediaStream | null>(() => (dmState.call?.callState === 'connected' ? callRemoteStream() : null));
+  const connected = () => call().callState === 'connected';
+  // Camera/screen toggles are allowed while ringing too (Discord-style
+  // "start preparing"): the local preview fills the stage before answering.
+  const videoActive = () => !call().videoOff && (connected() || ringing());
+  const screen = createMemo<MediaStream | null>(() => (connected() ? callRemoteStream() : null));
   const local = createMemo<MediaStream | null>(() => callLocalStream());
   const peer = () => peerInfo();
   const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
 
   // When the local user shares their screen the shared feed (local stream)
-  // fills the big stage, so the remote camera becomes a square PiP.
+  // fills the big stage, so the remote camera becomes a square PiP. Before
+  // the call is connected the stage always shows the local preview.
   const sharing = () => call().screenSharing;
-  const mainStream = () => (sharing() ? local() : screen());
-  const pipStream = () => (sharing() ? screen() : local());
+  const mainStream = () => (sharing() || !connected() ? local() : screen());
+  const pipStream = () => (sharing() && connected() ? screen() : local());
 
   // Drag handle at the bottom resizes the dock height (clamped 96px..60vh).
   const [dockH, setDockH] = createSignal<number | null>(null);
@@ -163,7 +167,7 @@ function ActiveCallBar() {
       style={dockH() ? { height: `${dockH()}px` } : undefined}
     >
       <div class="dm-call-bar">
-        <div class="dm-call-avatars" data-testid="dm-call-avatars">
+        <div class={`dm-call-avatars${videoActive() ? ' squared' : ''}`} data-testid="dm-call-avatars">
           <div class="dm-call-avatar-slot mine">
             <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
           </div>

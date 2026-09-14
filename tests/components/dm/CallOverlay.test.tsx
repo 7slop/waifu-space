@@ -206,6 +206,29 @@ describe('CallOverlay', () => {
     restore();
   });
 
+  it('enables a camera preview while still ringing (before answering)', async () => {
+    seedConv();
+    const restore = stubFetch({
+      '/api/dm/calls': () => ({
+        body: { success: true, call: callSession({ id: 'call-3', callerId: 'u-me', calleeId: 'u-bob' }) },
+        status: 201
+      }),
+      '/api/dm/calls/call-3/status': () => ({ body: { success: true } })
+    });
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    const { container } = render(() => <CallOverlay />);
+    expect(dmState.call?.callState).toBe('ringing');
+    expect(container.querySelector('.dm-call-remote-video')).not.toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-video-toggle"]')!);
+    await flush();
+    expect(dmState.call?.videoOff).toBe(false);
+    // pre-accept preview fills the stage and avatars turn into rounded squares
+    expect(container.querySelector('.dm-call-remote-video')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-avatars.squared')).toBeInTheDocument();
+    restore();
+  });
+
   it('screen share toggles on and shows in the bar', async () => {
     const offer: CallOfferBroadcast = {
       kind: 'call-offer',

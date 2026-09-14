@@ -1081,6 +1081,17 @@
   border: 2px solid var(--surface-1, #181825);
 }
 
+/* Avatars turn into rounded squares while video/preview is active. */
+.dm-call-avatars.squared .dm-call-avatar {
+  border-radius: 12px;
+}
+
+.dm-call-avatars.squared .dm-call-ring {
+  border-radius: 16px;
+  width: 70px;
+  height: 70px;
+}
+
 .dm-call-ring {
   position: absolute;
   top: 50%;
