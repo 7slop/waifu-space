@@ -1,4 +1,4 @@
-import { createEffect, createMemo, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import {
   acceptIncomingCall,
   callLocalStream,
@@ -128,8 +128,39 @@ function ActiveCallBar() {
   const mainStream = () => (sharing() ? local() : screen());
   const pipStream = () => (sharing() ? screen() : local());
 
+  // Drag handle at the bottom resizes the dock height (clamped 96px..60vh).
+  const [dockH, setDockH] = createSignal<number | null>(null);
+  let dockRef: HTMLDivElement | undefined;
+  let dragging = false;
+  let startY = 0;
+  let startH = 0;
+
+  const onResizeDown = (e: PointerEvent) => {
+    dragging = true;
+    startY = e.clientY;
+    startH = dockH() ?? dockRef?.offsetHeight ?? 96;
+    const target = e.currentTarget as HTMLElement | null;
+    try { target?.setPointerCapture?.(e.pointerId); } catch { /* jsdom/webkit */ }
+    target?.classList.add('dragging');
+  };
+  const onResizeMove = (e: PointerEvent) => {
+    if (!dragging) return;
+    const delta = e.clientY - startY;
+    setDockH(Math.min(window.innerHeight * 0.6, Math.max(96, startH + delta)));
+  };
+  const onResizeUp = (e: PointerEvent) => {
+    if (!dragging) return;
+    dragging = false;
+    (e.currentTarget as HTMLElement | null)?.classList.remove('dragging');
+  };
+
   return (
-    <div class={`dm-call-dock dm-call-active${videoActive() ? ' has-video' : ''}`} data-testid="dm-active-call">
+    <div
+      ref={dockRef}
+      class={`dm-call-dock dm-call-active${videoActive() ? ' has-video' : ''}${dockH() ? ' resized' : ''}`}
+      data-testid="dm-active-call"
+      style={dockH() ? { height: `${dockH()}px` } : undefined}
+    >
       <div class="dm-call-bar">
         <div class="dm-call-avatars" data-testid="dm-call-avatars">
           <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
@@ -193,6 +224,16 @@ function ActiveCallBar() {
           </div>
         </div>
       </Show>
+
+      <span
+        class="dm-call-resize-handle"
+        data-testid="dm-call-resize"
+        aria-hidden="true"
+        onPointerDown={onResizeDown}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeUp}
+        onPointerCancel={onResizeUp}
+      />
     </div>
   );
 }

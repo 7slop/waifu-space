@@ -134,6 +134,7 @@ describe('CallOverlay', () => {
   it('accepts an incoming call and transitions to an active call', async () => {
     const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
     setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
     const { container } = render(() => <CallOverlay />);
     fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
     await flush();
@@ -144,6 +145,7 @@ describe('CallOverlay', () => {
     // connected calls keep both avatars but drop the pulsing ring
     expect(container.querySelectorAll('[data-testid="dm-avatar"]').length).toBe(2);
     expect(container.querySelector('.dm-call-ring')).not.toBeInTheDocument();
+    restore();
   });
 
   it('startCall shows an outgoing ringing panel and hangup cancels it', async () => {
@@ -172,6 +174,7 @@ describe('CallOverlay', () => {
   it('mute toggles the call state in the overlay', async () => {
     const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
     setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
     const { container } = render(() => <CallOverlay />);
     fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
     await flush();
@@ -179,6 +182,7 @@ describe('CallOverlay', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-call-mute"]')!);
     await flush();
     expect(dmState.call?.muted).toBe(true);
+    restore();
   });
 
   it('camera button acquires a video feed and shows the stage', async () => {
@@ -189,6 +193,7 @@ describe('CallOverlay', () => {
       offer: { type: 'offer', sdp: 'offer' }
     };
     setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
     const { container } = render(() => <CallOverlay />);
     fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
     await flush();
@@ -198,6 +203,7 @@ describe('CallOverlay', () => {
     expect(dmState.call?.videoOff).toBe(false);
     expect(container.querySelector('.dm-call-remote-video')).toBeInTheDocument();
     expect(container.querySelector('.dm-call-pip-video')).toBeInTheDocument();
+    restore();
   });
 
   it('screen share toggles on and shows in the bar', async () => {
@@ -208,6 +214,7 @@ describe('CallOverlay', () => {
       offer: { type: 'offer', sdp: 'offer' }
     };
     setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
     const { container } = render(() => <CallOverlay />);
     fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
     await flush();
@@ -222,5 +229,6 @@ describe('CallOverlay', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-call-screen-toggle"]')!);
     await flush();
     expect(dmState.call?.screenSharing).toBe(false);
+    restore();
   });
 });
