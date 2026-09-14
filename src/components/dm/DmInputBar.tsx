@@ -1,0 +1,71 @@
+import { createSignal, Show } from 'solid-js';
+import { dmState, emitTyping, sendText, setGifOpen } from '../../lib/dm/store';
+import { t } from '../../lib/i18n';
+import { PhPaperPlaneTilt } from '../icons';
+import { GifPicker } from './GifPicker';
+
+/**
+ * The chat composer: a one-line textarea (Enter to send, Shift+Enter for a
+ * newline), a GIF button that opens {@link GifPicker}, and a send button.
+ * Keystrokes also broadcast a throttled "typing" indicator.
+ */
+export function DmInputBar() {
+  const [text, setText] = createSignal('');
+
+  const otherName = () => dmState.conversations.find((c) => c.id === dmState.activeConversationId)?.otherUser?.username ?? '';
+  const typingNames = () => {
+    const ids = dmState.typing[dmState.activeConversationId ?? ''] ?? [];
+    const conv = dmState.conversations.find((c) => c.id === dmState.activeConversationId);
+    return ids.length ? [`${conv?.otherUser?.username ?? 'Someone'}`] : [];
+  };
+
+  const send = () => {
+    const value = text().trim();
+    if (!value || !dmState.activeConversationId) return;
+    void sendText(value);
+    setText('');
+  };
+
+  return (
+    <div class="dm-input-area" data-testid="dm-input-area">
+      <Show when={typingNames().length > 0}>
+        <div class="dm-typing-indicator" data-testid="dm-typing-indicator">
+          {t('dm.typingOne', { name: typingNames()[0] })}
+        </div>
+      </Show>
+      <div class="dm-input-bar">
+        <button
+          class="dm-gif-btn"
+          data-testid="dm-gif-btn"
+          onClick={() => setGifOpen(!dmState.gifOpen)}
+          title={t('dm.gifTooltip')}
+        >
+          GIF
+        </button>
+        <textarea
+          class="dm-input-textarea"
+          data-testid="dm-input-textarea"
+          value={text()}
+          rows={1}
+          placeholder={t('dm.messagePlaceholder', { name: otherName() })}
+          onInput={(e) => {
+            setText(e.currentTarget.value);
+            emitTyping();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+        />
+        <button class="dm-send-btn" data-testid="dm-send-btn" onClick={send} disabled={!text().trim()}>
+          <PhPaperPlaneTilt />
+        </button>
+        <Show when={dmState.gifOpen}>
+          <GifPicker />
+        </Show>
+      </div>
+    </div>
+  );
+}

@@ -13,6 +13,7 @@ import {
 } from './lib/store';
 import { defenseGameActive, setDefenseGameActive } from './lib/defense-bridge';
 import { t } from './lib/i18n';
+import { configureDmRuntime, dmState } from './lib/dm/store';
 import { startNotificationScheduler, stopNotificationScheduler, sendNotification } from './lib/notifications';
 import { SakuraCanvas } from './components/SakuraCanvas';
 import { ToastNotification } from './components/ToastNotification';
@@ -29,7 +30,8 @@ import {
   PhDoor,
   PhWarning,
   PhRunning,
-  PhTimer
+  PhTimer,
+  PhBellRinging
 } from './components/icons';
 
 // Global Styles
@@ -40,6 +42,7 @@ import './styles/calendar.css';
 import './styles/settings.css';
 import './styles/rpg.css';
 import './styles/timebudget.css';
+import './styles/discord.css';
 
 // Legacy theme names from older builds map onto the new palettes.
 const LEGACY_THEME_MAP: Record<string, string> = {
@@ -101,6 +104,16 @@ function AppLayout(props: { children: any }) {
 
   onMount(() => {
     loadState();
+
+    // DM runtime is wired once for the whole session; `getAuth` reads the
+    // reactive store so a login/logout is reflected immediately.
+    configureDmRuntime({
+      getAuth: () => {
+        const user = state.user;
+        if (!user?.token || !user.id) return null;
+        return { token: user.token, id: user.id, username: user.username, avatarUrl: user.avatarUrl };
+      }
+    });
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (defenseGameActive()) {
@@ -236,6 +249,13 @@ function AppLayout(props: { children: any }) {
             <span><PhCoins /></span>
             <span>{state.rpg ? state.rpg.coins : 0}</span>
           </A>
+
+          <Show when={state.user && dmState.totalUnread > 0}>
+            <A href="/" class="header-dm-unread-pill" data-testid="header-dm-unread" title={t('dm.section')} end={true} onClick={e => handleNavClick(e, '/')}>
+              <span><PhBellRinging /></span>
+              <span class="header-dm-unread-count">{dmState.totalUnread > 99 ? '99+' : dmState.totalUnread}</span>
+            </A>
+          </Show>
 
           <Show when={state.user} fallback={
             <button
