@@ -4,7 +4,7 @@
 
 export type PresenceStatus = 'online' | 'idle' | 'dnd' | 'invisible' | 'offline';
 
-export type MessageType = 'text' | 'gif' | 'image' | 'video';
+export type MessageType = 'text' | 'gif' | 'image' | 'video' | 'system';
 
 export type CallType = 'voice' | 'video' | 'screen';
 
@@ -19,6 +19,13 @@ export interface DmUserLite {
   customStatus?: string;
 }
 
+/** A single emoji reaction bucket on a message (mirrors the DB aggregation). */
+export interface DmReaction {
+  emoji: string;
+  count: number;
+  userIds: string[];
+}
+
 export interface DmMessage {
   id: string;
   conversationId: string;
@@ -27,6 +34,8 @@ export interface DmMessage {
   messageType: MessageType;
   mediaUrl?: string | null;
   createdAt: string;
+  /** Per-emoji reaction buckets, empty when unreacted. */
+  reactions?: DmReaction[];
 }
 
 export interface DmConversationSummary {
@@ -134,4 +143,23 @@ export interface TypingBroadcast {
   userId: string;
   userName: string;
   at: number;
+}
+
+/** Payload broadcast over Supabase Realtime when someone toggles a reaction. */
+export interface ReactionBroadcast {
+  kind: 'dm-reaction';
+  conversationId: string;
+  messageId: string;
+  emoji: string;
+  action: 'add' | 'remove';
+  userId: string;
+  userName: string;
+  reactions: DmReaction[];
+}
+
+/** Result of the react toggle RPC. */
+export interface ReactionToggleResult {
+  action: 'add' | 'remove';
+  emoji: string;
+  reactions: DmReaction[];
 }

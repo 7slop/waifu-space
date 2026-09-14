@@ -7,10 +7,12 @@ import type {
   DmConversationSummary,
   DmMessage,
   DmMessageBroadcast,
+  DmReaction,
   DmUserLite,
   GifFavorite,
   MessageType,
   PresenceStatus,
+  ReactionBroadcast,
   TypingBroadcast,
   UserPresence
 } from './types';
@@ -32,6 +34,7 @@ import {
   setMyPresenceRequest,
   toDmMessage,
   updateCallStatusRequest,
+  toggleReactionRequest,
   listGifFavorites,
   addGifFavorite,
   removeGifFavorite,
@@ -98,6 +101,7 @@ export interface DmStoreState {
   gifOpen: boolean;
   gifTab: 'search' | 'favorites';
   gifFavorites: GifItem[];
+  emojiOpen: boolean;
   typing: Record<string, string[]>;
 }
 
@@ -146,6 +150,7 @@ const INITIAL: DmStoreState = {
   gifOpen: false,
   gifTab: 'search',
   gifFavorites: [],
+  emojiOpen: false,
   typing: {}
 };
 
@@ -234,6 +239,37 @@ function onRealtimeTyping(broadcast: TypingBroadcast): void {
       }
     }
   }, 5000);
+}
+
+/** Replaces a message's reaction buckets with the authoritative list. */
+function applyReactionReactions(msgs: DmMessage[], messageId: string, reactions: DmReaction[]): DmMessage[] {
+  return msgs.map(m => (m.id === messageId ? { ...m, reactions } : m));
+}
+
+/** Optimistically toggles the reacting user in/out of a bucket (pure). */
+function optimisticToggleReaction(msgs: DmMessage[], messageId: string, emoji: string, userId: string): DmMessage[] {
+  return msgs.map(m => {
+    if (m.id !== messageId) return m;
+    const list = m.reactions ?? [];
+    const bucket = list.find(r => r.emoji === emoji);
+    if (bucket && bucket.userIds.includes(userId)) {
+      const next = bucket.count <= 1
+        ? list.filter(r => r.emoji !== emoji)
+        : list.map(r => (r.emoji === emoji ? { ...r, count: r.count - 1, userIds: r.userIds.filter(u => u !== userId) } : r));
+      return { ...m, reactions: next };
+    }
+    const next = bucket
+      ? list.map(r => (r.emoji === emoji ? { ...r, count: r.count + 1, userIds: [...r.userIds, userId] } : r))
+      : [...list, { emoji, count: 1, userIds: [userId] }];
+    return { ...m, reactions: next };
+  });
+}
+
+function onRealtimeReaction(broadcast: ReactionBroadcast): void {
+  if (broadcast.userId === currentAuth()?.id) return;
+  const convId = broadcast.conversationId;
+  if (!Array.isArray(dmState.messages[convId])) return;
+  setDmState('messages', convId, (prev = []) => applyReactionReactions(prev, broadcast.messageId, broadcast.reactions));
 }
 
 function onRealtimePresence(map: Record<string, RealtimePresencePayload>): void {
@@ -369,6 +405,7 @@ export async function initDm(): Promise<boolean> {
     const rt = new DmRealtime(config, {
       onMessage: onRealtimeMessage,
       onTyping: onRealtimeTyping,
+      onReaction: onRealtimeReaction,
       onCallSignal: (s) => void handleCallSignal(s),
       onIncomingCall: onIncomingCallOffer,
       onCallCancel: onIncomingCallCancel,
@@ -603,6 +640,38 @@ export async function gifSearch(query: string): Promise<GifItem[]> {
 
 export function setGifOpen(open: boolean): void {
   setDmState('gifOpen', open);
+}
+
+export function setEmojiOpen(open: boolean): void {
+  setDmState('emojiOpen', open);
+}
+
+/** Toggles the active user's emoji reaction on a message (optimistic). */
+export async function toggleReaction(messageId: string, emoji: string): Promise<void> {
+  const auth = currentAuth();
+  const convId = dmState.activeConversationId;
+  if (!auth || !convId || !messageId || !emoji) return;
+  if (!Array.isArray(dmState.messages[convId])) return;
+  const uid = auth.id;
+  setDmState('messages', convId, (prev = []) => optimisticToggleReaction(prev, messageId, emoji, uid));
+  try {
+    const result = await toggleReactionRequest(auth.token, messageId, emoji);
+    setDmState('messages', convId, (prev = []) => applyReactionReactions(prev, messageId, result.reactions));
+    const broadcast: ReactionBroadcast = {
+      kind: 'dm-reaction',
+      conversationId: convId,
+      messageId,
+      emoji,
+      action: result.action,
+      userId: uid,
+      userName: auth.username,
+      reactions: result.reactions
+    };
+    void runtime.realtime?.sendReaction(broadcast);
+  } catch {
+    setDmState('messages', convId, (prev = []) => optimisticToggleReaction(prev, messageId, emoji, uid));
+    setDmState('error', 'Reaction could not be saved');
+  }
 }
 
 export function setGifTab(tab: 'search' | 'favorites'): void {

@@ -75,4 +75,32 @@ describe('DmInputBar', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-gif-btn"]')!);
     expect(container.querySelector('[data-testid="dm-gif-picker"]')).toBeInTheDocument();
   });
+
+  it('places the emoji and GIF buttons within the input actions on the right', () => {
+    seedConv();
+    const { container } = render(() => <DmInputBar />);
+    const actions = container.querySelector('.dm-input-actions')!;
+    expect(actions.querySelector('[data-testid="dm-emoji-btn"]')).toBeInTheDocument();
+    expect(actions.querySelector('[data-testid="dm-gif-btn"]')).toBeInTheDocument();
+  });
+
+  it('opens the emoji picker and inserts the selected emoji into the textarea', () => {
+    seedConv();
+    const { container } = render(() => <DmInputBar />);
+    fireEvent.click(container.querySelector('[data-testid="dm-emoji-btn"]')!);
+    expect(container.querySelector('[data-testid="dm-emoji-picker"]')).toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-emoji-item-0"]')!);
+    const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
+    expect(textarea.value).toBe('😀');
+    expect(container.querySelector('[data-testid="dm-emoji-picker"]')).not.toBeInTheDocument();
+  });
+
+  it('closes the emoji picker on outside click', () => {
+    seedConv();
+    const { container } = render(() => <DmInputBar />);
+    fireEvent.click(container.querySelector('[data-testid="dm-emoji-btn"]')!);
+    expect(container.querySelector('[data-testid="dm-emoji-picker"]')).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(container.querySelector('[data-testid="dm-emoji-picker"]')).not.toBeInTheDocument();
+  });
 });

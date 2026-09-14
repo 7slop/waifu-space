@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
 import { DmMessageGroup } from '../../../src/components/dm/DmMessageGroup';
-import { setDmState } from '../../../src/lib/dm/store';
-import { resetForDmTests } from '../../dm-helpers';
+import { dmState, setDmState } from '../../../src/lib/dm/store';
+import { resetForDmTests, stubFetch, flush } from '../../dm-helpers';
 import type { DmMessage } from '../../../src/lib/dm/types';
 
 const msg = (over: Partial<DmMessage>): DmMessage => ({
@@ -114,5 +114,82 @@ describe('DmMessageGroup', () => {
       />
     ));
     expect(container.querySelector('.dm-msg-fav-btn')).toHaveClass('favorited');
+  });
+
+  it('renders reaction pills and marks the user own reaction', () => {
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({ reactions: [{ emoji: '👍', count: 2, userIds: ['u-bob', 'u-me'] }] })}
+        showAvatar
+        senderName="Bob"
+        myUserId="u-me"
+      />
+    ));
+    const pill = container.querySelector('.dm-reaction-btn')!;
+    expect(pill).toBeInTheDocument();
+    expect(pill).toHaveClass('mine');
+    expect(pill.querySelector('.dm-reaction-count')).toHaveTextContent('2');
+  });
+
+  it('toggles an existing reaction off (POST) and keeps the store authoritative', async () => {
+    setDmState('activeConversationId', 'c1');
+    const message = msg({ reactions: [{ emoji: '👍', count: 2, userIds: ['u-bob', 'u-me'] }] });
+    setDmState('messages', 'c1', [message]);
+    let posted: any = null;
+    const restore = stubFetch({
+      '/api/dm/reactions': (url, init) => {
+        posted = JSON.parse(String(init.body));
+        return {
+          body: {
+            success: true,
+            messageId: 'm1',
+            emoji: '👍',
+            action: 'remove',
+            reactions: [{ emoji: '👍', count: 1, userIds: ['u-bob'] }]
+          }
+        };
+      }
+    });
+    const { container } = render(() => (
+      <DmMessageGroup message={message} showAvatar senderName="Bob" myUserId="u-me" />
+    ));
+    fireEvent.click(container.querySelector('.dm-reaction-btn')!);
+    await flush();
+    expect(posted).toEqual({ messageId: 'm1', emoji: '👍' });
+    expect(dmState.messages.c1?.[0]?.reactions?.[0]).toMatchObject({ count: 1, userIds: ['u-bob'] });
+    restore();
+  });
+
+  it('opens the quick-reaction menu from the + button and adds a reaction', async () => {
+    setDmState('activeConversationId', 'c1');
+    const message = msg({});
+    setDmState('messages', 'c1', [message]);
+    let posted: any = null;
+    const restore = stubFetch({
+      '/api/dm/reactions': (url, init) => {
+        posted = JSON.parse(String(init.body));
+        return {
+          body: {
+            success: true,
+            messageId: 'm1',
+            emoji: '❤️',
+            action: 'add',
+            reactions: [{ emoji: '❤️', count: 1, userIds: ['u-me'] }]
+          }
+        };
+      }
+    });
+    const { container } = render(() => (
+      <DmMessageGroup message={message} showAvatar senderName="Bob" myUserId="u-me" />
+    ));
+    fireEvent.click(container.querySelector('[data-testid="dm-reaction-add"]')!);
+    expect(container.querySelector('[data-testid="dm-reaction-menu"]')).toBeInTheDocument();
+    const button = Array.from(container.querySelectorAll('[data-testid^="dm-reaction-menu-"]'))
+      .find((el) => el.getAttribute('aria-label') === '❤️') as HTMLElement;
+    fireEvent.click(button);
+    await flush();
+    expect(posted).toEqual({ messageId: 'm1', emoji: '❤️' });
+    expect(dmState.messages.c1?.[0]?.reactions?.[0]).toMatchObject({ emoji: '❤️', count: 1 });
+    restore();
   });
 });

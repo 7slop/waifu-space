@@ -582,6 +582,7 @@
 .dm-msg-body {
   min-width: 0;
   flex: 1;
+  position: relative;
 }
 
 .dm-msg-meta {
@@ -670,11 +671,15 @@
   padding: 8px 10px;
 }
 
-.dm-input-bar:focus-within {
-  border-color: var(--primary-accent, #f5c2e7);
+.dm-input-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.dm-gif-btn {
+.dm-gif-btn,
+.dm-emoji-btn {
   flex-shrink: 0;
   height: 34px;
   padding: 0 12px;
@@ -687,7 +692,20 @@
   cursor: pointer;
 }
 
-.dm-gif-btn:hover {
+.dm-emoji-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.dm-emoji-btn-glyph {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.dm-gif-btn:hover,
+.dm-emoji-btn:hover {
   filter: brightness(1.1);
 }
 
@@ -748,6 +766,94 @@
   padding: 10px;
   z-index: 50;
   box-shadow: var(--card-shadow, 0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+/* Emoji picker -------------------------------------------------------------- */
+
+.dm-emoji-picker {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  width: 320px;
+  max-width: 90vw;
+  background: var(--surface-2, #313244);
+  border: 1px solid var(--border-color, #313244);
+  border-radius: var(--radius-lg, 8px);
+  padding: 8px;
+  z-index: 50;
+  box-shadow: var(--card-shadow, 0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+.dm-emoji-cats {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.dm-emoji-cat {
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #7f849c);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+
+.dm-emoji-cat:hover {
+  background: var(--surface-1, #181825);
+}
+
+.dm-emoji-cat.active {
+  background: var(--accent-soft, rgba(245, 194, 231, 0.14));
+  color: var(--primary-accent, #f5c2e7);
+  font-weight: 600;
+}
+
+.dm-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.dm-emoji-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+
+.dm-emoji-item:hover {
+  background: var(--surface-1, #181825);
+}
+
+/* Twemoji rendering (message text + picker + reactions) ---------------------- */
+
+.dm-emoji-glyph {
+  display: inline-block;
+  width: 1.25em;
+  height: 1.25em;
+  vertical-align: -0.25em;
+  overflow: hidden;
+}
+
+.dm-emoji-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.dm-emoji-native {
+  font-size: 1.1em;
+  line-height: 1;
 }
 
 .dm-gif-search-row {
@@ -1240,6 +1346,120 @@
 .dm-msg-fav-btn svg {
   width: 15px;
   height: 15px;
+}
+
+/* Reactions row ------------------------------------------------------------ */
+
+.dm-reactions-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.dm-reaction-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color, #313244);
+  border-radius: 13px;
+  background: var(--surface-2, #313244);
+  color: var(--text-primary, #cdd6f4);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.dm-reaction-btn:hover {
+  background: var(--accent-soft, rgba(245, 194, 231, 0.14));
+}
+
+.dm-reaction-btn.mine {
+  border-color: var(--primary-accent, #f5c2e7);
+  background: var(--accent-soft, rgba(245, 194, 231, 0.14));
+}
+
+.dm-reaction-btn .dm-emoji-glyph {
+  width: 1.05em;
+  height: 1.05em;
+}
+
+.dm-reaction-count {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.dm-reaction-add-wrap {
+  position: absolute;
+  right: 8px;
+  bottom: 2px;
+  z-index: 30;
+}
+
+.dm-reaction-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-color, #313244);
+  border-radius: 50%;
+  background: var(--surface-2, #313244);
+  color: var(--text-muted, #7f849c);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.dm-msg:hover .dm-reaction-add,
+.dm-reaction-add.active {
+  opacity: 1;
+}
+
+.dm-reaction-add:hover,
+.dm-reaction-add.active {
+  color: var(--primary-accent, #f5c2e7);
+  border-color: var(--primary-accent, #f5c2e7);
+}
+
+.dm-reaction-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface-2, #313244);
+  border: 1px solid var(--border-color, #313244);
+  border-radius: var(--radius-lg, 8px);
+  z-index: 40;
+  box-shadow: var(--card-shadow, 0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+.dm-reaction-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+
+.dm-reaction-menu-item:hover {
+  background: var(--surface-1, #181825);
+}
+
+.dm-reaction-menu-item .dm-emoji-glyph {
+  width: 1.2em;
+  height: 1.2em;
 }
 
 /* Header unread pill ------------------------------------------------------- */

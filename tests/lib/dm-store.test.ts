@@ -21,6 +21,7 @@ vi.mock('../../src/lib/dm/realtime', () => ({
     subscribeConversation = vi.fn(async () => undefined);
     sendMessage = vi.fn(async () => undefined);
     sendTyping = vi.fn(async () => undefined);
+    sendReaction = vi.fn(async () => undefined);
     sendCallSignal = vi.fn(async () => undefined);
     sendIncomingCallOffer = vi.fn(async () => undefined);
     sendCallCancel = vi.fn(async () => undefined);
@@ -101,6 +102,7 @@ vi.mock('../../src/lib/dm/call', () => ({
 import {
   configureDmRuntime,
   dmState,
+  setDmState,
   initDm,
   selectConversation,
   sendText,
@@ -112,7 +114,8 @@ import {
   acceptIncomingCall,
   hangUpCall,
   toggleMute,
-  toggleVideo
+  toggleVideo,
+  toggleReaction
 } from '../../src/lib/dm/store';
 
 const AUTH = { token: 't1', id: 'u-me', username: 'alice', avatarUrl: 'https://x/a.png' };
@@ -409,5 +412,50 @@ async function boot() {
     expect(dmState.call?.muted).toBe(true);
     toggleVideo();
     expect(dmState.call?.videoOff).toBe(true);
+  });
+});
+
+describe('dm store reactions', () => {
+  async function boot() {
+    stubFetch({
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'online' } })),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 })
+    });
+    await initDm();
+    return rt.instances[0];
+  }
+
+  it('toggleReaction adds a reaction, applies authoritative state and broadcasts', async () => {
+    const rtInst = await boot();
+    setDmState('activeConversationId', 'c1');
+    setDmState('messages', 'c1', [{ id: 'm1', conversationId: 'c1', senderId: 'u-bob', content: 'hi', messageType: 'text', createdAt: '2025-01-01T00:00:00.000Z' }]);
+    stubFetch({
+      '/api/dm/reactions': () =>
+        JSON_RESP({ success: true, messageId: 'm1', emoji: '👍', action: 'add', reactions: [{ emoji: '👍', count: 1, userIds: ['u-me'] }] })
+    });
+    await toggleReaction('m1', '👍');
+    expect(dmState.messages.c1?.[0]?.reactions).toEqual([{ emoji: '👍', count: 1, userIds: ['u-me'] }]);
+    expect(rtInst.sendReaction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dm-reaction', messageId: 'm1', emoji: '👍', action: 'add' }));
+  });
+
+  it('incoming reaction broadcasts replace the local reactions buckets', async () => {
+    await boot();
+    setDmState('messages', 'c1', [
+      { id: 'm1', conversationId: 'c1', senderId: 'u-me', content: 'mine', messageType: 'text', createdAt: '2025-01-01T00:00:00.000Z' }
+    ]);
+    rt.handlers.onReaction({
+      kind: 'dm-reaction',
+      conversationId: 'c1',
+      messageId: 'm1',
+      emoji: '😂',
+      action: 'add',
+      userId: 'u-bob',
+      userName: 'bob',
+      reactions: [{ emoji: '😂', count: 1, userIds: ['u-bob'] }]
+    });
+    expect(dmState.messages.c1?.[0]?.reactions).toEqual([{ emoji: '😂', count: 1, userIds: ['u-bob'] }]);
   });
 });

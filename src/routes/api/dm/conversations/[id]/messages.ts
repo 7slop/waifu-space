@@ -1,6 +1,6 @@
 import { json } from '@solidjs/router';
 import { resolveDmContext, badRequestResponse } from '../../../../../lib/server/dm-context';
-import type { DmMessage, MessageType } from '../../../../../lib/dm/types';
+import type { DmMessage, DmReaction, MessageType } from '../../../../../lib/dm/types';
 
 const MAX_MESSAGE_LENGTH = 4000;
 const VALID_MESSAGE_TYPES: MessageType[] = ['text', 'gif', 'image', 'video'];
@@ -8,6 +8,28 @@ const VALID_MESSAGE_TYPES: MessageType[] = ['text', 'gif', 'image', 'video'];
 function toMessageType(raw: any): MessageType {
   if (raw === 'gif' || raw === 'image' || raw === 'video') return raw;
   return 'text';
+}
+
+function parseReactions(raw: any): DmReaction[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((r: any) => ({
+    emoji: String(r?.emoji ?? ''),
+    count: Number(r?.count ?? (Array.isArray(r?.userIds) ? r.userIds.length : 0)),
+    userIds: Array.isArray(r?.userIds) ? r.userIds.map(String) : []
+  }));
+}
+
+function toMessage(m: any): DmMessage {
+  return {
+    id: m.id,
+    conversationId: m.conversationId,
+    senderId: m.senderId,
+    content: m.content ?? '',
+    messageType: toMessageType(m.messageType),
+    mediaUrl: m.mediaUrl ?? null,
+    createdAt: m.createdAt,
+    reactions: parseReactions(m.reactions)
+  };
 }
 
 export async function GET(event: { request: Request; params: Record<string, string> }) {
@@ -36,15 +58,7 @@ export async function GET(event: { request: Request; params: Record<string, stri
     return json({ success: false, error: error.message }, { status: 500 });
   }
 
-  const messages: DmMessage[] = (Array.isArray(data) ? data : []).map((m: any) => ({
-    id: m.id,
-    conversationId: m.conversationId,
-    senderId: m.senderId,
-    content: m.content ?? '',
-    messageType: toMessageType(m.messageType),
-    mediaUrl: m.mediaUrl ?? null,
-    createdAt: m.createdAt
-  }));
+  const messages: DmMessage[] = (Array.isArray(data) ? data : []).map(toMessage);
 
   return json({ success: true, messages });
 }
@@ -94,15 +108,7 @@ export async function POST(event: { request: Request; params: Record<string, str
   }
 
   const m = data as any;
-  const message: DmMessage = {
-    id: m.id,
-    conversationId: m.conversationId,
-    senderId: m.senderId,
-    content: m.content ?? '',
-    messageType: toMessageType(m.messageType),
-    mediaUrl: m.mediaUrl ?? null,
-    createdAt: m.createdAt
-  };
+  const message = toMessage(m);
 
   return json({ success: true, message }, { status: 201 });
 }

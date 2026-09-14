@@ -232,7 +232,8 @@ BEGIN
     'content', v_msg.content,
     'messageType', v_msg.message_type,
     'mediaUrl', v_msg.media_url,
-    'createdAt', v_msg.created_at
+    'createdAt', v_msg.created_at,
+    'reactions', '[]'::jsonb
   );
 END;
 $$;
@@ -291,7 +292,20 @@ BEGIN
       'content', m.content,
       'messageType', m.message_type,
       'mediaUrl', m.media_url,
-      'createdAt', m.created_at
+      'createdAt', m.created_at,
+      'reactions', (
+        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+            'emoji', rx.emoji,
+            'count', rx.cnt,
+            'userIds', rx.user_ids
+          ) ORDER BY rx.emoji), '[]'::jsonb)
+        FROM (
+          SELECT emoji, count(*) AS cnt, array_agg(user_id::text ORDER BY created_at) AS user_ids
+          FROM public.message_reactions
+          WHERE message_id = m.id
+          GROUP BY emoji
+        ) rx
+      )
     ) AS r
     FROM public.messages m
     WHERE m.conversation_id = p_conversation_id
@@ -301,6 +315,77 @@ BEGIN
   ) msub;
 
   RETURN v_msgs;
+END;
+$$;
+
+-- Toggle the requesting user's emoji reaction on a message. Enforces the
+-- "max 20 distinct emoji per message" cap on first use of a new emoji and
+-- returns the authoritative reaction buckets + whether the reaction was added
+-- or removed.
+CREATE OR REPLACE FUNCTION public.toggle_message_reaction(
+  p_user_id uuid,
+  p_message_id uuid,
+  p_emoji text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_action text;
+  v_reactions jsonb;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.messages m
+    JOIN public.conversation_participants cp ON cp.conversation_id = m.conversation_id
+    WHERE m.id = p_message_id AND cp.user_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'not a participant of this conversation';
+  END IF;
+
+  IF p_emoji IS NULL OR char_length(p_emoji) = 0 OR char_length(p_emoji) > 16 THEN
+    RAISE EXCEPTION 'invalid emoji';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.message_reactions
+    WHERE message_id = p_message_id AND user_id = p_user_id AND emoji = p_emoji
+  ) THEN
+    DELETE FROM public.message_reactions
+    WHERE message_id = p_message_id AND user_id = p_user_id AND emoji = p_emoji;
+    v_action := 'remove';
+  ELSE
+    IF NOT EXISTS (
+      SELECT 1 FROM public.message_reactions
+      WHERE message_id = p_message_id AND emoji = p_emoji
+    ) AND (
+      SELECT count(DISTINCT emoji) FROM public.message_reactions WHERE message_id = p_message_id
+    ) >= 20 THEN
+      RAISE EXCEPTION 'too many distinct reactions';
+    END IF;
+
+    INSERT INTO public.message_reactions (message_id, user_id, emoji)
+    VALUES (p_message_id, p_user_id, p_emoji);
+    v_action := 'add';
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'emoji', r.emoji,
+      'count', r.cnt,
+      'userIds', r.user_ids
+    ) ORDER BY r.emoji), '[]'::jsonb) INTO v_reactions
+  FROM (
+    SELECT emoji, count(*) AS cnt, array_agg(user_id::text ORDER BY created_at) AS user_ids
+    FROM public.message_reactions
+    WHERE message_id = p_message_id
+    GROUP BY emoji
+  ) r;
+
+  RETURN jsonb_build_object('action', v_action, 'emoji', p_emoji, 'reactions', v_reactions);
 END;
 $$;
 
@@ -587,6 +672,9 @@ REVOKE ALL ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.get_dm_messages(uuid, uuid, timestamptz, int) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_dm_messages(uuid, uuid, timestamptz, int) TO anon, authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.toggle_message_reaction(uuid, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.toggle_message_reaction(uuid, uuid, text) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.count_dm_unread(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.count_dm_unread(uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.upsert_user_presence(uuid, text, text, timestamptz) FROM PUBLIC;

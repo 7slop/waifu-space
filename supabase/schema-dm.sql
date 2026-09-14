@@ -84,6 +84,17 @@ CREATE TABLE IF NOT EXISTS public.call_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_call_sessions_conversation ON public.call_sessions(conversation_id, created_at DESC);
 
+-- 3c. Message Reactions (Discord-style emoji reactions, max 20 distinct per message)
+CREATE TABLE IF NOT EXISTS public.message_reactions (
+  message_id UUID NOT NULL REFERENCES public.messages(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  emoji TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  PRIMARY KEY (message_id, user_id, emoji)
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON public.message_reactions(message_id);
+
 -- ==========================================================
 -- Row-Level Security
 -- ==========================================================
@@ -93,6 +104,7 @@ ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_presence ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.call_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gif_favorites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
 
 -- Conversations
 DROP POLICY IF EXISTS "Participants can read conversations" ON public.conversations;
@@ -231,6 +243,36 @@ CREATE POLICY "gif_favorites_insert_own"
 DROP POLICY IF EXISTS "gif_favorites_delete_own" ON public.gif_favorites;
 CREATE POLICY "gif_favorites_delete_own"
   ON public.gif_favorites FOR DELETE
+  USING (user_id = auth.uid());
+
+-- Message reactions: participants of the parent conversation can read, and
+-- only the user themselves can add/remove their own reaction.
+DROP POLICY IF EXISTS "Participants can read reactions" ON public.message_reactions;
+CREATE POLICY "Participants can read reactions"
+  ON public.message_reactions FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.messages m
+      JOIN public.conversation_participants cp ON cp.conversation_id = m.conversation_id
+      WHERE m.id = message_reactions.message_id AND cp.user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Users add own reactions" ON public.message_reactions;
+CREATE POLICY "Users add own reactions"
+  ON public.message_reactions FOR INSERT
+  WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.messages m
+      JOIN public.conversation_participants cp ON cp.conversation_id = m.conversation_id
+      WHERE m.id = message_reactions.message_id AND cp.user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Users remove own reactions" ON public.message_reactions;
+CREATE POLICY "Users remove own reactions"
+  ON public.message_reactions FOR DELETE
   USING (user_id = auth.uid());
 
 -- ==========================================================

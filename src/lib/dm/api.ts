@@ -4,11 +4,13 @@ import type {
   CallType,
   DmConversationSummary,
   DmMessage,
+  DmReaction,
   DmUserLite,
   DmUserProfile,
   GifFavorite,
   MessageType,
   PresenceStatus,
+  ReactionToggleResult,
   UserPresence
 } from './types';
 
@@ -96,11 +98,20 @@ export function gifKeyOfUrl(url: string): string {
   return (match && match[1]) || url;
 }
 
+/** Normalizes a raw reaction bucket into a typed one. */
+export function toDmReaction(raw: any): DmReaction {
+  return {
+    emoji: String(raw?.emoji ?? ''),
+    count: Number(raw?.count ?? (Array.isArray(raw?.userIds) ? raw.userIds.length : 0)),
+    userIds: Array.isArray(raw?.userIds) ? raw.userIds.map(String) : []
+  };
+}
+
 /** Renders a server row (any shape) into a typed DM message. */
 export function toDmMessage(raw: any): DmMessage {
   const rawType = (raw?.messageType ?? raw?.message_type ?? 'text') as MessageType;
   const messageType: MessageType =
-    rawType === 'gif' || rawType === 'image' || rawType === 'video' ? rawType : 'text';
+    rawType === 'gif' || rawType === 'image' || rawType === 'video' || rawType === 'system' ? rawType : 'text';
   return {
     id: String(raw?.id ?? ''),
     conversationId: String(raw?.conversationId ?? raw?.conversation_id ?? ''),
@@ -108,7 +119,8 @@ export function toDmMessage(raw: any): DmMessage {
     content: String(raw?.content ?? ''),
     messageType,
     mediaUrl: (raw?.mediaUrl ?? raw?.media_url ?? null) || null,
-    createdAt: String(raw?.createdAt ?? raw?.created_at ?? new Date().toISOString())
+    createdAt: String(raw?.createdAt ?? raw?.created_at ?? new Date().toISOString()),
+    reactions: Array.isArray(raw?.reactions) ? raw.reactions.map(toDmReaction) : undefined
   };
 }
 
@@ -227,6 +239,16 @@ export async function sendMessageRequest(
     token
   );
   return data.message;
+}
+
+/** Toggles the current user's emoji reaction on a message. */
+export async function toggleReactionRequest(token: string, messageId: string, emoji: string): Promise<ReactionToggleResult> {
+  const data = await request<{ success: boolean; action: 'add' | 'remove'; reactions: DmReaction[] }>(
+    '/api/dm/reactions',
+    { method: 'POST', body: JSON.stringify({ messageId, emoji }) },
+    token
+  );
+  return { action: data.action, emoji, reactions: data.reactions ?? [] };
 }
 
 export async function markConversationRead(token: string, conversationId: string): Promise<void> {

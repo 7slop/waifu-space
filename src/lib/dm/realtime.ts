@@ -4,6 +4,7 @@ import type {
   CallSignalPayload,
   DmMessageBroadcast,
   PresenceStatus,
+  ReactionBroadcast,
   TypingBroadcast
 } from './types';
 import { isVisiblePresence } from './presence';
@@ -38,6 +39,7 @@ export interface RealtimePresencePayload {
 export interface DmRealtimeHandlers {
   onMessage(broadcast: DmMessageBroadcast): void;
   onTyping(broadcast: TypingBroadcast): void;
+  onReaction(broadcast: ReactionBroadcast): void;
   onCallSignal(signal: CallSignalPayload): void;
   onIncomingCall(broadcast: CallOfferBroadcast): void;
   onCallCancel(broadcast: CallOfferBroadcast): void;
@@ -193,6 +195,7 @@ export class DmRealtime {
     chan
       .on('broadcast', { event: 'dm-message' }, ({ payload }) => this.handlers.onMessage(payload as DmMessageBroadcast))
       .on('broadcast', { event: 'typing' }, ({ payload }) => this.handlers.onTyping(payload as TypingBroadcast))
+      .on('broadcast', { event: 'dm-reaction' }, ({ payload }) => this.handlers.onReaction(payload as ReactionBroadcast))
       .on('broadcast', { event: 'call-signal' }, ({ payload }) => this.handlers.onCallSignal(payload as CallSignalPayload))
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -215,6 +218,10 @@ export class DmRealtime {
 
   async sendTyping(payload: TypingBroadcast): Promise<void> {
     await this.broadcast(`dm-${payload.conversationId}`, 'typing', payload);
+  }
+
+  async sendReaction(payload: ReactionBroadcast): Promise<void> {
+    await this.broadcast(`dm-${payload.conversationId}`, 'dm-reaction', payload);
   }
 
   async sendCallSignal(signal: CallSignalPayload): Promise<void> {
