@@ -4,6 +4,7 @@ import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate
 import { state } from '../lib/store';
 import { layoutTimedEvents } from '../lib/calendar-layout';
 import { minuteFromClientY, snapMinute } from '../lib/calendar-drag';
+import { useNow, timePercentOfDay } from '../lib/live-time';
 import { t, getLocale, holidayTooltip, hourMinute, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
@@ -41,11 +42,8 @@ export function CalendarWeekView(props: {
 
   const today = new Date();
 
-  const getCurrentTimePercent = () => {
-    const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    return (minutes / 1440) * 100;
-  };
+  const now = useNow();
+  const currentTimePercent = () => timePercentOfDay(now());
 
   const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
     if (ev._holiday) {
@@ -542,7 +540,7 @@ export function CalendarWeekView(props: {
                   {isT && (
                     <div
                       class="current-time-line"
-                      style={{ top: `${getCurrentTimePercent()}%` }}
+                      style={{ top: `${currentTimePercent()}%` }}
                     />
                   )}
 

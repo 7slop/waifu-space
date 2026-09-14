@@ -19,6 +19,7 @@ import {
   startNotificationScheduler,
   stopNotificationScheduler,
   sendTestNotification,
+  sendNotification,
   canNotifyNatively,
   playNotificationSound,
 } from '../../src/lib/notifications';
@@ -175,11 +176,27 @@ describe('Browser notifications (notifications.ts)', () => {
     expect(toastMessage()).toContain('Offline reminder');
   });
 
-  it('reports native capability and can send a test notification when granted', () => {
+  it('reports native capability and can send a test notification when granted', async () => {
     expect(canNotifyNatively()).toBe(true);
-    expect(sendTestNotification()).toBe('native');
+    expect(await sendTestNotification()).toBe('native');
     expect(captured.length).toBe(1);
     expect(captured[0].body).toContain('working');
+  });
+
+  it('delivers a native notification through sendNotification when granted', () => {
+    sendNotification('Standup', 'starting in 30 minutes');
+    expect(captured.length).toBe(1);
+    expect(captured[0].title).toBe('Standup');
+    expect(captured[0].body).toContain('30 minutes');
+    expect(toastVisible()).toBe(false);
+  });
+
+  it('falls back to an in-app toast when native delivery is unavailable', () => {
+    vi.stubGlobal('Notification', undefined);
+    sendNotification('Dentist', 'starting in 30 minutes');
+    expect(captured.length).toBe(0);
+    expect(toastVisible()).toBe(true);
+    expect(toastMessage()).toContain('Dentist');
   });
 
   it('sends a 9 AM digest for all-day events and tasks', () => {
@@ -269,7 +286,7 @@ describe('Browser notifications (notifications.ts)', () => {
       const gain = vi.spyOn(FakeAudioContext.prototype, 'createGain');
       vi.stubGlobal('AudioContext', FakeAudioContext);
       const { playNotificationSound } = await import('../../src/lib/notifications');
-      playNotificationSound();
+      await playNotificationSound();
       expect(osc).toHaveBeenCalledTimes(2);
       expect(gain).toHaveBeenCalledTimes(1);
     });
@@ -280,14 +297,14 @@ describe('Browser notifications (notifications.ts)', () => {
       const { setState } = await import('../../src/lib/store');
       const { playNotificationSound } = await import('../../src/lib/notifications');
       setState('settings', 'soundEnabled', false);
-      playNotificationSound();
+      await playNotificationSound();
       expect(osc).not.toHaveBeenCalled();
     });
 
     it('never throws when the browser has no audio context', async () => {
       vi.stubGlobal('AudioContext', undefined);
       const { playNotificationSound } = await import('../../src/lib/notifications');
-      expect(() => playNotificationSound()).not.toThrow();
+      await expect(playNotificationSound()).resolves.toBeUndefined();
     });
   });
 });

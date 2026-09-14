@@ -111,15 +111,21 @@ function getAudioContext(): AudioContext | null {
  * needed). Suppressed when `state.settings.soundEnabled` is off or when no
  * audio output is available. The context is created lazily/wrapped in guards
  * so autoplay policies or missing hardware never throw.
+ *
+ * When the AudioContext is suspended (autoplay policy), the function awaits
+ * `ctx.resume()` so that the oscillator schedule is anchored to an accurate
+ * `currentTime` instead of the frozen zero.
  */
-export function playNotificationSound(): void {
+export async function playNotificationSound(): Promise<void> {
   if (typeof window === 'undefined') return;
   if (!state.settings.soundEnabled) return;
   let ctx: AudioContext | null;
   try {
     ctx = getAudioContext();
     if (!ctx) return;
-    if (ctx.state === 'suspended') void ctx.resume();
+    if (ctx.state === 'suspended') {
+      try { await ctx.resume(); } catch { return; }
+    }
   } catch {
     return;
   }
@@ -177,7 +183,7 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
  * message so no reminder is ever silently dropped.
  */
 function deliver(title: string, body: string): void {
-  playNotificationSound();
+  void playNotificationSound();
   if (canNotifyNatively()) {
     try {
       new Notification(title, { body });
@@ -190,14 +196,23 @@ function deliver(title: string, body: string): void {
 }
 
 /**
+ * Public delivery helper so callers outside this module (e.g. the global
+ * deadline-alert interval in app.tsx) can send native + sound reminders
+ * without duplicating the logic.
+ */
+export function sendNotification(title: string, body: string): void {
+  deliver(title, body);
+}
+
+/**
  * Fires a single test notification so the user can verify that native
  * delivery works in their browser. Returns 'native' when the OS notification
  * was created, 'toast' when only the in-app fallback ran.
  */
-export function sendTestNotification(): 'native' | 'toast' {
+export async function sendTestNotification(): Promise<'native' | 'toast'> {
   const title = t('notifications.testTitle');
   const body = t('notifications.testBody');
-  playNotificationSound();
+  await playNotificationSound();
   if (canNotifyNatively()) {
     try {
       new Notification(title, { body });
@@ -303,13 +318,6 @@ export function startNotificationScheduler(): void {
   // check whenever the tab regains visibility/focus. This keeps a notification
   // that should have fired while hidden from being lost — it lands the moment
   // the user looks at WaifuSpace again.
-  const onVisibilityChange = () => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-      runNotificationCheck();
-    }
-  };
-  const onFocus = () => runNotificationCheck();
-
   try {
     runNotificationCheck();
   } catch (e) {

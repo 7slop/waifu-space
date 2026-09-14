@@ -13,7 +13,7 @@ import {
 } from './lib/store';
 import { defenseGameActive, setDefenseGameActive } from './lib/defense-bridge';
 import { t } from './lib/i18n';
-import { startNotificationScheduler, stopNotificationScheduler } from './lib/notifications';
+import { startNotificationScheduler, stopNotificationScheduler, sendNotification } from './lib/notifications';
 import { SakuraCanvas } from './components/SakuraCanvas';
 import { ToastNotification } from './components/ToastNotification';
 import { AuthModal } from './components/AuthModal';
@@ -166,8 +166,8 @@ function AppLayout(props: { children: any }) {
         if (persona === 'tsundere') note = `Baka! Your task "${upcoming.title}" is starting in less than 15 minutes! Don't slack!`;
         else if (persona === 'yandere') note = `Darling, finish "${upcoming.title}" quickly so you can focus on me~`;
 
-        showToast(note);
         triggerWaifuResponse(note, 'pout');
+        sendNotification(note, note);
       }
     }, 60000);
 

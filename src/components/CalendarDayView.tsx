@@ -3,6 +3,7 @@ import { CalendarEventItem } from '../lib/ical';
 import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate } from '../lib/store';
 import { layoutTimedEvents } from '../lib/calendar-layout';
 import { minuteFromClientY, snapMinute } from '../lib/calendar-drag';
+import { useNow, timePercentOfDay } from '../lib/live-time';
 import { t, getLocale, holidayTooltip, hourMinute, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
@@ -31,11 +32,8 @@ export function CalendarDayView(props: {
   const allDayEvents = () => dayEvents().filter(ev => ev.allDay);
   const timedLayouts = () => layoutTimedEvents(dayEvents().filter(ev => !ev.allDay));
 
-  const getCurrentTimePercent = () => {
-    const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    return (minutes / 1440) * 100;
-  };
+  const now = useNow();
+  const currentTimePercent = () => timePercentOfDay(now());
 
 const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
     if (ev._holiday) {
@@ -494,7 +492,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
             {isToday() && (
               <div
                 class="current-time-line"
-                style={{ top: `${getCurrentTimePercent()}%` }}
+                style={{ top: `${currentTimePercent()}%` }}
               />
             )}
 

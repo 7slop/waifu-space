@@ -116,7 +116,7 @@ export function CountryHolidaysModal(props: { isOpen: boolean; onClose: () => vo
       permission = await requestNotificationPermission();
     }
     if (permission === 'granted') {
-      sendTestNotification();
+      await sendTestNotification();
       showToast(t('calendar.viewSettings.testDelivered'));
     } else {
       showToast(t('calendar.viewSettings.testFallback'));
