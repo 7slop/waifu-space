@@ -11,6 +11,7 @@ import {
   toggleMute,
   toggleScreenShare
 } from '../../lib/dm/store';
+import { state } from '../../lib/store';
 import { t } from '../../lib/i18n';
 import {
   PhMicrophone,
@@ -23,6 +24,7 @@ import {
   PhVideoCameraSlash,
   PhMonitorArrowUp
 } from '../icons';
+import { DmAvatar } from './DmAvatar';
 
 /** Binds a MediaStream onto a <video> element as soon as one is available. */
 function DmVideoView(props: { stream: () => MediaStream | null; muted?: boolean; class?: string }) {
@@ -38,12 +40,19 @@ function DmVideoView(props: { stream: () => MediaStream | null; muted?: boolean;
   return <video class={props.class} ref={ref} autoplay playsinline muted={props.muted} />;
 }
 
+/** Resolves the other participant's avatar from the conversation list. */
+function peerInfo() {
+  const conv = dmState.conversations.find((c) => c.id === dmState.activeConversationId);
+  return { name: conv?.otherUser?.username ?? '', avatar: conv?.otherUser?.avatarUrl ?? null };
+}
+
 /**
  * Top-docked call bar rendered at the top of the chat column. It does NOT
  * cover the whole page: messages stay visible below. Shows an incoming-call
  * bar with accept/decline, an outgoing "ringing" bar with cancel, and an
  * active call bar with mute, camera, screen-share and hang-up controls plus
- * a video stage that appears while video is active.
+ * a video stage that appears while video is active. While ringing, both
+ * participants' avatars are shown with a pulsing ring around the callee.
  */
 export function CallOverlay() {
   const call = () => dmState.call;
@@ -64,14 +73,28 @@ export function CallOverlay() {
 function IncomingCallBar() {
   const incoming = () => dmState.incomingCall!;
   const isVideo = () => incoming().call.callType !== 'voice';
+  const peer = () => peerInfo();
+  const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
+  const callerId = () => incoming().call.callerId;
+  const callerIsPeer = () =>
+    dmState.conversations.find((c) => c.id === incoming().call.conversationId)?.otherUser?.id === callerId();
 
   return (
     <div class="dm-call-dock dm-call-incoming" data-testid="dm-incoming-call">
+      <div class="dm-call-avatars ringing" data-testid="dm-call-avatars">
+        <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
+        <span class="dm-call-ring" aria-hidden="true" />
+        <DmAvatar
+          name={incoming().callerName || peer().name}
+          avatarUrl={callerIsPeer() ? peer().avatar : undefined}
+          size="44px"
+          class="dm-call-avatar remote"
+        />
+      </div>
       <div class="dm-call-info">
-        {isVideo() ? <PhVideoCamera class="dm-call-icon" /> : <PhPhoneDisconnect class="dm-call-icon" />}
         <span class="dm-call-name">{incoming().callerName}</span>
         <span class="dm-call-sub">
-          {t(incoming().call.callType === 'screen' ? 'dm.callScreenLabel' : incoming().call.callType === 'video' ? 'dm.callVideoLabel' : 'dm.callVoiceLabel')}
+          {isVideo() ? t('dm.callVideoLabel') : t('dm.callVoiceLabel')}
           {' · '}{t('dm.callingLabel')}
         </span>
       </div>
@@ -96,18 +119,25 @@ function ActiveCallBar() {
   const videoActive = () => call().callState === 'connected' && !call().videoOff;
   const screen = createMemo<MediaStream | null>(() => (dmState.call?.callState === 'connected' ? callRemoteStream() : null));
   const local = createMemo<MediaStream | null>(() => callLocalStream());
+  const peer = () => peerInfo();
+  const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
 
   return (
     <div class={`dm-call-dock dm-call-active${screen() ? ' has-video' : ''}`} data-testid="dm-active-call">
       <div class="dm-call-bar">
+        <div class="dm-call-avatars" data-testid="dm-call-avatars">
+          <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
+          <Show when={ringing()}>
+            <span class="dm-call-ring" aria-hidden="true" />
+          </Show>
+          <DmAvatar name={call().remoteName || peer().name} avatarUrl={peer().avatar} size="44px" class="dm-call-avatar remote" />
+        </div>
+
         <div class="dm-call-info">
-          {ringing()
-            ? call().direction === 'incoming' ? <PhPhoneIncoming class="dm-call-icon" /> : <PhPhoneCall class="dm-call-icon" />
-            : call().screenSharing ? <PhMonitorArrowUp class="dm-call-icon" /> : <PhPhoneCall class="dm-call-icon" />}
-          <span class="dm-call-name">{call().remoteName}</span>
+          <span class="dm-call-name">{call().remoteName || peer().name}</span>
           <span class="dm-call-sub">
             {ringing()
-              ? t(call().direction === 'incoming' ? 'dm.incomingCall' : 'dm.outgoingCall', { name: call().remoteName })
+              ? t(call().direction === 'incoming' ? 'dm.incomingCall' : 'dm.outgoingCall', { name: call().remoteName || peer().name })
               : call().screenSharing ? t('dm.sharingScreenLabel') : t('dm.inCallLabel')}
           </span>
         </div>

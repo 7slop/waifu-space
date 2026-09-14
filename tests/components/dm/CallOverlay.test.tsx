@@ -121,6 +121,10 @@ describe('CallOverlay', () => {
     const { container } = render(() => <CallOverlay />);
     expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
     expect(container.textContent).toContain('Bob');
+    // both participant avatars + pulsing ring are rendered while ringing
+    expect(container.querySelectorAll('[data-testid="dm-avatar"]').length).toBe(2);
+    expect(container.querySelector('[data-testid="dm-call-avatars"].ringing')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-ring')).toBeInTheDocument();
     fireEvent.click(container.querySelector('[data-testid="dm-call-decline"]')!);
     await flush();
     expect(dmState.incomingCall).toBeNull();
@@ -137,6 +141,9 @@ describe('CallOverlay', () => {
     expect(dmState.call?.direction).toBe('incoming');
     expect(dmState.call?.callState).toBe('connected');
     expect(container.querySelector('[data-testid="dm-active-call"]')).toBeInTheDocument();
+    // connected calls keep both avatars but drop the pulsing ring
+    expect(container.querySelectorAll('[data-testid="dm-avatar"]').length).toBe(2);
+    expect(container.querySelector('.dm-call-ring')).not.toBeInTheDocument();
   });
 
   it('startCall shows an outgoing ringing panel and hangup cancels it', async () => {
