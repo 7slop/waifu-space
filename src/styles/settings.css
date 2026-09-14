@@ -450,13 +450,36 @@
 @media (max-width: 850px) {
   .settings-layout {
     flex-direction: column;
+    height: auto;
   }
   .settings-nav {
     width: 100%;
     flex-direction: row;
     overflow-x: auto;
+    white-space: nowrap;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
+    padding: 8px 12px;
+    gap: 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .settings-tab-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .settings-content {
+    padding: 14px 10px 48px;
+  }
+  .section-card {
+    padding: 16px 12px;
+  }
+  .setting-row-colors {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .personality-grid {
+    grid-template-columns: 1fr;
   }
   .appearance-studio-layout {
     grid-template-columns: 1fr;

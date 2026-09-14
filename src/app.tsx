@@ -28,7 +28,8 @@ import {
   PhSparkle,
   PhDoor,
   PhWarning,
-  PhRunning
+  PhRunning,
+  PhTimer
 } from './components/icons';
 
 // Global Styles
@@ -38,6 +39,7 @@ import './styles/waifu.css';
 import './styles/calendar.css';
 import './styles/settings.css';
 import './styles/rpg.css';
+import './styles/timebudget.css';
 
 // Legacy theme names from older builds map onto the new palettes.
 const LEGACY_THEME_MAP: Record<string, string> = {
@@ -218,6 +220,10 @@ function AppLayout(props: { children: any }) {
             <span><PhGameController /></span>
             <span>{t('nav.minigames')}</span>
           </A>
+          <A href="/timebudget" class="nav-tab-btn" activeClass="active" onClick={e => handleNavClick(e, '/timebudget')}>
+            <span><PhTimer /></span>
+            <span>{t('timebudget.nav')}</span>
+          </A>
           <A href="/profile" class="nav-tab-btn" activeClass="active" onClick={e => handleNavClick(e, '/profile')}>
             <span><PhUserCircle /></span>
             <span>{t('nav.profile')}</span>
@@ -278,6 +284,30 @@ function AppLayout(props: { children: any }) {
       <main class="app-content">
         <Suspense>{props.children}</Suspense>
       </main>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <nav class="mobile-bottom-nav" aria-label="Mobile Navigation">
+        <A href="/" class="mobile-nav-item" activeClass="active" end={true} onClick={e => handleNavClick(e, '/')}>
+          <span class="mobile-nav-icon"><PhFlowerLotus /></span>
+          <span class="mobile-nav-label">{t('nav.companion')}</span>
+        </A>
+        <A href="/calendar" class="mobile-nav-item" activeClass="active" onClick={e => handleNavClick(e, '/calendar')}>
+          <span class="mobile-nav-icon"><PhCalendar /></span>
+          <span class="mobile-nav-label">{t('nav.calendar')}</span>
+        </A>
+        <A href="/minigames" class="mobile-nav-item" activeClass="active" onClick={e => handleNavClick(e, '/minigames')}>
+          <span class="mobile-nav-icon"><PhGameController /></span>
+          <span class="mobile-nav-label">{t('nav.minigames')}</span>
+        </A>
+        <A href="/timebudget" class="mobile-nav-item" activeClass="active" onClick={e => handleNavClick(e, '/timebudget')}>
+          <span class="mobile-nav-icon"><PhTimer /></span>
+          <span class="mobile-nav-label">{t('timebudget.nav')}</span>
+        </A>
+        <A href="/profile" class="mobile-nav-item" activeClass="active" onClick={e => handleNavClick(e, '/profile')}>
+          <span class="mobile-nav-icon"><PhUserCircle /></span>
+          <span class="mobile-nav-label">{t('nav.profile')}</span>
+        </A>
+      </nav>
 
       {/* MODALS */}
       <AuthModal

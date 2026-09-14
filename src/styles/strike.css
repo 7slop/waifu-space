@@ -1410,5 +1410,26 @@
   box-shadow: 0 6px 18px rgba(0, 206, 201, 0.45);
 }
 
+@media (max-width: 768px) {
+  .strike-viewport-container {
+    height: 60vh;
+    min-height: 360px;
+    border-radius: 10px;
+  }
+
+  .strike-lock-modal {
+    padding: 20px 16px;
+    max-width: 90vw;
+  }
+
+  .strike-lock-modal h2 {
+    font-size: 1.4rem;
+  }
+
+  .strike-lock-modal p {
+    font-size: 0.9rem;
+  }
+}
+
 
 
