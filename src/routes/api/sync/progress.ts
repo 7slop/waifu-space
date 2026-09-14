@@ -359,7 +359,13 @@ export async function GET(event: { request: Request }) {
       showcaseItems,
       inventory,
       calendarItems,
-      calendarOverrides
+      calendarOverrides,
+      // The client uses calendarSyncedAt to tell "cloud calendar has never
+      // been synced" from "synced and now empty (user deleted everything)".
+      // Omitting it here made the default 'all' pull behave like a fresh
+      // account whenever the cloud list was empty, so deletes/resets never
+      // propagated across devices (each reload re-pushed stale local data).
+      calendarSyncedAt: progress?.calendar_synced_at ?? null
     });
   }
 

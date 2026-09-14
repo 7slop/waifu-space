@@ -706,6 +706,33 @@ describe('Supabase-backed API routes (regression guard)', () => {
       });
     });
 
+    it('reports calendarSyncedAt on the default pull scope when the cloud was synced', async () => {
+      mocks.state.db.user_progress.push({
+        user_id: userId,
+        coins: 200,
+        bond_level: 1,
+        calendar_synced_at: '2026-09-12T12:00:00.000Z'
+      });
+
+      const res = await syncGET(
+        req('http://localhost/api/sync/progress', { headers: { Authorization: `Bearer ${token}` } })
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.calendarSyncedAt).toBe('2026-09-12T12:00:00.000Z');
+    });
+
+    it('exposes calendarSyncedAt as null on the default pull when never synced', async () => {
+      mocks.state.db.user_progress.push({ user_id: userId, coins: 200, bond_level: 1 });
+
+      const res = await syncGET(
+        req('http://localhost/api/sync/progress', { headers: { Authorization: `Bearer ${token}` } })
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.calendarSyncedAt).toBeNull();
+    });
+
     it('rejects requests without a valid session', async () => {
       const res = await syncGET(req('http://localhost/api/sync/progress', {}));
       expect(res.status).toBe(401);
