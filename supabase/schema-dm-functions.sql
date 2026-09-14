@@ -1,0 +1,561 @@
+-- ==========================================================
+-- WaifuSpace: DM / Presence / Call RPCs (SECURITY DEFINER)
+-- These run as the caller between service-role server code and
+-- the database. Every function verifies that a caller presenting a
+-- real user JWT (auth.uid() != null) may only touch their own data;
+-- the server routes always pass the verified session user id.
+-- ==========================================================
+
+-- Personalized summary of every DM conversation for a user.
+CREATE OR REPLACE FUNCTION public.get_dm_conversations(p_user_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  RETURN (
+    SELECT COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', c.id,
+          'type', c.type,
+          'createdAt', c.created_at,
+          'updatedAt', c.updated_at,
+          'lastReadAt', my_p.last_read_at,
+          'unreadCount', (
+            SELECT count(*)::int
+            FROM public.messages m
+            WHERE m.conversation_id = c.id
+              AND m.sender_id <> p_user_id
+              AND m.created_at > COALESCE(my_p.last_read_at, 'epoch'::timestamptz)
+          ),
+          'lastMessage', lm.last_msg,
+          'otherUser', ou.other_user
+        )
+        ORDER BY COALESCE(lm.last_msg->>'createdAt', c.updated_at::text) DESC
+      ),
+      '[]'::jsonb
+    )
+    FROM public.conversations c
+    JOIN public.conversation_participants my_p
+      ON my_p.conversation_id = c.id AND my_p.user_id = p_user_id
+    LEFT JOIN LATERAL (
+      SELECT jsonb_build_object(
+        'id', m.id,
+        'conversationId', m.conversation_id,
+        'senderId', m.sender_id,
+        'content', m.content,
+        'messageType', m.message_type,
+        'mediaUrl', m.media_url,
+        'createdAt', m.created_at
+      ) AS last_msg
+      FROM public.messages m
+      WHERE m.conversation_id = c.id
+      ORDER BY m.created_at DESC
+      LIMIT 1
+    ) lm ON true
+    LEFT JOIN LATERAL (
+      SELECT jsonb_build_object(
+        'id', pu.id,
+        'username', pu.username,
+        'avatarUrl', COALESCE(pu.avatar_url, ''),
+        'bio', COALESCE(pu.bio, ''),
+        'presenceStatus', COALESCE(pr.status, 'offline'),
+        'customStatus', pr.custom_status
+      ) AS other_user
+      FROM public.conversation_participants op
+      JOIN public.profiles pu ON pu.id = op.user_id
+      LEFT JOIN public.user_presence pr ON pr.user_id = pu.id
+      WHERE op.conversation_id = c.id AND op.user_id <> p_user_id
+      LIMIT 1
+    ) ou ON true
+  );
+END;
+$$;
+
+-- Find an existing DM between two users or create it atomically.
+CREATE OR REPLACE FUNCTION public.get_or_create_dm_conversation(
+  p_user_id uuid,
+  p_other_user_id uuid
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_conv_id uuid;
+  v_my_last_read timestamptz;
+  v_unread int;
+  v_other record;
+  v_result jsonb;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF p_user_id = p_other_user_id THEN
+    RAISE EXCEPTION 'cannot DM yourself';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = p_other_user_id) THEN
+    RAISE EXCEPTION 'recipient does not exist';
+  END IF;
+
+  SELECT cp.conversation_id INTO v_conv_id
+  FROM public.conversation_participants cp
+  WHERE cp.user_id = p_user_id
+    AND cp.conversation_id IN (
+      SELECT cp2.conversation_id FROM public.conversation_participants cp2 WHERE cp2.user_id = p_other_user_id
+    )
+  LIMIT 1;
+
+  IF v_conv_id IS NULL THEN
+    INSERT INTO public.conversations (type) VALUES ('dm') RETURNING id INTO v_conv_id;
+    INSERT INTO public.conversation_participants (conversation_id, user_id)
+    VALUES (v_conv_id, p_user_id), (v_conv_id, p_other_user_id);
+  END IF;
+
+  SELECT COALESCE(cp.last_read_at, now()) INTO v_my_last_read
+  FROM public.conversation_participants cp
+  WHERE cp.conversation_id = v_conv_id AND cp.user_id = p_user_id;
+
+  SELECT count(*)::int INTO v_unread
+  FROM public.messages m
+  WHERE m.conversation_id = v_conv_id
+    AND m.sender_id <> p_user_id
+    AND m.created_at > COALESCE(v_my_last_read, 'epoch'::timestamptz);
+
+  SELECT pu.id, pu.username, COALESCE(pu.avatar_url, '') AS avatar_url,
+         COALESCE(pu.bio, '') AS bio,
+         COALESCE(pr.status, 'offline') AS presence_status,
+         pr.custom_status
+    INTO v_other
+  FROM public.profiles pu
+  LEFT JOIN public.user_presence pr ON pr.user_id = pu.id
+  WHERE pu.id = p_other_user_id;
+
+  SELECT jsonb_build_object(
+    'id', c.id,
+    'type', c.type,
+    'createdAt', c.created_at,
+    'updatedAt', c.updated_at,
+    'lastReadAt', v_my_last_read,
+    'unreadCount', v_unread,
+    'lastMessage', NULL,
+    'otherUser', jsonb_build_object(
+      'id', v_other.id,
+      'username', v_other.username,
+      'avatarUrl', v_other.avatar_url,
+      'bio', v_other.bio,
+      'presenceStatus', v_other.presence_status,
+      'customStatus', v_other.custom_status
+    )
+  ) INTO v_result
+  FROM public.conversations c
+  WHERE c.id = v_conv_id;
+
+  RETURN v_result;
+END;
+$$;
+
+-- Insert a message as p_user_id (validated participant), bump thread activity.
+CREATE OR REPLACE FUNCTION public.send_dm_message(
+  p_user_id uuid,
+  p_conversation_id uuid,
+  p_content text DEFAULT '',
+  p_message_type text DEFAULT 'text',
+  p_media_url text DEFAULT NULL
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_msg public.messages%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.conversation_participants cp
+    WHERE cp.conversation_id = p_conversation_id AND cp.user_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'not a participant of this conversation';
+  END IF;
+
+  IF p_message_type NOT IN ('text', 'gif') THEN
+    RAISE EXCEPTION 'invalid message type';
+  END IF;
+
+  IF (COALESCE(p_content, '') = '' AND COALESCE(p_media_url, '') = '') THEN
+    RAISE EXCEPTION 'message body is empty';
+  END IF;
+
+  IF char_length(p_content) > 4000 THEN
+    RAISE EXCEPTION 'message too long';
+  END IF;
+
+  INSERT INTO public.messages (conversation_id, sender_id, content, message_type, media_url)
+  VALUES (p_conversation_id, p_user_id, COALESCE(p_content, ''), p_message_type, p_media_url)
+  RETURNING * INTO v_msg;
+
+  UPDATE public.conversations SET updated_at = now() WHERE id = p_conversation_id;
+
+  RETURN jsonb_build_object(
+    'id', v_msg.id,
+    'conversationId', v_msg.conversation_id,
+    'senderId', v_msg.sender_id,
+    'content', v_msg.content,
+    'messageType', v_msg.message_type,
+    'mediaUrl', v_msg.media_url,
+    'createdAt', v_msg.created_at
+  );
+END;
+$$;
+
+-- Mark a conversation read for p_user_id.
+CREATE OR REPLACE FUNCTION public.mark_dm_conversation_read(
+  p_user_id uuid,
+  p_conversation_id uuid
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  UPDATE public.conversation_participants
+     SET last_read_at = now()
+   WHERE conversation_id = p_conversation_id AND user_id = p_user_id;
+END;
+$$;
+
+-- Page through a conversation's messages (newest first, ascending response).
+CREATE OR REPLACE FUNCTION public.get_dm_messages(
+  p_user_id uuid,
+  p_conversation_id uuid,
+  p_before timestamptz DEFAULT NULL,
+  p_limit int DEFAULT 50
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_msgs jsonb;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.conversation_participants cp
+    WHERE cp.conversation_id = p_conversation_id AND cp.user_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'not a participant of this conversation';
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(r ORDER BY (r->>'createdAt') ASC), '[]'::jsonb) INTO v_msgs
+  FROM (
+    SELECT jsonb_build_object(
+      'id', m.id,
+      'conversationId', m.conversation_id,
+      'senderId', m.sender_id,
+      'content', m.content,
+      'messageType', m.message_type,
+      'mediaUrl', m.media_url,
+      'createdAt', m.created_at
+    ) AS r
+    FROM public.messages m
+    WHERE m.conversation_id = p_conversation_id
+      AND (p_before IS NULL OR m.created_at < p_before)
+    ORDER BY m.created_at DESC
+    LIMIT LEAST(GREATEST(p_limit, 1), 100)
+  ) msub;
+
+  RETURN v_msgs;
+END;
+$$;
+
+-- Total unread message count across all the user's conversations.
+CREATE OR REPLACE FUNCTION public.count_dm_unread(p_user_id uuid)
+RETURNS int
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_total int;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  SELECT COALESCE(sum(cnt), 0)::int INTO v_total
+  FROM (
+    SELECT count(*) AS cnt
+    FROM public.messages m
+    JOIN public.conversation_participants cp
+      ON cp.conversation_id = m.conversation_id AND cp.user_id = p_user_id
+    WHERE m.sender_id <> p_user_id
+      AND m.created_at > COALESCE(cp.last_read_at, 'epoch'::timestamptz)
+    GROUP BY m.conversation_id
+  ) t;
+
+  RETURN v_total;
+END;
+$$;
+
+-- Upsert presence (status + optional custom status text).
+CREATE OR REPLACE FUNCTION public.upsert_user_presence(
+  p_user_id uuid,
+  p_status text DEFAULT 'online',
+  p_custom_status text DEFAULT NULL,
+  p_last_seen timestamptz DEFAULT now()
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v jsonb;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF p_status NOT IN ('online', 'idle', 'dnd', 'invisible', 'offline') THEN
+    RAISE EXCEPTION 'invalid presence status';
+  END IF;
+
+  INSERT INTO public.user_presence (user_id, status, custom_status, last_seen_at)
+  VALUES (p_user_id, p_status, NULLIF(COALESCE(p_custom_status, ''), ''), COALESCE(p_last_seen, now()))
+  ON CONFLICT (user_id) DO UPDATE SET
+    status = EXCLUDED.status,
+    custom_status = EXCLUDED.custom_status,
+    last_seen_at = EXCLUDED.last_seen_at
+  RETURNING jsonb_build_object(
+    'userId', user_id,
+    'status', status,
+    'customStatus', custom_status,
+    'lastSeenAt', last_seen_at
+  ) INTO v;
+
+  RETURN v;
+END;
+$$;
+
+-- Batch fetch presence for a set of user ids (fallback when realtime is down).
+CREATE OR REPLACE FUNCTION public.get_user_presence_batch(p_user_ids uuid[])
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN (
+    SELECT COALESCE(
+      jsonb_object_agg(
+        user_id::text,
+        jsonb_build_object('userId', user_id, 'status', status, 'customStatus', custom_status, 'lastSeenAt', last_seen_at)
+      ),
+      '{}'::jsonb
+    )
+    FROM public.user_presence
+    WHERE user_id = ANY(p_user_ids)
+  );
+END;
+$$;
+
+-- Create a ringing call session (server-authoritative record).
+CREATE OR REPLACE FUNCTION public.create_call_session(
+  p_user_id uuid,
+  p_conversation_id uuid,
+  p_callee_id uuid,
+  p_call_type text DEFAULT 'voice'
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_call public.call_sessions%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF p_user_id = p_callee_id THEN
+    RAISE EXCEPTION 'cannot call yourself';
+  END IF;
+
+  IF p_call_type NOT IN ('voice', 'video', 'screen') THEN
+    RAISE EXCEPTION 'invalid call type';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.conversation_participants
+    WHERE conversation_id = p_conversation_id AND user_id IN (p_user_id, p_callee_id)
+  ) THEN
+    RAISE EXCEPTION 'both users must be part of the conversation';
+  END IF;
+
+  INSERT INTO public.call_sessions (conversation_id, caller_id, callee_id, call_type, status)
+  VALUES (p_conversation_id, p_user_id, p_callee_id, p_call_type, 'ringing')
+  RETURNING * INTO v_call;
+
+  RETURN jsonb_build_object(
+    'id', v_call.id,
+    'conversationId', v_call.conversation_id,
+    'callerId', v_call.caller_id,
+    'calleeId', v_call.callee_id,
+    'callType', v_call.call_type,
+    'status', v_call.status,
+    'startedAt', v_call.started_at,
+    'answeredAt', v_call.answered_at,
+    'endedAt', v_call.ended_at,
+    'createdAt', v_call.created_at
+  );
+END;
+$$;
+
+-- Update a call's lifecycle status (answer / decline / hang up / cancel).
+CREATE OR REPLACE FUNCTION public.update_call_session(
+  p_user_id uuid,
+  p_call_id uuid,
+  p_status text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_call public.call_sessions%ROWTYPE;
+  v_is_participant boolean;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF p_status NOT IN ('ringing', 'active', 'ended', 'declined', 'missed', 'canceled', 'busy') THEN
+    RAISE EXCEPTION 'invalid call status';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1 FROM public.conversation_participants cp
+    JOIN public.call_sessions cs ON cs.conversation_id = cp.conversation_id
+    WHERE cs.id = p_call_id AND cp.user_id = p_user_id
+  ) INTO v_is_participant;
+
+  IF NOT v_is_participant THEN
+    RAISE EXCEPTION 'not a participant of this call';
+  END IF;
+
+  UPDATE public.call_sessions
+     SET status = p_status,
+         answered_at = CASE WHEN p_status = 'active' THEN now() END,
+         ended_at = CASE WHEN p_status IN ('ended', 'declined', 'missed', 'canceled', 'busy') THEN COALESCE(ended_at, now()) END
+   WHERE id = p_call_id
+  RETURNING * INTO v_call;
+
+  RETURN jsonb_build_object(
+    'id', v_call.id,
+    'conversationId', v_call.conversation_id,
+    'callerId', v_call.caller_id,
+    'calleeId', v_call.callee_id,
+    'callType', v_call.call_type,
+    'status', v_call.status,
+    'startedAt', v_call.started_at,
+    'answeredAt', v_call.answered_at,
+    'endedAt', v_call.ended_at,
+    'createdAt', v_call.created_at
+  );
+END;
+$$;
+
+-- Public profile + waifu appearance snapshot for the DM profile panel.
+CREATE OR REPLACE FUNCTION public.get_user_profile_public(p_user_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile record;
+BEGIN
+  SELECT pu.id, pu.username, pu.avatar_url, pu.bio, pu.created_at
+    INTO v_profile
+  FROM public.profiles pu
+  WHERE pu.id = p_user_id;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN (
+    SELECT jsonb_build_object(
+      'id', v_profile.id,
+      'username', v_profile.username,
+      'avatarUrl', COALESCE(v_profile.avatar_url, ''),
+      'bio', COALESCE(v_profile.bio, ''),
+      'createdAt', v_profile.created_at,
+      'stats', jsonb_build_object(
+        'coins', COALESCE(up.coins, 0),
+        'bondLevel', COALESCE(up.bond_level, 1),
+        'defenseHighWave', COALESCE(up.defense_high_wave, 0),
+        'totalVictories', COALESCE(up.defense_victories, 0),
+        'goblinsDefeated', COALESCE(up.goblins_defeated, 0)
+      ),
+      'waifu', jsonb_build_object(
+        'name', COALESCE(up.waifu_name, 'Akari'),
+        'personality', COALESCE(up.waifu_personality, 'tsundere'),
+        'appearance', jsonb_build_object(
+          'outfit', COALESCE(up.worn_outfit, 'seifuku'),
+          'accessory', COALESCE(up.worn_accessory, 'ribbon'),
+          'hairstyle', COALESCE(up.worn_hairstyle, 'twintails'),
+          'avatarFrame', COALESCE(up.worn_avatar_frame, 'none'),
+          'hairColor', COALESCE(up.appearance_data->>'hairColor', '#ff7597'),
+          'eyeColor', COALESCE(up.appearance_data->>'eyeColor', '#4f86f7'),
+          'skinTone', COALESCE(up.appearance_data->>'skinTone', '#fff1eb'),
+          'avatarMode', COALESCE(up.appearance_data->>'avatarMode', 'svg')
+        )
+      )
+    )
+    FROM public.user_progress up
+    WHERE up.user_id = p_user_id
+  );
+END;
+$$;
+
+-- Grant EXECUTE to the roles in play.
+REVOKE ALL ON FUNCTION public.get_dm_conversations(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_dm_conversations(uuid) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_or_create_dm_conversation(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_or_create_dm_conversation(uuid, uuid) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_dm_messages(uuid, uuid, timestamptz, int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_dm_messages(uuid, uuid, timestamptz, int) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.count_dm_unread(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.count_dm_unread(uuid) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.upsert_user_presence(uuid, text, text, timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.upsert_user_presence(uuid, text, text, timestamptz) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_user_presence_batch(uuid[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_user_presence_batch(uuid[]) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.update_call_session(uuid, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.update_call_session(uuid, uuid, text) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_user_profile_public(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_user_profile_public(uuid) TO anon, authenticated, service_role;
