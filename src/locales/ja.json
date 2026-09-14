@@ -304,12 +304,20 @@
       "deleteTask": "{title} を削除"
     },
     "viewSettings": {
-      "tooltip": "カレンダー表示設定",
+      "title": "カレンダー表示設定",
       "timeFormat": "時刻表示",
+      "timeFormatDesc": "カレンダーでの時刻の表示形式",
       "timeFormat24h": "24時間表記 (00:00)",
       "timeFormat12h": "12時間表記 (0 AM)",
       "notifications": "ブラウザ通知",
-      "notificationsDesc": "予定の30分前とタスクの開始時に通知します"
+      "notificationsDesc": "予定の30分前とタスクの開始時に通知します",
+      "permissionUnsupported": "このブラウザでは利用できません",
+      "permissionDefault": "ブラウザの許可を求められたら「許可」をクリックしてください",
+      "permissionGranted": "通知は許可されています",
+      "permissionDenied": "ブラウザ設定でブロックされています",
+      "test": "テスト通知を送信",
+      "testDelivered": "端末にテスト通知を送信しました",
+      "testFallback": "ネイティブ通知を利用できないため、代わりに画面内通知を表示しました"
     }
   },
   "notifications": {
@@ -319,7 +327,9 @@
     "allDayTitle": "今日",
     "allDayBody": "{title} が今日予定されています",
     "enabledToast": "ブラウザ通知を有効にしました",
-    "permissionDenied": "通知権限が拒否されました。ブラウザの設定を確認してください"
+    "permissionDenied": "通知権限が拒否されました。ブラウザの設定を確認してください",
+    "testTitle": "テスト通知",
+    "testBody": "ブラウザ通知が動作しています！"
   },
   "rpg": {
     "dashboard": {

@@ -3,6 +3,11 @@ import {
   state,
   setState,
   addCalendarEvent,
+  showToast,
+  toastMessage,
+  toastVisible,
+  setToastMessage,
+  setToastVisible,
   DEFAULT_STATE,
   dateKeyOf,
 } from '../../src/lib/store';
@@ -13,6 +18,8 @@ import {
   resetNotificationSentState,
   startNotificationScheduler,
   stopNotificationScheduler,
+  sendTestNotification,
+  canNotifyNatively,
 } from '../../src/lib/notifications';
 
 type CapturedNotification = { title: string; body: string };
@@ -64,6 +71,8 @@ describe('Browser notifications (notifications.ts)', () => {
     captured.length = 0;
     resetNotificationSentState();
     setState(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+    setToastMessage('');
+    setToastVisible(false);
     vi.stubGlobal('Notification', FakeNotification);
   });
 
@@ -114,17 +123,37 @@ describe('Browser notifications (notifications.ts)', () => {
     expect(captured.length).toBe(1);
   });
 
-  it('is silent when permission was not granted', () => {
+  it('falls back to an in-app toast instead of a native notification when permission is denied', () => {
     class DeniedNotification {
       static permission: NotificationPermission = 'denied';
       constructor() {
-        captured.push({ title: 'should not fire', body: '' });
+        captured.push({ title: 'should not fire natively', body: '' });
       }
     }
     vi.stubGlobal('Notification', DeniedNotification);
     addEvent({ title: 'Lunch', start: minutesAgo(5) });
     runNotificationCheck();
+    // No native notification was attempted…
     expect(captured.length).toBe(0);
+    // …but the reminder is still delivered in-app so it is never lost.
+    expect(toastVisible()).toBe(true);
+    expect(toastMessage()).toContain('Lunch');
+  });
+
+  it('delivers a reminder in-app when the browser has no Notification API', () => {
+    vi.stubGlobal('Notification', undefined);
+    addEvent({ title: 'Offline reminder', type: 'task', start: minutesAgo(5) });
+    runNotificationCheck();
+    expect(captured.length).toBe(0);
+    expect(toastVisible()).toBe(true);
+    expect(toastMessage()).toContain('Offline reminder');
+  });
+
+  it('reports native capability and can send a test notification when granted', () => {
+    expect(canNotifyNatively()).toBe(true);
+    expect(sendTestNotification()).toBe('native');
+    expect(captured.length).toBe(1);
+    expect(captured[0].body).toContain('working');
   });
 
   it('sends a 9 AM digest for all-day events and tasks', () => {

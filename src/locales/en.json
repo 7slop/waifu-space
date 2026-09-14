@@ -304,12 +304,20 @@
       "deleteTask": "Delete {title}"
     },
     "viewSettings": {
-      "tooltip": "Calendar view settings",
+      "title": "Calendar view settings",
       "timeFormat": "Time format",
+      "timeFormatDesc": "How event times are shown in the calendar",
       "timeFormat24h": "24-hour (00:00)",
       "timeFormat12h": "12-hour (0 AM)",
       "notifications": "Browser notifications",
-      "notificationsDesc": "Get notified 30 min before events and when tasks start"
+      "notificationsDesc": "Get notified 30 min before events and when tasks start",
+      "permissionUnsupported": "Not supported in this browser",
+      "permissionDefault": "Click “Allow” when the browser asks for permission",
+      "permissionGranted": "Notifications allowed",
+      "permissionDenied": "Blocked in browser settings",
+      "test": "Send test notification",
+      "testDelivered": "Test notification sent to your device",
+      "testFallback": "Native delivery not possible here — showing an in-app notice instead"
     }
   },
   "notifications": {
@@ -319,7 +327,9 @@
     "allDayTitle": "Today",
     "allDayBody": "{title} is on your schedule today",
     "enabledToast": "Browser notifications enabled",
-    "permissionDenied": "Notification permission was denied. Check your browser settings."
+    "permissionDenied": "Notification permission was denied. Check your browser settings.",
+    "testTitle": "Test notification",
+    "testBody": "Native browser notifications are working!"
   },
   "rpg": {
     "dashboard": {

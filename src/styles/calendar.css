@@ -1259,25 +1259,73 @@ body.is-resizing-event {
 
 /* ---------------- VIEW SETTINGS (time format, notifications) ---------------- */
 
-.view-settings-menu-container {
-  position: relative;
-  display: inline-flex;
-}
-
-.view-settings-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  background: var(--surface-2, #1e1e24);
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
-  border-radius: var(--radius-md);
-  box-shadow: var(--card-shadow);
-  padding: 12px;
-  min-width: 250px;
-  z-index: 1000;
+.view-settings-section {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+}
+
+.vs-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-muted, #a0a0b0);
+  margin: 0;
+}
+
+.vs-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vs-row + .vs-row {
+  margin-top: 4px;
+}
+
+.vs-label-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vs-status {
+  font-size: 11px;
+  color: var(--text-muted, #a0a0b0);
+}
+
+.vs-notif-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+  margin-top: 2px;
+}
+
+.vs-test-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.vs-test-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.vs-section-divider {
+  height: 1px;
+  background: var(--border-color, rgba(255, 255, 255, 0.15));
+  margin: 4px 0;
 }
 
 .vs-group {

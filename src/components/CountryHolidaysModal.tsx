@@ -1,16 +1,30 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
-import { state, fetchCountryCatalog, setCountryHolidays, setCulturalHolidaysEnabled } from '../lib/store';
+import {
+  state,
+  setState,
+  saveState,
+  showToast,
+  fetchCountryCatalog,
+  setCountryHolidays,
+  setCulturalHolidaysEnabled,
+} from '../lib/store';
+import {
+  requestNotificationPermission,
+  getNotificationPermission,
+  sendTestNotification,
+} from '../lib/notifications';
 import { CountryInfo, countryFlagEmoji } from '../lib/countries';
 import { t } from '../lib/i18n';
 import { useFocusTrap } from '../lib/accessibility';
-import { SettingsIcon, PhX, PhConfetti } from './icons';
+import { SettingsIcon, PhX, PhConfetti, PhClock } from './icons';
 
 const TITLE_ID = 'holidays-modal-title';
 
 /**
- * Country-holidays picker. Toggling a country applies immediately (like Google
- * Calendar); the selection is saved to settings and synced to the cloud, and
- * the selected countries' public holidays show as read-only all-day events.
+ * Calendar settings dialog (opened from the toolbar gear). Holds a
+ * "Calendar view settings" section (time format + browser notifications) and
+ * the country-holidays picker. Toggling applies immediately and is saved to
+ * settings, synced to the cloud.
  */
 export function CountryHolidaysModal(props: { isOpen: boolean; onClose: () => void }) {
   const dialogRef = useFocusTrap(() => props.isOpen, () => props.onClose());
@@ -60,6 +74,56 @@ export function CountryHolidaysModal(props: { isOpen: boolean; onClose: () => vo
     setCountryHolidays([]);
   };
 
+  const toggleNotifications = async (checked: boolean) => {
+    if (!checked) {
+      setState('settings', 'notificationsEnabled', false);
+      saveState();
+      return;
+    }
+    const permission = await requestNotificationPermission();
+    if (permission === 'granted') {
+      setState('settings', 'notificationsEnabled', true);
+      saveState();
+      showToast(t('notifications.enabledToast'));
+    } else {
+      setState('settings', 'notificationsEnabled', false);
+      saveState();
+      showToast(t('notifications.permissionDenied'));
+    }
+  };
+
+  const setTimeFormat = (format: '24h' | '12h') => {
+    if (state.settings.timeFormat === format) return;
+    setState('settings', 'timeFormat', format);
+    saveState();
+  };
+
+  const handleTestNotification = async () => {
+    let permission = getNotificationPermission();
+    if (permission === 'default' || permission === 'unsupported') {
+      permission = await requestNotificationPermission();
+    }
+    if (permission === 'granted') {
+      sendTestNotification();
+      showToast(t('calendar.viewSettings.testDelivered'));
+    } else {
+      showToast(t('calendar.viewSettings.testFallback'));
+    }
+  };
+
+  const permissionLabel = () => {
+    switch (getNotificationPermission()) {
+      case 'granted':
+        return t('calendar.viewSettings.permissionGranted');
+      case 'denied':
+        return t('calendar.viewSettings.permissionDenied');
+      case 'default':
+        return t('calendar.viewSettings.permissionDefault');
+      default:
+        return t('calendar.viewSettings.permissionUnsupported');
+    }
+  };
+
   return (
     <div
       ref={dialogRef}
@@ -71,7 +135,7 @@ export function CountryHolidaysModal(props: { isOpen: boolean; onClose: () => vo
         if (e.target === e.currentTarget) props.onClose();
       }}
     >
-      <div class="gcal-modal" style={{ 'max-width': '440px' }}>
+      <div class="gcal-modal" style={{ 'max-width': '460px' }}>
         <div class="modal-header">
           <h3 id={TITLE_ID}>
             <SettingsIcon size={16} class="modal-title-icon" /> {t('calendar.holidays.title')}
@@ -82,6 +146,57 @@ export function CountryHolidaysModal(props: { isOpen: boolean; onClose: () => vo
         </div>
 
         <div class="holiday-modal-body">
+          {/* ------------- CALENDAR VIEW SETTINGS ------------- */}
+          <section class="view-settings-section" aria-label={t('calendar.viewSettings.title')}>
+            <h4 class="vs-section-title">{t('calendar.viewSettings.title')}</h4>
+
+            <div class="vs-row">
+              <div class="vs-label-wrap">
+                <span class="vs-title">{t('calendar.viewSettings.timeFormat')}</span>
+                <span class="vs-desc">{t('calendar.viewSettings.timeFormatDesc')}</span>
+              </div>
+              <div class="vs-options">
+                <button
+                  type="button"
+                  class={`vs-option ${state.settings.timeFormat === '12h' ? 'active' : ''}`}
+                  onClick={() => setTimeFormat('12h')}
+                >
+                  {t('calendar.viewSettings.timeFormat12h')}
+                </button>
+                <button
+                  type="button"
+                  class={`vs-option ${state.settings.timeFormat === '24h' ? 'active' : ''}`}
+                  onClick={() => setTimeFormat('24h')}
+                >
+                  {t('calendar.viewSettings.timeFormat24h')}
+                </button>
+              </div>
+            </div>
+
+            <div class="vs-row">
+              <div class="vs-label-wrap">
+                <span class="vs-title">{t('calendar.viewSettings.notifications')}</span>
+                <span class="vs-desc">{t('calendar.viewSettings.notificationsDesc')}</span>
+              </div>
+              <input
+                type="checkbox"
+                class="vs-switch"
+                checked={state.settings.notificationsEnabled}
+                onChange={e => toggleNotifications(e.currentTarget.checked)}
+                aria-label={t('calendar.viewSettings.notifications')}
+              />
+            </div>
+            <div class="vs-notif-actions">
+              <span class="vs-status"><PhClock /> {permissionLabel()}</span>
+              <button type="button" class="vs-test-btn" onClick={() => void handleTestNotification()}>
+                {t('calendar.viewSettings.test')}
+              </button>
+            </div>
+          </section>
+
+          <div class="vs-section-divider" />
+
+          {/* ------------- COUNTRY HOLIDAYS ------------- */}
           <p class="holiday-modal-subtitle">{t('calendar.holidays.subtitle')}</p>
 
           <label class="holiday-culture-toggle">

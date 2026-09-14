@@ -12,7 +12,6 @@ import {
   isEventOnDate,
   dateKeyOf,
   showToast,
-  saveState,
   holidayEvents,
   holidayLoading,
   refreshHolidayEvents,
@@ -20,7 +19,6 @@ import {
 import {
   startNotificationScheduler,
   stopNotificationScheduler,
-  requestNotificationPermission,
 } from '../lib/notifications';
 import { CalendarEventItem } from '../lib/ical';
 import { buildCulturalHolidayEvents } from '../lib/countries';
@@ -34,7 +32,6 @@ import { CalendarWeekView } from './CalendarWeekView';
 import { CalendarDayView } from './CalendarDayView';
 import { t, getLocale, formatDate } from '../lib/i18n';
 import { onActivateKey } from '../lib/accessibility';
-import { PhClock } from './icons';
 import {
   PhPlus,
   PhCaretDown,
@@ -55,9 +52,6 @@ export function CalendarPlanner() {
   // Modals & Popovers & Dropdowns
   const [createMenuOpen, setCreateMenuOpen] = createSignal(false);
   let createMenuRef: HTMLDivElement | undefined;
-
-  const [viewSettingsOpen, setViewSettingsOpen] = createSignal(false);
-  let viewSettingsRef: HTMLDivElement | undefined;
 
   const [isModalOpen, setIsModalOpen] = createSignal(false);
   const [modalEvent, setModalEvent] = createSignal<CalendarEventItem | null>(null);
@@ -91,30 +85,6 @@ export function CalendarPlanner() {
       stopNotificationScheduler();
     }
   });
-
-  const toggleNotifications = async (checked: boolean) => {
-    if (!checked) {
-      setState('settings', 'notificationsEnabled', false);
-      saveState();
-      return;
-    }
-    const permission = await requestNotificationPermission();
-    if (permission === 'granted') {
-      setState('settings', 'notificationsEnabled', true);
-      saveState();
-      showToast(t('notifications.enabledToast'));
-    } else {
-      setState('settings', 'notificationsEnabled', false);
-      saveState();
-      showToast(t('notifications.permissionDenied'));
-    }
-  };
-
-  const setTimeFormat = (format: '24h' | '12h') => {
-    if (state.settings.timeFormat === format) return;
-    setState('settings', 'timeFormat', format);
-    saveState();
-  };
 
   // Filtered events
   const filteredEvents = createMemo(() => {
@@ -375,7 +345,6 @@ const sidebarTasks = createMemo(() => {
       if (e.key === 'Escape') {
         closePopover();
         setCreateMenuOpen(false);
-        setViewSettingsOpen(false);
         setIsModalOpen(false);
         setHolidaysModalOpen(false);
         setRepeatScopeRequest(null);
@@ -397,7 +366,6 @@ const sidebarTasks = createMemo(() => {
     } else if (e.key === 'Escape') {
       closePopover();
       setCreateMenuOpen(false);
-      setViewSettingsOpen(false);
       setIsModalOpen(false);
     }
   };
@@ -405,9 +373,6 @@ const sidebarTasks = createMemo(() => {
   const handleDocClick = (e: MouseEvent) => {
     if (createMenuRef && !createMenuRef.contains(e.target as Node)) {
       setCreateMenuOpen(false);
-    }
-    if (viewSettingsRef && !viewSettingsRef.contains(e.target as Node)) {
-      setViewSettingsOpen(false);
     }
   };
 
@@ -524,58 +489,6 @@ const sidebarTasks = createMemo(() => {
               <span class="holiday-loading-dot" aria-hidden="true" />
             </Show>
           </button>
-          <div class="view-settings-menu-container" ref={viewSettingsRef}>
-            <button
-              type="button"
-              class="gcal-icon-btn view-settings-btn"
-              onClick={() => setViewSettingsOpen(!viewSettingsOpen())}
-              title={t('calendar.viewSettings.tooltip')}
-              aria-label={t('calendar.viewSettings.tooltip')}
-              aria-haspopup="true"
-              aria-expanded={viewSettingsOpen()}
-            >
-              <PhClock />
-            </button>
-            <Show when={viewSettingsOpen()}>
-              <div class="view-settings-dropdown" role="menu">
-                <div class="vs-group">
-                  <span class="vs-title">{t('calendar.viewSettings.timeFormat')}</span>
-                  <div class="vs-options">
-                    <button
-                      type="button"
-                      class={`vs-option ${state.settings.timeFormat === '12h' ? 'active' : ''}`}
-                      onClick={() => setTimeFormat('12h')}
-                    >
-                      {t('calendar.viewSettings.timeFormat12h')}
-                    </button>
-                    <button
-                      type="button"
-                      class={`vs-option ${state.settings.timeFormat === '24h' ? 'active' : ''}`}
-                      onClick={() => setTimeFormat('24h')}
-                    >
-                      {t('calendar.viewSettings.timeFormat24h')}
-                    </button>
-                  </div>
-                </div>
-                <div class="vs-divider" />
-                <div class="vs-group">
-                  <div class="vs-toggle-row">
-                    <div>
-                      <span class="vs-title">{t('calendar.viewSettings.notifications')}</span>
-                      <span class="vs-desc">{t('calendar.viewSettings.notificationsDesc')}</span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      class="vs-switch"
-                      checked={state.settings.notificationsEnabled}
-                      onChange={e => toggleNotifications(e.currentTarget.checked)}
-                      aria-label={t('calendar.viewSettings.notifications')}
-                    />
-                  </div>
-                </div>
-              </div>
-            </Show>
-          </div>
           <div class="gcal-view-selector">
             <button
               type="button"
