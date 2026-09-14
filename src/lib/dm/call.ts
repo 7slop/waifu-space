@@ -39,6 +39,8 @@ export interface CallManagerDeps {
   onRemoteStream?: (stream: MediaStream) => void;
   onStateChange?: (state: CallState) => void;
   onIceCandidate?: (candidate: RTCIceCandidateInit, callId: string) => void;
+  /** Emitted when a mid-call track change needs a fresh SDP offer. */
+  onRenegotiation?: (offer: RTCSessionDescriptionInit, callId: string) => void;
 }
 
 export class CallManager {
@@ -52,6 +54,12 @@ export class CallManager {
   private peerId: string | null = null;
   private creatingAnswer = false;
   private pendingCandidates: RTCIceCandidateInit[] = [];
+  private videoSender: RTCRtpSender | null = null;
+  private screenTrack: MediaStreamTrack | null = null;
+  private screenStream: MediaStream | null = null;
+  private screenActive = false;
+  private cameraTrack: MediaStreamTrack | null = null;
+  private renegotiating = false;
 
   constructor(deps: CallManagerDeps = {}) {
     this.deps = deps;
@@ -89,7 +97,40 @@ export class CallManager {
       this.deps.onRemoteStream?.(this.remoteStream);
     };
     if (this.localStream) {
-      for (const track of this.localStream.getTracks()) this.pc.addTrack(track, this.localStream);
+      for (const track of this.localStream.getTracks()) {
+        const sender = this.pc.addTrack(track, this.localStream);
+        if (track.kind === 'video') this.videoSender = sender;
+      }
+    }
+  }
+
+  private renegotiate(): void {
+    if (this.state !== 'connected' || !this.pc || this.renegotiating || !this.callId) return;
+    this.renegotiating = true;
+    void (async () => {
+      try {
+        const offer = await this.pc!.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+        await this.pc!.setLocalDescription(offer);
+        const desc: RTCSessionDescriptionInit = { type: (this.pc!.localDescription as any)?.type ?? 'offer', sdp: this.pc!.localDescription?.sdp ?? '' };
+        this.deps.onRenegotiation?.(desc, this.callId!);
+      } catch {
+        // renegotiation is best-effort
+      }
+      this.renegotiating = false;
+    })();
+  }
+
+  private async applyVideoTrack(track: MediaStreamTrack | null): Promise<void> {
+    if (!this.pc) return;
+    try {
+      if (this.videoSender) {
+        await this.videoSender.replaceTrack(track);
+      } else if (track) {
+        this.videoSender = this.pc.addTrack(track, this.localStream ?? new MediaStream());
+      }
+      this.renegotiate();
+    } catch {
+      // ignore track wiring errors
     }
   }
 
@@ -238,6 +279,82 @@ export class CallManager {
     return next;
   }
 
+  /** Ensures a camera feed is live mid-call (used from a voice call). */
+  async ensureCamera(): Promise<boolean> {
+    if (!this.localStream) return false;
+    const existing = this.localStream.getVideoTracks()[0];
+    if (existing && existing !== this.screenTrack) return true;
+    const getUserMedia = this.deps.getUserMedia ?? ((constraints: MediaStreamConstraints) => {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        return Promise.reject(new Error('camera unavailable'));
+      }
+      return navigator.mediaDevices.getUserMedia(constraints);
+    });
+    let stream: MediaStream;
+    try {
+      stream = await getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
+    } catch {
+      return false;
+    }
+    const track = stream.getVideoTracks()[0];
+    if (!track) return false;
+    this.cameraTrack = track;
+    this.screenActive = false;
+    this.screenTrack = null;
+    this.localStream.addTrack(track);
+    if (this.screenStream) {
+      for (const t of this.screenStream.getTracks()) t.stop();
+      this.screenStream = null;
+    }
+    await this.applyVideoTrack(track);
+    return true;
+  }
+
+  /** Starts sharing the user's screen over the current call. */
+  async enableScreenShare(): Promise<boolean> {
+    if (!this.localStream || this.screenActive) return false;
+    const getDisplayMedia = this.deps.getDisplayMedia ?? (() => {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getDisplayMedia) {
+        return Promise.reject(new Error('screen sharing unsupported'));
+      }
+      return navigator.mediaDevices.getDisplayMedia({ video: true });
+    });
+    let stream: MediaStream;
+    try {
+      stream = await getDisplayMedia();
+    } catch {
+      return false;
+    }
+    const track = stream.getVideoTracks()[0];
+    if (!track) return false;
+    this.screenStream = stream;
+    this.screenTrack = track;
+    this.screenActive = true;
+    this.localStream.addTrack(track);
+    await this.applyVideoTrack(track);
+    return true;
+  }
+
+  /** Stops screen sharing and restores the camera feed if one was live. */
+  async disableScreenShare(): Promise<boolean> {
+    if (!this.screenActive || !this.screenTrack) return false;
+    this.screenTrack.stop();
+    this.localStream?.removeTrack(this.screenTrack);
+    if (this.screenStream) {
+      for (const t of this.screenStream.getTracks()) t.stop();
+    }
+    this.screenStream = null;
+    this.screenTrack = null;
+    this.screenActive = false;
+    await this.applyVideoTrack(this.cameraTrack && this.cameraTrack.enabled ? this.cameraTrack : null);
+    return true;
+  }
+
+  /** True while the user is sharing their screen. */
+  isScreenSharing(): boolean {
+    return this.screenActive;
+  }
+
   /** Tracks whether the user is currently muted (any audio track disabled). */
   isMuted(): boolean {
     return !!this.localStream && this.localStream.getAudioTracks().every(t => !t.enabled);
@@ -247,6 +364,11 @@ export class CallManager {
   isVideoOff(): boolean {
     const tracks = this.localStream?.getVideoTracks();
     return !tracks || tracks.length === 0 || tracks.every(t => !t.enabled);
+  }
+
+  /** Whether any local video track exists (camera or screen). */
+  hasVideoTracks(): boolean {
+    return !!this.localStream && this.localStream.getVideoTracks().length > 0;
   }
 
   hangUp(reason: 'ended' | 'declined' | 'canceled' = 'ended'): void {
@@ -262,11 +384,19 @@ export class CallManager {
       for (const t of this.localStream.getTracks()) t.stop();
       this.localStream = null;
     }
+    if (this.screenStream) {
+      for (const t of this.screenStream.getTracks()) t.stop();
+      this.screenStream = null;
+    }
     this.remoteStream = null;
     this.pendingCandidates = [];
     this.callId = null;
     this.peerId = null;
     this.options = null;
+    this.videoSender = null;
+    this.screenTrack = null;
+    this.screenActive = false;
+    this.cameraTrack = null;
     this.setState(reason === 'canceled' ? 'idle' : reason === 'declined' ? 'ended' : 'ended');
   }
 }

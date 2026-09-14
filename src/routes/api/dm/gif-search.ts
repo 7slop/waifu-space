@@ -10,6 +10,7 @@ interface GifItem {
   preview: string;
   width: number;
   height: number;
+  title?: string;
 }
 
 export async function GET(event: { request: Request }) {
@@ -24,12 +25,49 @@ export async function GET(event: { request: Request }) {
     return badRequestResponse('Search query is required');
   }
 
-  const apiKey = process.env.TENOR_API_KEY || process.env.GIPHY_API_KEY;
+  const giphyKey = process.env.GIPHY_API_KEY;
+  const tenorKey = process.env.TENOR_API_KEY;
 
-  if (process.env.TENOR_API_KEY) {
+  // GIPHY is preferred (it is the default provider for this UI).
+  if (giphyKey) {
+    const giphyUrl = new URL('https://api.giphy.com/v1/gifs/search');
+    giphyUrl.searchParams.set('q', query);
+    giphyUrl.searchParams.set('api_key', giphyKey);
+    giphyUrl.searchParams.set('limit', String(limit));
+    giphyUrl.searchParams.set('rating', 'pg-13');
+
+    try {
+      const res = await fetch(giphyUrl.toString());
+      if (!res.ok) {
+        return json({ success: false, error: 'GIF search failed' }, { status: 502 });
+      }
+      const body = await res.json();
+      const items: GifItem[] = (Array.isArray(body?.data) ? body.data : [])
+        .map((g: any) => {
+          const url = g?.images?.original?.url as string | undefined;
+          const preview = (g?.images?.fixed_width?.url as string | undefined) || url;
+          if (!url) return null;
+          return {
+            id: String(g?.id ?? Math.random()),
+            url,
+            preview,
+            width: Number(g?.images?.original?.width ?? 200),
+            height: Number(g?.images?.original?.height ?? 200),
+            title: typeof g?.title === 'string' ? g.title.slice(0, 256) : undefined
+          };
+        })
+        .filter((i: GifItem | null): i is GifItem => i !== null);
+
+      return json({ success: true, source: 'giphy', items });
+    } catch {
+      return json({ success: false, error: 'GIF search failed' }, { status: 502 });
+    }
+  }
+
+  if (tenorKey) {
     const tenorUrl = new URL('https://tenor.com/v2/search');
     tenorUrl.searchParams.set('q', query);
-    tenorUrl.searchParams.set('key', process.env.TENOR_API_KEY);
+    tenorUrl.searchParams.set('key', tenorKey);
     tenorUrl.searchParams.set('limit', String(limit));
     tenorUrl.searchParams.set('contentfilter', 'medium');
     tenorUrl.searchParams.set('media_filter', 'minimal');
@@ -64,41 +102,7 @@ export async function GET(event: { request: Request }) {
     }
   }
 
-  if (process.env.GIPHY_API_KEY) {
-    const giphyUrl = new URL('https://api.giphy.com/v1/gifs/search');
-    giphyUrl.searchParams.set('q', query);
-    giphyUrl.searchParams.set('api_key', process.env.GIPHY_API_KEY);
-    giphyUrl.searchParams.set('limit', String(limit));
-    giphyUrl.searchParams.set('rating', 'pg-13');
-
-    try {
-      const res = await fetch(giphyUrl.toString());
-      if (!res.ok) {
-        return json({ success: false, error: 'GIF search failed' }, { status: 502 });
-      }
-      const body = await res.json();
-      const items: GifItem[] = (Array.isArray(body?.data) ? body.data : [])
-        .map((g: any) => {
-          const url = g?.images?.original?.url as string | undefined;
-          const preview = (g?.images?.fixed_width?.url as string | undefined) || url;
-          if (!url) return null;
-          return {
-            id: String(g?.id ?? Math.random()),
-            url,
-            preview,
-            width: Number(g?.images?.original?.width ?? 200),
-            height: Number(g?.images?.original?.height ?? 200)
-          };
-        })
-        .filter((i: GifItem | null): i is GifItem => i !== null);
-
-      return json({ success: true, source: 'giphy', items });
-    } catch {
-      return json({ success: false, error: 'GIF search failed' }, { status: 502 });
-    }
-  }
-
-  // No provider key configured: fall back to a curated static-of-paste mode.
-  // API key remains unused for now.
-  return json({ success: true, source: 'none', items: [], keyConfigured: Boolean(apiKey) });
+  // No provider key configured: return an empty result so the UI can surface
+  // the "no results" state instead of silently failing.
+  return json({ success: true, source: 'none', items: [], keyConfigured: Boolean(giphyKey || tenorKey) });
 }

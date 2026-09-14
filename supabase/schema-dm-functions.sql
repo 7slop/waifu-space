@@ -189,7 +189,7 @@ BEGIN
     RAISE EXCEPTION 'not a participant of this conversation';
   END IF;
 
-  IF p_message_type NOT IN ('text', 'gif') THEN
+  IF p_message_type NOT IN ('text', 'gif', 'image', 'video') THEN
     RAISE EXCEPTION 'invalid message type';
   END IF;
 

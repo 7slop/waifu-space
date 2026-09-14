@@ -101,4 +101,28 @@ describe('DmSidebar', () => {
     expect(dmState.activeConversationId).toBe('c3');
     restore();
   });
+
+  it('pins the user panel at the bottom of the sidebar', () => {
+    seed();
+    const { container } = render(() => <DmSidebar />);
+    const sidebar = container.querySelector('.dm-sidebar')!;
+    expect(sidebar.lastElementChild).toHaveClass('dm-user-panel');
+  });
+
+  it('opens the own profile popover from the pinned user panel', () => {
+    seed();
+    const restore = stubFetch({
+      '/api/dm/users/u-me/profile': () => ({
+        body: {
+          success: true,
+          profile: { id: 'u-me', username: 'me', avatarUrl: null, bio: 'myself', createdAt: '2025-01-01T00:00:00.000Z', lastSeenAt: '2025-01-01T00:00:00.000Z' }
+        }
+      })
+    });
+    const { container } = render(() => <DmSidebar />);
+    fireEvent.click(container.querySelector('.dm-user-panel')!);
+    expect(container.querySelector('[data-testid="dm-profile-popover"]')).toBeInTheDocument();
+    expect(container.textContent).toContain('You');
+    restore();
+  });
 });

@@ -6,6 +6,7 @@ import type {
   DmMessage,
   DmUserLite,
   DmUserProfile,
+  GifFavorite,
   MessageType,
   PresenceStatus,
   UserPresence
@@ -15,27 +16,44 @@ import type {
 // Pure helpers (framework-free, unit-tested)
 // ---------------------------------------------------------------------------
 
-const IMAGE_MEDIAA_URL_RE =
-  /\.(gif|webp|gifv)(\?.*)?$/i;
-const KNOWN_PROVIDER_RE =
-  /(tenor\.com|giphy\.com|media\.tenor\.com|media\.giphy\.com|i\.giphy\.media|media\.gif|gph\.is)/i;
+export type MediaKind = 'gif' | 'image' | 'video';
 
-/** True when a string looks like a direct image/GIF URL we can embed. */
-export function isGifUrl(value: string): boolean {
-  if (!value || typeof value !== 'string') return false;
+const GIF_EXT_RE = /\.(gif|gifv)(\?.*)?$/i;
+const IMAGE_EXT_RE = /\.(png|jpe?g|webp|avif|bmp|gif|gifv)(\?.*)?$/i;
+const VIDEO_EXT_RE = /\.(mp4|webm|ogv|mov|m4v)(\?.*)?$/i;
+const KNOWN_GIF_PROVIDER_RE =
+  /(tenor\.com|giphy\.com|media\.tenor\.com|media\.giphy\.com|i\.giphy\.media|media\.gif|gph\.is)/i;
+/** Extracts a GIPHY media id from /media/<id>/giphy.gif style URLs. */
+const GIPHY_MEDIA_RE = /\/media\/([A-Za-z0-9]+)\//i;
+
+/**
+ * Detects whether a pasted/typed string is a direct URL to a GIF, image or
+ * video we can embed. Returns the kind + canonical URL, or null.
+ */
+export function detectMediaUrl(value: string): { url: string; kind: MediaKind } | null {
+  if (!value || typeof value !== 'string') return null;
   const trimmed = value.trim();
-  if (!/^https?:\/\//i.test(trimmed)) return false;
-  if (IMAGE_MEDIAA_URL_RE.test(trimmed.split('#')[0])) return true;
-  return KNOWN_PROVIDER_RE.test(trimmed);
+  if (trimmed.length > 2048) return null;
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  const path = trimmed.split('#')[0];
+  if (VIDEO_EXT_RE.test(path)) return { url: trimmed, kind: 'video' };
+  if (IMAGE_EXT_RE.test(path)) {
+    const kind: MediaKind = GIF_EXT_RE.test(path) ? 'gif' : 'image';
+    return { url: trimmed, kind };
+  }
+  if (KNOWN_GIF_PROVIDER_RE.test(trimmed)) return { url: trimmed, kind: 'gif' };
+  return null;
+}
+
+/** True when a string looks like a direct image/GIF/video URL we can embed. */
+export function isGifUrl(value: string): boolean {
+  return detectMediaUrl(value) !== null;
 }
 
 /** Trims/canonicalizes a pasted media URL, or null if not a media URL. */
 export function normalizeGifUrl(value: string): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (trimmed.length > 2048) return null;
-  if (!isGifUrl(trimmed)) return null;
-  return trimmed;
+  const detected = detectMediaUrl(value);
+  return detected ? detected.url : null;
 }
 
 /** Chooses the message type + payload to send for a raw input string. */
@@ -46,21 +64,49 @@ export function classifyOutgoingMessage(
   if (explicitMediaUrl) {
     return { content: '', messageType: 'gif', mediaUrl: explicitMediaUrl };
   }
-  const candidate = normalizeGifUrl(input);
-  if (candidate && (IMAGE_MEDIAA_URL_RE.test(candidate) || candidate.includes(input.trim()))) {
-    return { content: '', messageType: 'gif', mediaUrl: candidate };
+  const detected = detectMediaUrl(input);
+  if (detected) {
+    return { content: '', messageType: detected.kind, mediaUrl: detected.url };
   }
   return { content: input.trim(), messageType: 'text', mediaUrl: null };
 }
 
+/**
+ * Resolves the embeddable media for a message (if any). For `gif`/`image`/
+ * `video` messages the stored media URL wins; pasted text links are detected.
+ */
+export function mediaSourceOf(message: DmMessage): { url: string; kind: MediaKind } | null {
+  if (message.messageType === 'text') {
+    const detected = detectMediaUrl(message.mediaUrl || message.content);
+    return detected ? { url: detected.url, kind: detected.kind } : null;
+  }
+  if ((message.messageType === 'gif' || message.messageType === 'image' || message.messageType === 'video') && message.mediaUrl) {
+    return { url: message.mediaUrl, kind: message.messageType };
+  }
+  return null;
+}
+
+/**
+ * Stable favorite key for a media URL: the GIPHY media id when the URL is a
+ * GIPHY asset (so favoriting a sent gif matches picker favorites), else the
+ * URL itself.
+ */
+export function gifKeyOfUrl(url: string): string {
+  const match = url.split('#')[0].match(GIPHY_MEDIA_RE);
+  return (match && match[1]) || url;
+}
+
 /** Renders a server row (any shape) into a typed DM message. */
 export function toDmMessage(raw: any): DmMessage {
+  const rawType = (raw?.messageType ?? raw?.message_type ?? 'text') as MessageType;
+  const messageType: MessageType =
+    rawType === 'gif' || rawType === 'image' || rawType === 'video' ? rawType : 'text';
   return {
     id: String(raw?.id ?? ''),
     conversationId: String(raw?.conversationId ?? raw?.conversation_id ?? ''),
     senderId: String(raw?.senderId ?? raw?.sender_id ?? ''),
     content: String(raw?.content ?? ''),
-    messageType: raw?.messageType === 'gif' || raw?.message_type === 'gif' ? 'gif' : 'text',
+    messageType,
     mediaUrl: (raw?.mediaUrl ?? raw?.media_url ?? null) || null,
     createdAt: String(raw?.createdAt ?? raw?.created_at ?? new Date().toISOString())
   };
@@ -87,18 +133,17 @@ export function isOwnMessage(msg: DmMessage, myUserId: string | null | undefined
   return !!myUserId && msg.senderId === myUserId;
 }
 
-/** Well-known GIF providers whose URLs should be embedded as-is even for text. */
-export function mediaSourceOf(message: DmMessage): string | null {
-  if (message.messageType === 'gif' && message.mediaUrl) return message.mediaUrl;
-  if (message.messageType === 'text' && (message.mediaUrl || isGifUrl(message.content))) {
-    return message.mediaUrl || message.content;
-  }
-  return null;
-}
-
 export function formatMessageTime(iso: string): string {
   try {
     return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+export function formatJoinDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
   } catch {
     return '';
   }
@@ -279,15 +324,61 @@ export interface GifItem {
   preview: string;
   width: number;
   height: number;
+  title?: string;
 }
 
-export async function searchGifs(token: string, query: string): Promise<GifItem[]> {
-  const data = await request<{ success: boolean; items: GifItem[] }>(
+export interface GifSearchResult {
+  items: GifItem[];
+  source: 'giphy' | 'tenor' | 'none';
+  keyConfigured: boolean;
+}
+
+export async function searchGifs(token: string, query: string): Promise<GifSearchResult> {
+  const data = await request<{ success: boolean; items?: GifItem[]; source?: string; keyConfigured?: boolean }>(
     `/api/dm/gif-search?q=${encodeURIComponent(query)}`,
     { method: 'GET' },
     token
   );
-  return data.items ?? [];
+  return {
+    items: data.items ?? [],
+    source: data.source === 'tenor' ? 'tenor' : data.source === 'none' ? 'none' : 'giphy',
+    keyConfigured: data.keyConfigured ?? true
+  };
+}
+
+export async function listGifFavorites(token: string): Promise<GifFavorite[]> {
+  const data = await request<{ success: boolean; favorites: GifFavorite[] }>(
+    '/api/dm/gif-favorites',
+    { method: 'GET' },
+    token
+  );
+  return data.favorites ?? [];
+}
+
+export interface GifFavoriteInput {
+  gifId: string;
+  url: string;
+  preview?: string;
+  width?: number;
+  height?: number;
+  title?: string;
+}
+
+export async function addGifFavorite(token: string, item: GifFavoriteInput): Promise<GifFavorite> {
+  const data = await request<{ success: boolean; favorite: GifFavorite }>(
+    '/api/dm/gif-favorites',
+    { method: 'POST', body: JSON.stringify(item) },
+    token
+  );
+  return data.favorite;
+}
+
+export async function removeGifFavorite(token: string, gifId: string): Promise<void> {
+  await request<{ success: boolean }>(
+    '/api/dm/gif-favorites',
+    { method: 'DELETE', body: JSON.stringify({ gifId }) },
+    token
+  );
 }
 
 export async function fetchDmConfig(): Promise<{ supabaseUrl: string; supabaseAnonKey: string; isConfigured: boolean }> {

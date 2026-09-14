@@ -8,6 +8,8 @@ import type {
   DmMessage,
   DmMessageBroadcast,
   DmUserLite,
+  GifFavorite,
+  MessageType,
   PresenceStatus,
   TypingBroadcast,
   UserPresence
@@ -29,7 +31,11 @@ import {
   sendMessageRequest,
   setMyPresenceRequest,
   toDmMessage,
-  updateCallStatusRequest
+  updateCallStatusRequest,
+  listGifFavorites,
+  addGifFavorite,
+  removeGifFavorite,
+  gifKeyOfUrl
 } from './api';
 import { DmRealtime, RealtimePresencePayload } from './realtime';
 import { CallManager, CallState } from './call';
@@ -64,6 +70,7 @@ export interface DmCallUi {
   callState: CallState;
   muted: boolean;
   videoOff: boolean;
+  screenSharing: boolean;
 }
 
 export interface DmStoreState {
@@ -86,7 +93,10 @@ export interface DmStoreState {
   searchResults: DmUserLite[];
   gifQuery: string;
   gifResults: GifItem[];
+  gifUnavailable: boolean;
   gifOpen: boolean;
+  gifTab: 'search' | 'favorites';
+  gifFavorites: GifItem[];
   typing: Record<string, string[]>;
 }
 
@@ -131,7 +141,10 @@ const INITIAL: DmStoreState = {
   searchResults: [],
   gifQuery: '',
   gifResults: [],
+  gifUnavailable: false,
   gifOpen: false,
+  gifTab: 'search',
+  gifFavorites: [],
   typing: {}
 };
 
@@ -195,7 +208,8 @@ function onRealtimeMessage(broadcast: DmMessageBroadcast): void {
   if (!isMine) {
     const dnd = dmState.presence[msg.senderId]?.status === 'dnd';
     const sender = broadcast.senderName || dmState.conversations.find(c => c.id === convId)?.otherUser?.username || 'Someone';
-    if (!dnd) notify(broadcast.senderName || sender, msg.messageType === 'gif' ? 'Sent a GIF' : msg.content || '(attachment)');
+    const attachment = msg.messageType === 'gif' ? 'Sent a GIF' : msg.messageType === 'image' ? 'Sent an image' : msg.messageType === 'video' ? 'Sent a video' : '';
+    if (!dnd) notify(broadcast.senderName || sender, attachment || msg.content || '(attachment)');
   }
 }
 
@@ -249,6 +263,13 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
       const answer = await manager.acceptOffer(pending.call.id, pending.call.callerId, signal.sdp);
       if (answer) sendSignal('answer', pending.call.id, pending.call.conversationId, { sdp: answer });
       flushPendingIce(pending.call.conversationId, pending.call.id);
+      return;
+    }
+    // A renegotiation offer mid-call (e.g. the remote side added a track).
+    if (call && signal.callId === call.call.id && signal.sdp) {
+      const remoteId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
+      const answer = await manager.acceptOffer(call.call.id, remoteId, signal.sdp);
+      if (answer) sendSignal('answer', call.call.id, call.call.conversationId, { sdp: answer });
     }
     return;
   }
@@ -295,7 +316,17 @@ function makeCallManager(): CallManager {
 
 function wireCallManager(call: CallSession, manager: CallManager): void {
   manager.deps.onStateChange = () => {
-    setDmState('call', (prev) => (prev ? { ...prev, callState: manager.currentState, muted: manager.isMuted(), videoOff: manager.isVideoOff() } : prev));
+    setDmState('call', (prev) =>
+      prev
+        ? {
+            ...prev,
+            callState: manager.currentState,
+            muted: manager.isMuted(),
+            videoOff: manager.isVideoOff(),
+            screenSharing: manager.isScreenSharing()
+          }
+        : prev
+    );
   };
   manager.deps.onIceCandidate = (candidate) => {
     const convId = call.conversationId;
@@ -304,6 +335,10 @@ function wireCallManager(call: CallSession, manager: CallManager): void {
     } else {
       setDmState('pendingIce', (list) => [...list, { kind: 'call-signal', callId: call.id, conversationId: convId, type: 'ice', candidate }]);
     }
+  };
+  manager.deps.onRenegotiation = (offer, callId) => {
+    if (callId !== call.id) return;
+    sendSignal('offer', call.id, call.conversationId, { sdp: offer });
   };
 }
 
@@ -467,7 +502,7 @@ export async function sendGif(url: string): Promise<DmMessage | null> {
   return sendViaApi(convId, { content: '', messageType: 'gif', mediaUrl: url });
 }
 
-async function sendViaApi(convId: string, payload: { content: string; messageType: 'text' | 'gif'; mediaUrl: string | null }): Promise<DmMessage | null> {
+async function sendViaApi(convId: string, payload: { content: string; messageType: MessageType; mediaUrl: string | null }): Promise<DmMessage | null> {
   const auth = currentAuth();
   if (!auth) return null;
   try {
@@ -544,9 +579,10 @@ export async function gifSearch(query: string): Promise<GifItem[]> {
   setDmState('gifQuery', query);
   if (!auth) return [];
   try {
-    const items = await searchGifs(auth.token, query);
-    setDmState('gifResults', items);
-    return items;
+    const result = await searchGifs(auth.token, query);
+    setDmState('gifResults', result.items);
+    setDmState('gifUnavailable', result.source === 'none' && !result.keyConfigured);
+    return result.items;
   } catch {
     setDmState('gifResults', []);
     return [];
@@ -555,6 +591,67 @@ export async function gifSearch(query: string): Promise<GifItem[]> {
 
 export function setGifOpen(open: boolean): void {
   setDmState('gifOpen', open);
+}
+
+export function setGifTab(tab: 'search' | 'favorites'): void {
+  setDmState('gifTab', tab);
+  if (tab === 'favorites') void gifLoadFavorites();
+}
+
+export function isGifFavorited(id: string): boolean {
+  return dmState.gifFavorites.some((f) => f.id === id);
+}
+
+function favToItem(f: GifFavorite): GifItem {
+  return { id: f.gifId, url: f.url, preview: f.preview || f.url, width: f.width, height: f.height, title: f.title || undefined };
+}
+
+export async function gifLoadFavorites(): Promise<GifItem[]> {
+  const auth = currentAuth();
+  if (!auth) return [];
+  try {
+    const favorites = await listGifFavorites(auth.token);
+    const items = favorites.map(favToItem);
+    setDmState('gifFavorites', items);
+    return items;
+  } catch {
+    setDmState('gifFavorites', []);
+    return [];
+  }
+}
+
+/** Toggles a GIF's favorite state by its picker key (provider id). */
+export async function gifToggleFavorite(item: GifItem): Promise<boolean> {
+  const auth = currentAuth();
+  if (!auth) return false;
+  const existing = dmState.gifFavorites.some((f) => f.id === item.id);
+  try {
+    if (existing) {
+      await removeGifFavorite(auth.token, item.id);
+      setDmState('gifFavorites', (list) => list.filter((f) => f.id !== item.id));
+      return false;
+    }
+    const fav = await addGifFavorite(auth.token, {
+      gifId: item.id,
+      url: item.url,
+      preview: item.preview || item.url,
+      width: item.width || 0,
+      height: item.height || 0,
+      title: item.title || ''
+    });
+    setDmState('gifFavorites', (list) => [favToItem(fav), ...list.filter((f) => f.id !== item.id)]);
+    return true;
+  } catch {
+    setDmState('error', 'Could not update favorite');
+    return existing;
+  }
+}
+
+/** Toggles favorite state for a media URL (used from rendered chat media). */
+export async function gifToggleFavoriteByUrl(url: string, title = ''): Promise<void> {
+  if (!url) return;
+  const key = gifKeyOfUrl(url);
+  await gifToggleFavorite({ id: key, url, preview: url, width: 0, height: 0, title });
 }
 
 // ---------------------------------------------------------------------------
@@ -575,7 +672,7 @@ export async function startCall(type: CallType): Promise<boolean> {
       return false;
     }
     wireCallManager(call, manager);
-    setDmState('call', { call, direction: 'outgoing', remoteName: conv.otherUser.username, callState: 'ringing', muted: false, videoOff: type !== 'video' });
+    setDmState('call', { call, direction: 'outgoing', remoteName: conv.otherUser.username, callState: 'ringing', muted: false, videoOff: type !== 'video', screenSharing: false });
     const offer = await manager.createOffer(call.id, otherId);
     if (offer) {
       sendSignal('offer', call.id, conv.id, { sdp: offer });
@@ -600,7 +697,7 @@ export async function acceptIncomingCall(): Promise<boolean> {
     return false;
   }
   wireCallManager(call, manager);
-  setDmState({ incomingCall: null, call: { call, direction: 'incoming', remoteName: callerName, callState: 'ringing', muted: false, videoOff: call.callType !== 'video' } });
+  setDmState({ incomingCall: null, call: { call, direction: 'incoming', remoteName: callerName, callState: 'ringing', muted: false, videoOff: call.callType !== 'video', screenSharing: false } });
   void runtime.realtime?.subscribeConversation(call.conversationId);
   if (offer.offer) {
     const answer = await manager.acceptOffer(call.id, call.callerId, offer.offer);
@@ -684,6 +781,37 @@ export function toggleVideo(): boolean {
   manager.toggleVideo();
   setDmState('call', (prev) => (prev ? { ...prev, videoOff: manager.isVideoOff() } : prev));
   return manager.isVideoOff();
+}
+
+/** Toggles screen sharing on/off during a connected call. */
+export async function toggleScreenShare(): Promise<boolean> {
+  const manager = runtime.call;
+  if (!manager) return false;
+  const sharing = manager.isScreenSharing();
+  const ok = sharing ? await manager.disableScreenShare() : await manager.enableScreenShare();
+  setDmState('call', (prev) => (prev ? { ...prev, screenSharing: manager.isScreenSharing(), videoOff: manager.isVideoOff() } : prev));
+  return ok;
+}
+
+/** Enables a camera feed mid-call when the call started as voice. */
+export async function enableCallCamera(): Promise<boolean> {
+  const manager = runtime.call;
+  if (!manager) return false;
+  const ok = await manager.ensureCamera();
+  setDmState('call', (prev) => (prev ? { ...prev, videoOff: manager.isVideoOff() } : prev));
+  return ok;
+}
+
+/** Camera button: turn the camera off/on (acquiring one if needed). */
+export async function cameraButtonPressed(): Promise<void> {
+  const manager = runtime.call;
+  if (!manager) return;
+  if (manager.hasVideoTracks()) {
+    manager.toggleVideo();
+  } else {
+    await manager.ensureCamera();
+  }
+  setDmState('call', (prev) => (prev ? { ...prev, videoOff: manager.isVideoOff(), screenSharing: manager.isScreenSharing() } : prev));
 }
 
 export function resetDmStore(): void {

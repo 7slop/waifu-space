@@ -22,20 +22,43 @@ CREATE TABLE IF NOT EXISTS public.conversation_participants (
 
 CREATE INDEX IF NOT EXISTS idx_participants_user ON public.conversation_participants(user_id);
 
--- 3. Messages (text + GIF media)
+-- 3. Messages (text + GIF/image/video media)
 CREATE TABLE IF NOT EXISTS public.messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
   sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   content TEXT NOT NULL DEFAULT '',
-  message_type TEXT NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'gif')),
+  message_type TEXT NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'gif', 'image', 'video')),
   media_url TEXT,
   created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
+-- Widen the constraint on pre-existing databases (idempotent).
+ALTER TABLE public.messages DROP CONSTRAINT IF EXISTS messages_message_type_check;
+ALTER TABLE public.messages ADD CONSTRAINT messages_message_type_check
+  CHECK (message_type IN ('text', 'gif', 'image', 'video'));
+
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON public.messages(conversation_id, created_at DESC);
 -- Replica identity FULL so change-data capture can deliver full rows.
 ALTER TABLE public.messages REPLICA IDENTITY FULL;
+
+-- 3b. GIF Favorites (per-user saved GIFs shown in the picker)
+CREATE TABLE IF NOT EXISTS public.gif_favorites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  gif_id TEXT NOT NULL,
+  url TEXT NOT NULL,
+  preview TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL DEFAULT 0,
+  height INTEGER NOT NULL DEFAULT 0,
+  title TEXT NOT NULL DEFAULT '',
+  provider TEXT NOT NULL DEFAULT 'giphy',
+  created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  UNIQUE (user_id, gif_id)
+);
+
+CREATE INDEX IF NOT EXISTS gif_favorites_user_created_idx
+  ON public.gif_favorites (user_id, created_at DESC);
 
 -- 4. User Presence (persisted status + custom status text)
 CREATE TABLE IF NOT EXISTS public.user_presence (
@@ -69,6 +92,7 @@ ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_presence ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.call_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gif_favorites ENABLE ROW LEVEL SECURITY;
 
 -- Conversations
 DROP POLICY IF EXISTS "Participants can read conversations" ON public.conversations;
@@ -192,6 +216,22 @@ CREATE POLICY "Participants can update call sessions"
       WHERE cp.conversation_id = call_sessions.conversation_id AND cp.user_id = auth.uid()
     )
   );
+
+-- GIF favorites: strictly owner-scoped.
+DROP POLICY IF EXISTS "gif_favorites_select_own" ON public.gif_favorites;
+CREATE POLICY "gif_favorites_select_own"
+  ON public.gif_favorites FOR SELECT
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "gif_favorites_insert_own" ON public.gif_favorites;
+CREATE POLICY "gif_favorites_insert_own"
+  ON public.gif_favorites FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "gif_favorites_delete_own" ON public.gif_favorites;
+CREATE POLICY "gif_favorites_delete_own"
+  ON public.gif_favorites FOR DELETE
+  USING (user_id = auth.uid());
 
 -- ==========================================================
 -- Realtime publication: deliver live message rows to subscribers

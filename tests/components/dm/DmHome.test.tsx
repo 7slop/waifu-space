@@ -110,4 +110,23 @@ describe('DmHome', () => {
     await waitFor(() => expect(container.querySelector('.dm-boot-error')).toBeInTheDocument());
     restore();
   });
+
+  it('opens the peer profile popover from the chat header identity', async () => {
+    const restore = bootRoutes();
+    const { container } = render(() => <DmHome />);
+    await waitFor(() => expect(container.querySelector('[data-testid="dm-sidebar"]')).toBeInTheDocument());
+    fireEvent.click(container.querySelector('[data-testid="dm-conv-c1"]')!);
+    await waitFor(() => expect(container.querySelector('[data-testid="dm-chat-identity"]')).toBeInTheDocument());
+
+    const profileRestore = stubFetch({
+      '/api/dm/users/u-bob/profile': () => ({
+        body: { success: true, profile: { id: 'u-bob', username: 'Bob', avatarUrl: null, bio: 'bob bio', createdAt: '2025-01-01T00:00:00.000Z', lastSeenAt: '2025-01-02T00:00:00.000Z' } }
+      })
+    });
+    fireEvent.click(container.querySelector('[data-testid="dm-chat-identity"]')!);
+    expect(container.querySelector('[data-testid="dm-profile-popover"]')).toBeInTheDocument();
+    await waitFor(() => expect(container.querySelector('[data-testid="dm-popover-bio"]')?.textContent).toContain('bob bio'));
+    profileRestore();
+    restore();
+  });
 });

@@ -9,15 +9,30 @@ const STATUS_OPTIONS: PresenceStatus[] = ['online', 'idle', 'dnd', 'invisible'];
 
 /**
  * Dropdown that lets the user change their own presence status and set a
- * custom status line (shown to others under the sidebar username).
+ * custom status line (shown to others under the sidebar username). Opens
+ * upward when there is no room below the trigger (the sidebar user panel is
+ * pinned to the bottom), otherwise downward.
  */
 export function DmPresenceStatusMenu() {
   const [open, setOpen] = createSignal(false);
+  const [openUp, setOpenUp] = createSignal(true);
   const [custom, setCustom] = createSignal('');
+  let wrapRef: HTMLDivElement | undefined;
 
   const currentStatus = (): PresenceStatus => {
     const status = dmState.myPresence?.status;
     return isStorableStatus(status) ? status : 'offline';
+  };
+
+  const toggle = () => {
+    const next = !open();
+    if (next && wrapRef) {
+      const rect = wrapRef.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setOpenUp(spaceBelow < 300 && spaceAbove >= spaceBelow);
+    }
+    setOpen(next);
   };
 
   const choose = (status: PresenceStatus) => {
@@ -33,19 +48,19 @@ export function DmPresenceStatusMenu() {
   };
 
   return (
-    <div class="dm-status-wrap">
+    <div class="dm-status-wrap" ref={wrapRef}>
       <button
         class="dm-user-status-btn"
         data-testid="dm-status-menu-btn"
         aria-label={t('dm.setStatus')}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
       >
         <span class="dm-status-dot" style={{ background: statusColor(currentStatus()) }} />
         <span class="dm-user-status-label">{t(`dm.${currentStatus()}`)}</span>
       </button>
 
       <Show when={open()}>
-        <div class="dm-status-menu" data-testid="dm-status-menu">
+        <div class={`dm-status-menu${openUp() ? ' open-up' : ''}`} data-testid="dm-status-menu">
           {STATUS_OPTIONS.map((status) => (
             <button
               class={`dm-status-option${status === currentStatus() ? ' active' : ''}`}

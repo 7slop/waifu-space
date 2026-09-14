@@ -13,6 +13,7 @@ vi.mock('../../../src/lib/dm/call', () => ({
     remoteMedia: MediaStream | null = null;
     private muted = false;
     private videoOff = true;
+    private screenSharing = false;
     constructor(deps: any) {
       this.deps = deps ?? {};
     }
@@ -37,7 +38,7 @@ vi.mock('../../../src/lib/dm/call', () => ({
       return true;
     }
     toggleVideo(): boolean {
-      this.videoOff = false;
+      this.videoOff = this.videoOff ? false : false;
       return true;
     }
     isMuted(): boolean {
@@ -45,6 +46,25 @@ vi.mock('../../../src/lib/dm/call', () => ({
     }
     isVideoOff(): boolean {
       return this.videoOff;
+    }
+    async ensureCamera(): Promise<boolean> {
+      this.videoOff = false;
+      return true;
+    }
+    hasVideoTracks(): boolean {
+      return true;
+    }
+    async enableScreenShare(): Promise<boolean> {
+      this.videoOff = false;
+      this.screenSharing = true;
+      return true;
+    }
+    async disableScreenShare(): Promise<boolean> {
+      this.screenSharing = false;
+      return true;
+    }
+    isScreenSharing(): boolean {
+      return this.screenSharing;
     }
     hangUp(): void {
       this.currentState = 'ended';
@@ -152,5 +172,43 @@ describe('CallOverlay', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-call-mute"]')!);
     await flush();
     expect(dmState.call?.muted).toBe(true);
+  });
+
+  it('camera button acquires a video feed and shows the stage', async () => {
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession({ callType: 'voice' }),
+      callerName: 'Bob',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    expect(container.querySelector('.dm-call-remote-video')).not.toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-video-toggle"]')!);
+    await flush();
+    expect(dmState.call?.videoOff).toBe(false);
+    expect(container.querySelector('.dm-call-remote-video')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-local-video')).toBeInTheDocument();
+  });
+
+  it('screen share toggles on and shows in the bar', async () => {
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession(),
+      callerName: 'Bob',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-screen-toggle"]')!);
+    await flush();
+    expect(dmState.call?.screenSharing).toBe(true);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-screen-toggle"]')!);
+    await flush();
+    expect(dmState.call?.screenSharing).toBe(false);
   });
 });

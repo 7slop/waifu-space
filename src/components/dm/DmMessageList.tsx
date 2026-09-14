@@ -1,7 +1,7 @@
 import { createMemo, For, Show } from 'solid-js';
 import { state } from '../../lib/store';
 import { dmState, loadOlder } from '../../lib/dm/store';
-import { formatDayDivider } from '../../lib/dm/api';
+import { formatDayDivider, isOwnMessage } from '../../lib/dm/api';
 import { t } from '../../lib/i18n';
 import { DmMessageGroup } from './DmMessageGroup';
 import type { DmMessage } from '../../lib/dm/types';
@@ -26,7 +26,7 @@ export function scrollDmToBottom(el: HTMLDivElement) {
  * Yesterday / date" day dividers and splits messages into visual groups
  * (avatar shown only for the first message of a run from the same author).
  */
-export function DmMessageList() {
+export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: HTMLElement) => void }) {
   const convId = () => dmState.activeConversationId;
   const messages = () => dmState.messages[convId() ?? ''] ?? [];
   const otherUser = () => dmState.conversations.find((c) => c.id === convId())?.otherUser;
@@ -53,8 +53,13 @@ export function DmMessageList() {
     return out;
   });
 
-  const senderName = () => otherUser()?.username || 'User';
-  const senderAvatar = () => otherUser()?.avatarUrl;
+  const senderName = (msg: DmMessage) =>
+    isOwnMessage(msg, state.user?.id)
+      ? state.user?.username || 'You'
+      : otherUser()?.username || 'User';
+
+  const senderAvatar = (msg: DmMessage) =>
+    isOwnMessage(msg, state.user?.id) ? state.user?.avatarUrl : otherUser()?.avatarUrl;
 
   return (
     <div class="dm-messages" data-testid="dm-messages">
@@ -73,9 +78,10 @@ export function DmMessageList() {
             <DmMessageGroup
               message={row.message!}
               showAvatar={row.showAvatar!}
-              senderName={senderName()}
-              senderAvatar={senderAvatar()}
+              senderName={senderName(row.message!)}
+              senderAvatar={senderAvatar(row.message!)}
               myUserId={state.user?.id}
+              onAuthorClick={props?.onAuthorClick}
             />
           )
         }

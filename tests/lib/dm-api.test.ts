@@ -25,7 +25,8 @@ describe('dm-api pure helpers', () => {
     expect(isGifUrl('https://media.giphy.com/media/abc/giphy.gif')).toBe(true);
     expect(isGifUrl('https://i.giphy.com/abc.webp')).toBe(true);
     expect(isGifUrl('https://example.com/x.webp?size=2')).toBe(true);
-    expect(isGifUrl('https://example.com/photo.jpg')).toBe(false);
+    expect(isGifUrl('https://example.com/photo.jpg')).toBe(true);
+    expect(isGifUrl('https://media.tenor.com/abc.mp4')).toBe(true);
     expect(isGifUrl('not a url')).toBe(false);
     expect(isGifUrl('')).toBe(false);
     expect(isGifUrl('   ')).toBe(false);
@@ -33,7 +34,8 @@ describe('dm-api pure helpers', () => {
 
   it('normalizeGifUrl trims and rejects long/non-media inputs', () => {
     expect(normalizeGifUrl('  https://media.tenor.com/a.gif  ')).toBe('https://media.tenor.com/a.gif');
-    expect(normalizeGifUrl('https://example.com/a.png')).toBeNull();
+    expect(normalizeGifUrl('https://example.com/a.png')).toBe('https://example.com/a.png');
+    expect(normalizeGifUrl('https://example.com/a.mp4')).toBe('https://example.com/a.mp4');
     expect(normalizeGifUrl('hello')).toBeNull();
     expect(normalizeGifUrl(`https://example.com/${'x'.repeat(3000)}.gif`)).toBeNull();
   });
@@ -79,9 +81,10 @@ describe('dm-api pure helpers', () => {
   });
 
   it('mediaSourceOf embeds messageType gif and text URLs', () => {
-    expect(mediaSourceOf({ id: '1', conversationId: 'c', senderId: 'u', content: '', messageType: 'gif', mediaUrl: 'https://x/a.gif', createdAt: '' })).toBe('https://x/a.gif');
-    expect(mediaSourceOf({ id: '2', conversationId: 'c', senderId: 'u', content: 'https://media.tenor.com/b.gif', messageType: 'text', createdAt: '' })).toBe('https://media.tenor.com/b.gif');
-    expect(mediaSourceOf({ id: '3', conversationId: 'c', senderId: 'u', content: 'plain', messageType: 'text', createdAt: '' })).toBeNull();
+    expect(mediaSourceOf({ id: '1', conversationId: 'c', senderId: 'u', content: '', messageType: 'gif', mediaUrl: 'https://x/a.gif', createdAt: '' })).toEqual({ url: 'https://x/a.gif', kind: 'gif' });
+    expect(mediaSourceOf({ id: '2', conversationId: 'c', senderId: 'u', content: 'https://media.tenor.com/b.gif', messageType: 'text', createdAt: '' })).toEqual({ url: 'https://media.tenor.com/b.gif', kind: 'gif' });
+    expect(mediaSourceOf({ id: '3', conversationId: 'c', senderId: 'u', content: 'https://x/a.mp4', messageType: 'video', mediaUrl: 'https://x/a.mp4', createdAt: '' })).toEqual({ url: 'https://x/a.mp4', kind: 'video' });
+    expect(mediaSourceOf({ id: '4', conversationId: 'c', senderId: 'u', content: 'plain', messageType: 'text', createdAt: '' })).toBeNull();
   });
 
   it('formatMessageTime and formatDayDivider render labels', () => {
@@ -142,7 +145,9 @@ describe('dm-api http client', () => {
   it('searchUsers and searchGifs return typed items', async () => {
     expect(await searchUsers('tok', 'bob')).toEqual([]);
     const gifs = await searchGifs('tok', 'cat');
-    expect(gifs[0]).toMatchObject({ id: 'g1', width: 100 });
+    expect(gifs.items[0]).toMatchObject({ id: 'g1', width: 100 });
+    expect(gifs.source).toBe('giphy');
+    expect(gifs.keyConfigured).toBe(true);
   });
 
   it('fetchDmConfig returns the realtime config', async () => {

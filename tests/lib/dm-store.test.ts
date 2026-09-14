@@ -37,6 +37,7 @@ vi.mock('../../src/lib/dm/call', () => ({
     remoteMedia: MediaStream | null = null;
     private muted = false;
     private videoOff = false;
+    private screenSharing = false;
     constructor(deps: any) {
       this.deps = deps ?? {};
       callRegistry.instances.push(this);
@@ -72,6 +73,23 @@ vi.mock('../../src/lib/dm/call', () => ({
     }
     isVideoOff(): boolean {
       return this.videoOff;
+    }
+    async ensureCamera(): Promise<boolean> {
+      return true;
+    }
+    hasVideoTracks(): boolean {
+      return true;
+    }
+    async enableScreenShare(): Promise<boolean> {
+      this.screenSharing = true;
+      return true;
+    }
+    async disableScreenShare(): Promise<boolean> {
+      this.screenSharing = false;
+      return true;
+    }
+    isScreenSharing(): boolean {
+      return this.screenSharing;
     }
     hangUp(): void {
       this.currentState = 'ended';

@@ -3,7 +3,6 @@ import { initDm, disconnectDm, dmState } from '../../lib/dm/store';
 import { t } from '../../lib/i18n';
 import { DmSidebar } from './DmSidebar';
 import { DmChatPanel } from './DmChatPanel';
-import { CallOverlay } from './CallOverlay';
 
 /**
  * The home page when a registered user is signed in: a Discord-style DM
@@ -37,7 +36,6 @@ export function DmHome() {
       >
         <DmSidebar />
         <DmChatPanel />
-        <CallOverlay />
       </Show>
     </div>
   );

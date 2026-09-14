@@ -4,7 +4,7 @@
 
 export type PresenceStatus = 'online' | 'idle' | 'dnd' | 'invisible' | 'offline';
 
-export type MessageType = 'text' | 'gif';
+export type MessageType = 'text' | 'gif' | 'image' | 'video';
 
 export type CallType = 'voice' | 'video' | 'screen';
 
@@ -87,6 +87,19 @@ export interface DmUserProfile {
       avatarMode: 'svg' | 'custom';
     };
   };
+}
+
+/** A saved favorite GIF (mirrors the `gif_favorites` table row). */
+export interface GifFavorite {
+  id: string;
+  gifId: string;
+  url: string;
+  preview: string;
+  width: number;
+  height: number;
+  title: string;
+  provider: string;
+  createdAt: string;
 }
 
 /** Payload broadcast over Supabase Realtime when a new message lands. */

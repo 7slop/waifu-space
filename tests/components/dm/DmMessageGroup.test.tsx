@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, cleanup } from '@solidjs/testing-library';
+import { render, fireEvent, cleanup } from '@solidjs/testing-library';
 import { DmMessageGroup } from '../../../src/components/dm/DmMessageGroup';
+import { setDmState } from '../../../src/lib/dm/store';
 import { resetForDmTests } from '../../dm-helpers';
 import type { DmMessage } from '../../../src/lib/dm/types';
 
@@ -68,5 +69,50 @@ describe('DmMessageGroup', () => {
       <DmMessageGroup message={msg({ content: 'hi there' })} showAvatar senderName="Bob" myUserId="u-me" />
     ));
     expect(container.querySelector('.dm-msg-content')).toHaveTextContent('hi there');
+  });
+
+  it('fires onAuthorClick for the avatar and the author name', () => {
+    const clicks: string[] = [];
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({})}
+        showAvatar
+        senderName="Bob"
+        myUserId="u-me"
+        onAuthorClick={(senderId) => clicks.push(senderId)}
+      />
+    ));
+    fireEvent.click(container.querySelector('.dm-msg-avatar-btn')!);
+    fireEvent.click(container.querySelector('.dm-msg-author')!);
+    expect(clicks).toEqual(['u-bob', 'u-bob']);
+  });
+
+  it('renders a video message as an embedded <video>', () => {
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({ messageType: 'video', mediaUrl: 'https://example.com/clip.mp4' })}
+        showAvatar
+        senderName="Bob"
+        myUserId="u-me"
+      />
+    ));
+    const video = container.querySelector('video.dm-msg-media');
+    expect(video).toBeInTheDocument();
+    expect(video).toHaveAttribute('src', 'https://example.com/clip.mp4');
+  });
+
+  it('marks a media message as favorited when it matches a saved favorite', () => {
+    setDmState('gifFavorites', [
+      { id: 'https://media.tenor.com/foo.gif', url: 'https://media.tenor.com/foo.gif', preview: 'https://media.tenor.com/foo.gif', width: 480, height: 270, title: null }
+    ]);
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({ messageType: 'gif', mediaUrl: 'https://media.tenor.com/foo.gif' })}
+        showAvatar
+        senderName="Bob"
+        myUserId="u-me"
+      />
+    ));
+    expect(container.querySelector('.dm-msg-fav-btn')).toHaveClass('favorited');
   });
 });

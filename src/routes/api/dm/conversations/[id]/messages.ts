@@ -3,6 +3,12 @@ import { resolveDmContext, badRequestResponse } from '../../../../../lib/server/
 import type { DmMessage, MessageType } from '../../../../../lib/dm/types';
 
 const MAX_MESSAGE_LENGTH = 4000;
+const VALID_MESSAGE_TYPES: MessageType[] = ['text', 'gif', 'image', 'video'];
+
+function toMessageType(raw: any): MessageType {
+  if (raw === 'gif' || raw === 'image' || raw === 'video') return raw;
+  return 'text';
+}
 
 export async function GET(event: { request: Request; params: Record<string, string> }) {
   const ctx = resolveDmContext(event.request);
@@ -35,7 +41,7 @@ export async function GET(event: { request: Request; params: Record<string, stri
     conversationId: m.conversationId,
     senderId: m.senderId,
     content: m.content ?? '',
-    messageType: m.messageType === 'gif' ? 'gif' : 'text',
+    messageType: toMessageType(m.messageType),
     mediaUrl: m.mediaUrl ?? null,
     createdAt: m.createdAt
   }));
@@ -58,15 +64,18 @@ export async function POST(event: { request: Request; params: Record<string, str
   }
 
   const rawType = body?.messageType;
-  const messageType: MessageType = rawType === 'gif' ? 'gif' : 'text';
+  const messageType: MessageType = VALID_MESSAGE_TYPES.includes(rawType) ? rawType : 'text';
   const content = typeof body?.content === 'string' ? body.content.slice(0, MAX_MESSAGE_LENGTH) : '';
   const mediaUrl = typeof body?.mediaUrl === 'string' ? body.mediaUrl.slice(0, 2048) : null;
 
   if (messageType === 'text' && content.trim() === '') {
     return badRequestResponse('Message cannot be empty');
   }
-  if (messageType === 'gif' && !mediaUrl) {
-    return badRequestResponse('GIF messages require a media URL');
+  if (messageType !== 'text' && !mediaUrl) {
+    return badRequestResponse(`${messageType} messages require a media URL`);
+  }
+  if (mediaUrl && !/^https?:\/\//i.test(mediaUrl) && mediaUrl.length <= 2048) {
+    return badRequestResponse('mediaUrl must be an absolute http(s) URL');
   }
 
   const { data, error } = await ctx.supabase.rpc('send_dm_message', {
@@ -90,7 +99,7 @@ export async function POST(event: { request: Request; params: Record<string, str
     conversationId: m.conversationId,
     senderId: m.senderId,
     content: m.content ?? '',
-    messageType: m.messageType === 'gif' ? 'gif' : 'text',
+    messageType: toMessageType(m.messageType),
     mediaUrl: m.mediaUrl ?? null,
     createdAt: m.createdAt
   };

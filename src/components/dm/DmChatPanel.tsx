@@ -2,30 +2,45 @@ import { createSignal, Show } from 'solid-js';
 import { dmState, startCall } from '../../lib/dm/store';
 import { statusForUserId, isVisiblePresence } from '../../lib/dm/presence';
 import { t } from '../../lib/i18n';
-import { PhMonitorArrowUp, PhPhoneCall, PhVideoCamera } from '../icons';
+import { PhPhoneCall } from '../icons';
 import { DmAvatar } from './DmAvatar';
 import { DmMessageList } from './DmMessageList';
 import { DmInputBar } from './DmInputBar';
-import { DmUserProfilePanel } from './DmUserProfilePanel';
+import { DmProfilePopover } from './DmProfilePopover';
+import { CallOverlay } from './CallOverlay';
 
 /**
- * The right-hand chat region: conversation header (identity, live presence and
- * call actions), the message timeline, the composer, and the optional slide-in
- * profile panel for the other participant.
+ * The right-hand chat region: conversation header (identity + single call
+ * button), the top-docked call panel, the message timeline, the composer,
+ * and an anchored profile popup for the other participant.
  */
 export function DmChatPanel() {
-  const [profileOpen, setProfileOpen] = createSignal(false);
+  const [profileTarget, setProfileTarget] = createSignal<{ id: string; anchor: () => DOMRect } | null>(null);
+  let identityBtnRef: HTMLButtonElement | undefined;
 
   const conv = () => dmState.conversations.find((c) => c.id === dmState.activeConversationId);
   const realtimeMap: Record<string, any> = {};
   for (const [uid, entry] of Object.entries(dmState.realtimePresence)) realtimeMap[uid] = entry.status;
   const status = () => (conv() ? statusForUserId(conv()!.otherUser.id, dmState.presence, realtimeMap) : 'offline');
 
+  const openHeaderProfile = () => {
+    if (!conv()) return;
+    const anchor = () => (identityBtnRef ? identityBtnRef.getBoundingClientRect() : new DOMRect(0, 0, 0, 0));
+    setProfileTarget((prev) => (prev ? null : { id: conv()!.otherUser.id, anchor }));
+  };
+
+  const onAuthorClick = (senderId: string, el: HTMLElement) => {
+    const anchor = () => el.getBoundingClientRect();
+    setProfileTarget((prev) => (prev?.id === senderId ? null : { id: senderId, anchor }));
+  };
+
   return (
     <section class="dm-chat" data-testid="dm-chat">
       <Show when={conv()} fallback={<DmChatEmpty />}>
+        <CallOverlay />
+
         <header class="dm-chat-header">
-          <button class="dm-chat-identity" data-testid="dm-chat-identity" onClick={() => setProfileOpen((v) => !v)}>
+          <button class="dm-chat-identity" data-testid="dm-chat-identity" ref={identityBtnRef} onClick={openHeaderProfile}>
             <DmAvatar
               name={conv()!.otherUser.username || conv()!.otherUser.id}
               avatarUrl={conv()!.otherUser.avatarUrl}
@@ -44,20 +59,18 @@ export function DmChatPanel() {
             <button class="dm-call-btn" data-testid="dm-call-voice" title={t('dm.callVoice')} onClick={() => void startCall('voice')}>
               <PhPhoneCall />
             </button>
-            <button class="dm-call-btn" data-testid="dm-call-video" title={t('dm.callVideo')} onClick={() => void startCall('video')}>
-              <PhVideoCamera />
-            </button>
-            <button class="dm-call-btn" data-testid="dm-call-screen" title={t('dm.callScreen')} onClick={() => void startCall('screen')}>
-              <PhMonitorArrowUp />
-            </button>
           </div>
         </header>
 
-        <DmMessageList />
+        <DmMessageList onAuthorClick={onAuthorClick} />
         <DmInputBar />
 
-        <Show when={profileOpen()}>
-          <DmUserProfilePanel userId={conv()!.otherUser.id} onClose={() => setProfileOpen(false)} />
+        <Show when={profileTarget()}>
+          <DmProfilePopover
+            userId={profileTarget()!.id}
+            anchor={profileTarget()!.anchor}
+            onClose={() => setProfileTarget(null)}
+          />
         </Show>
       </Show>
     </section>
