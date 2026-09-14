@@ -6,10 +6,12 @@ import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
 import { PhArrowsClockwise, PhMapPin, GlyphText } from './icons';
 
+const MAX_DAYS = 10;
+
 /**
- * Agenda / schedule view: a scrolling, date-grouped list of the events for a
- * rolling N-day window starting at `startDate`. All-day items are shown with
- * an "All day" label, timed items with their (12h/24h-aware) clock times.
+ * Agenda / schedule view: a spacious, date-grouped layout of events for a
+ * rolling N-day window starting at `startDate`. Each day section expands to
+ * fill available space with generous padding. Max 10 days visible.
  */
 export function CalendarScheduleView(props: {
   startDate: Date;
@@ -17,7 +19,7 @@ export function CalendarScheduleView(props: {
   days?: number;
   onOpenEvent: (ev: CalendarEventItem, anchorRect?: DOMRect) => void;
 }) {
-  const days = props.days ?? 7;
+  const days = Math.min(props.days ?? 7, MAX_DAYS);
   const today = new Date();
 
   const dayList = () => {
@@ -36,6 +38,7 @@ export function CalendarScheduleView(props: {
       <For each={dayList()}>
         {day => {
           const isToday = isSameDay(day, today);
+          const dayNum = day.getDate();
           const sorted = createMemo(() =>
             getEventsForDate(props.events, day)
               .slice()
@@ -45,12 +48,15 @@ export function CalendarScheduleView(props: {
               })
           );
           return (
-            <section class="schedule-day-group">
+            <section class={`schedule-day-group ${isToday ? 'today' : ''}`}>
               <div class={`schedule-day-header ${isToday ? 'today' : ''}`}>
-                <span class="schedule-day-name">
-                  {day.toLocaleDateString(getLocale(), { weekday: 'long', month: 'long', day: 'numeric' })}
-                </span>
-                {isToday && <span class="schedule-today-badge">{t('calendar.toolbar.today')}</span>}
+                <span class="schedule-day-num">{dayNum}</span>
+                <div class="schedule-day-label">
+                  <span class="schedule-day-name">
+                    {day.toLocaleDateString(getLocale(), { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </span>
+                  {isToday && <span class="schedule-today-badge">{t('calendar.toolbar.today')}</span>}
+                </div>
               </div>
 
               <div class="schedule-day-body">
@@ -60,8 +66,6 @@ export function CalendarScheduleView(props: {
                 >
                   <For each={sorted()}>
                     {ev => {
-                      // Memoized so times re-render instantly when the 12h/24h
-                      // setting is changed (a plain read inside <For> wouldn't).
                       const timeStr = createMemo(() =>
                         ev.allDay
                           ? t('calendar.alldayLabel')
@@ -85,28 +89,32 @@ export function CalendarScheduleView(props: {
                         }}
                         onKeyDown={e => onActivateKey(e, () => props.onOpenEvent(ev))}
                       >
-                        <span class="schedule-ev-time">{timeStr()}</span>
                         <span class="schedule-ev-dot" style={{ background: ev.color || '#ff6584' }} />
-                        {ev.type === 'task' && (
-                          <input
-                            type="checkbox"
-                            class="schedule-task-check"
-                            checked={ev.completed}
-                            onClick={e => {
-                              e.stopPropagation();
-                              toggleTask(ev.id, ev.dateKey);
-                            }}
-                          />
-                        )}
-                        {ev.type === 'birthday' && <span class="schedule-ev-emoji">🎂</span>}
-                        {ev._holiday && <span class="pill-holiday-flag"><GlyphText text={ev._holiday.culture ? '🎉' : countryFlagEmoji(ev._holiday.countryCode)} /></span>}
-                        <span class="schedule-ev-title">{ev.title}</span>
-                        {ev.recurrence && ev.recurrence !== 'none' && (
-                          <span class="schedule-ev-icon" title={t('calendar.sidebar.repeats', { rule: ev.recurrence })}><PhArrowsClockwise /></span>
-                        )}
-                        {ev.location && (
-                          <span class="schedule-ev-icon"><PhMapPin /> {ev.location}</span>
-                        )}
+                        <div class="schedule-ev-content">
+                          <span class="schedule-ev-title">{ev.title}</span>
+                          <span class="schedule-ev-time">{timeStr()}</span>
+                        </div>
+                        <div class="schedule-ev-meta">
+                          {ev.type === 'task' && (
+                            <input
+                              type="checkbox"
+                              class="schedule-task-check"
+                              checked={ev.completed}
+                              onClick={e => {
+                                e.stopPropagation();
+                                toggleTask(ev.id, ev.dateKey);
+                              }}
+                            />
+                          )}
+                          {ev.type === 'birthday' && <span class="schedule-ev-emoji">🎂</span>}
+                          {ev._holiday && <span class="pill-holiday-flag"><GlyphText text={ev._holiday.culture ? '🎉' : countryFlagEmoji(ev._holiday.countryCode)} /></span>}
+                          {ev.recurrence && ev.recurrence !== 'none' && (
+                            <span class="schedule-ev-icon" title={t('calendar.sidebar.repeats', { rule: ev.recurrence })}><PhArrowsClockwise /></span>
+                          )}
+                          {ev.location && (
+                            <span class="schedule-ev-icon"><PhMapPin /> {ev.location}</span>
+                          )}
+                        </div>
                       </div>
                     );
                   }}
