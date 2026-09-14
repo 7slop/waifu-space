@@ -616,6 +616,43 @@
   white-space: pre-wrap;
 }
 
+/* Centered Discord-style system messages (call lifecycle etc). */
+.dm-msg-system {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-muted, #7f849c);
+}
+
+.dm-system-icon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.dm-system-icon.started {
+  color: var(--accent-green, #a6e3a1);
+}
+
+.dm-system-icon.ended {
+  color: var(--text-muted, #7f849c);
+}
+
+.dm-system-icon.declined {
+  color: var(--accent-red, #f38ba8);
+}
+
+.dm-system-icon.missed {
+  color: var(--accent-red, #f38ba8);
+}
+
+.dm-system-text {
+  color: var(--text-muted, #7f849c);
+}
+
 .dm-msg-media {
   max-width: 360px;
   max-height: 280px;

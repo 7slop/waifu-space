@@ -341,6 +341,12 @@ async function boot() {
       '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
       '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'offline' } })),
       '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 }),
+      '/api/dm/calls/call-2/status': () =>
+        JSON_RESP({
+          success: true,
+          call: { id: 'call-2', conversationId: 'c1', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice', status: 'ended', startedAt: '', answeredAt: null, endedAt: null, createdAt: '' },
+          systemMessage: { id: 'sys-1', conversationId: 'c1', senderId: 'u-me', content: '{"kind":"call-ended","callType":"voice"}', messageType: 'system', mediaUrl: 'call-ended:call-2', createdAt: '2025-01-04T00:00:00.000Z' }
+        }),
       '/api/dm/calls': () =>
         JSON_RESP(
           {
@@ -412,6 +418,33 @@ async function boot() {
     expect(dmState.call?.muted).toBe(true);
     toggleVideo();
     expect(dmState.call?.videoOff).toBe(true);
+  });
+
+  it('hangUpCall applies a call-ended system message to the timeline and broadcasts it', async () => {
+    const rtInst = await boot();
+    await selectConversation('c1');
+    await startCall('voice');
+    await hangUpCall();
+    expect(dmState.call).toBeNull();
+    const msgs = dmState.messages.c1 ?? [];
+    const sys = msgs.find((m) => m.messageType === 'system');
+    expect(sys?.content).toBe('{"kind":"call-ended","callType":"voice"}');
+    expect(rtInst.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'c1', message: expect.objectContaining({ messageType: 'system' }) }));
+  });
+
+  it('incoming realtime system messages are applied without a notification', async () => {
+    const notifySpy = vi.fn();
+    configureDmRuntime({ getAuth: () => ({ ...AUTH }), notify: notifySpy });
+    await boot();
+    setDmState('activeConversationId', 'c1');
+    rt.handlers.onMessage({
+      kind: 'dm-message',
+      conversationId: 'c1',
+      senderName: 'bob',
+      message: { id: 'sys-x', conversationId: 'c1', senderId: 'u-bob', content: '{"kind":"call-missed","callType":"voice"}', messageType: 'system', createdAt: '2025-01-05T00:00:00.000Z' }
+    });
+    expect(dmState.messages.c1?.some((m) => m.id === 'sys-x')).toBe(true);
+    expect(notifySpy).not.toHaveBeenCalled();
   });
 });
 

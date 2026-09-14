@@ -330,13 +330,19 @@ export async function createCallRequest(
   return data.call;
 }
 
-export async function updateCallStatusRequest(token: string, callId: string, status: CallStatus): Promise<CallSession> {
-  const data = await request<{ success: boolean; call: CallSession }>(
+export interface CallStatusResult {
+  call: CallSession;
+  systemMessage?: DmMessage | null;
+}
+
+export async function updateCallStatusRequest(token: string, callId: string, status: CallStatus): Promise<CallStatusResult> {
+  const data = await request<{ success: boolean; call: CallSession; systemMessage?: any }>(
     `/api/dm/calls/${callId}/status`,
     { method: 'POST', body: JSON.stringify({ status }) },
     token
   );
-  return data.call;
+  const result: CallStatusResult = { call: data.call, systemMessage: data.systemMessage ? toDmMessage(data.systemMessage) : null };
+  return result;
 }
 
 export async function fetchUserProfileRequest(token: string, userId: string): Promise<DmUserProfile> {

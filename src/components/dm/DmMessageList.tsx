@@ -47,7 +47,7 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
       }
       const grouped = lastSender === message.senderId && new Date(message.createdAt).getTime() - lastTime < GROUPING_MS;
       out.push({ kind: 'message', key: message.id, message, showAvatar: !grouped });
-      lastSender = message.senderId;
+      lastSender = message.messageType === 'system' ? '' : message.senderId;
       lastTime = new Date(message.createdAt).getTime();
     }
     return out;

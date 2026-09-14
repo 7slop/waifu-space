@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
-import { DmMessageGroup } from '../../../src/components/dm/DmMessageGroup';
+import { DmMessageGroup, parseDmSystemContent } from '../../../src/components/dm/DmMessageGroup';
 import { dmState, setDmState } from '../../../src/lib/dm/store';
 import { resetForDmTests, stubFetch, flush } from '../../dm-helpers';
 import type { DmMessage } from '../../../src/lib/dm/types';
@@ -191,5 +191,27 @@ describe('DmMessageGroup', () => {
     expect(posted).toEqual({ messageId: 'm1', emoji: '❤️' });
     expect(dmState.messages.c1?.[0]?.reactions?.[0]).toMatchObject({ emoji: '❤️', count: 1 });
     restore();
+  });
+
+  it('renders system messages centered with an icon, no avatar or reactions', () => {
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({ messageType: 'system', content: '{"kind":"call-missed","callType":"voice"}' })}
+        showAvatar
+        senderName="Bob"
+        myUserId="u-me"
+      />
+    ));
+    expect(container.querySelector('[data-testid="dm-message-system"]')).toBeInTheDocument();
+    expect(container.querySelector('.dm-system-text')).toHaveTextContent('Missed call');
+    expect(container.querySelector('.dm-system-icon.missed')).toBeInTheDocument();
+    expect(container.querySelector('.dm-msg-avatar')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-reactions-row"]')).not.toBeInTheDocument();
+  });
+
+  it('parseDmSystemContent handles a JSON payload and falls back to plain-kind text', () => {
+    expect(parseDmSystemContent('{"kind":"call-started","callType":"video"}')).toEqual({ kind: 'call-started', callType: 'video' });
+    expect(parseDmSystemContent('call-started')).toEqual({ kind: 'call-started' });
+    expect(parseDmSystemContent('')).toEqual({ kind: '' });
   });
 });

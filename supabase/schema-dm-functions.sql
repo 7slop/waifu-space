@@ -544,6 +544,8 @@ AS $$
 DECLARE
   v_call public.call_sessions%ROWTYPE;
   v_is_participant boolean;
+  v_msg jsonb;
+  v_kind text;
 BEGIN
   IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
     RAISE EXCEPTION 'p_user_id does not match the session user';
@@ -570,6 +572,41 @@ BEGIN
    WHERE id = p_call_id
   RETURNING * INTO v_call;
 
+  v_kind := CASE p_status
+    WHEN 'active'   THEN 'call-started'
+    WHEN 'ended'    THEN 'call-ended'
+    WHEN 'declined' THEN 'call-declined'
+    WHEN 'missed'   THEN 'call-missed'
+    WHEN 'busy'     THEN 'call-declined'
+    ELSE NULL
+  END;
+
+  v_msg := NULL;
+  IF v_kind IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.messages m
+    WHERE m.conversation_id = v_call.conversation_id
+      AND m.message_type = 'system'
+      AND m.media_url = v_kind || ':' || v_call.id::text
+  ) THEN
+    INSERT INTO public.messages (conversation_id, sender_id, content, message_type, media_url)
+    VALUES (
+      v_call.conversation_id,
+      p_user_id,
+      jsonb_build_object('kind', v_kind, 'callType', COALESCE(v_call.call_type, 'voice'))::text,
+      'system',
+      v_kind || ':' || v_call.id::text
+    )
+    RETURNING jsonb_build_object(
+      'id', id,
+      'conversationId', conversation_id,
+      'senderId', sender_id,
+      'content', content,
+      'messageType', message_type,
+      'mediaUrl', media_url,
+      'createdAt', created_at
+    ) INTO v_msg;
+  END IF;
+
   RETURN jsonb_build_object(
     'id', v_call.id,
     'conversationId', v_call.conversation_id,
@@ -580,7 +617,8 @@ BEGIN
     'startedAt', v_call.started_at,
     'answeredAt', v_call.answered_at,
     'endedAt', v_call.ended_at,
-    'createdAt', v_call.created_at
+    'createdAt', v_call.created_at,
+    'systemMessage', v_msg
   );
 END;
 $$;

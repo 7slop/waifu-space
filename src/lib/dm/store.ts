@@ -192,26 +192,27 @@ function onRealtimeMessage(broadcast: DmMessageBroadcast): void {
   const active = dmState.activeConversationId === convId;
   const isMine = !!auth && msg.senderId === auth.id;
   const wasUnread = dmState.conversations.find(c => c.id === convId)?.unreadCount ?? 0;
+  const isSystem = msg.messageType === 'system';
 
   setDmState('messages', convId, (prev = []) => mergeMessageLists([prev, [msg]]));
   setDmState('conversations', (convs) =>
     convs
       .map((c) => {
         if (c.id !== convId) return c;
-        const unreadCount = isMine || active ? c.unreadCount ?? 0 : (c.unreadCount ?? 0) + 1;
+        const unreadCount = isSystem || isMine || active ? c.unreadCount ?? 0 : (c.unreadCount ?? 0) + 1;
         return { ...c, lastMessage: msg, updatedAt: msg.createdAt, unreadCount };
       })
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
   );
 
   const wasIncoming = !isMine;
-  if (wasIncoming && !active && wasUnread === 0) {
+  if (wasIncoming && !active && wasUnread === 0 && !isSystem) {
     // Don't double-count: the server unaware increments; this store keeps the
     // local total roughly in sync with the badge while a conversation is open.
     setDmState('totalUnread', (n) => n + 1);
   }
 
-  if (!isMine) {
+  if (!isMine && !isSystem) {
     const dnd = dmState.presence[msg.senderId]?.status === 'dnd';
     const sender = broadcast.senderName || dmState.conversations.find(c => c.id === convId)?.otherUser?.username || 'Someone';
     const attachment = msg.messageType === 'gif' ? 'Sent a GIF' : msg.messageType === 'image' ? 'Sent an image' : msg.messageType === 'video' ? 'Sent a video' : '';
@@ -335,6 +336,25 @@ function onIncomingCallCancel(broadcast: CallOfferBroadcast): void {
   if (dmState.incomingCall?.call.id === broadcast.call.id) {
     setDmState('incomingCall', null);
   }
+}
+
+/** Applies a system message to the local timeline and tells the peer via realtime. */
+function applySystemMessage(convId: string, message: DmMessage | null | undefined): void {
+  if (!message) return;
+  setDmState('messages', convId, (prev = []) => mergeMessageLists([prev, [message]]));
+  setDmState('conversations', (convs) => {
+    if (!convs.some((c) => c.id === convId)) return convs;
+    return convs
+      .map((c) => (c.id === convId ? { ...c, lastMessage: message, updatedAt: message.createdAt } : c))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  });
+  void runtime.realtime?.sendMessage({
+    kind: 'dm-message',
+    conversationId: convId,
+    message,
+    senderName: '',
+    senderAvatar: undefined
+  });
 }
 
 function callTypeLabel(type: CallType): string {
@@ -780,6 +800,10 @@ export async function acceptIncomingCall(): Promise<boolean> {
   wireCallManager(call, manager);
   setDmState({ incomingCall: null, call: { call, direction: 'incoming', remoteName: callerName, callState: 'ringing', muted: false, videoOff: call.callType !== 'video', screenSharing: false } });
   void runtime.realtime?.subscribeConversation(call.conversationId);
+  // Mark the call as answered on the server so both timelines get the
+  // "call started" system message and the call session reflects the state.
+  const result = await updateCallStatusRequest(auth.token, call.id, 'active').catch(() => null);
+  if (result?.systemMessage) applySystemMessage(call.conversationId, result.systemMessage);
   if (offer.offer) {
     const answer = await manager.acceptOffer(call.id, call.callerId, offer.offer);
     if (answer) sendSignal('answer', call.id, call.conversationId, { sdp: answer });
@@ -797,11 +821,8 @@ export async function declineIncomingCall(): Promise<void> {
   setDmState('incomingCall', null);
   runtime.pendingAccept = null;
   if (!auth || !offer) return;
-  try {
-    await updateCallStatusRequest(auth.token, offer.call.id, 'declined');
-  } catch {
-    // ignore
-  }
+  const result = await updateCallStatusRequest(auth.token, offer.call.id, 'declined').catch(() => null);
+  if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
 }
 
 export async function hangUpCall(): Promise<void> {
@@ -814,7 +835,8 @@ export async function hangUpCall(): Promise<void> {
     setDmState('incomingCall', null);
     runtime.pendingAccept = null;
     if (auth && offer?.call.status === 'ringing') {
-      await updateCallStatusRequest(auth.token, offer.call.id, 'declined').catch(() => undefined);
+      const result = await updateCallStatusRequest(auth.token, offer.call.id, 'declined').catch(() => null);
+      if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
       void runtime.realtime?.sendCallCancel(offer.call.calleeId, { kind: 'call-offer', call: offer.call, callerName: auth.username });
     }
     return;
@@ -823,7 +845,9 @@ export async function hangUpCall(): Promise<void> {
   runtime.call?.hangUp('ended');
   announceCallCancel(call, auth);
   if (auth) {
-    await updateCallStatusRequest(auth.token, call.call.id, call.callState === 'ringing' ? (call.direction === 'outgoing' ? 'canceled' : 'declined') : 'ended').catch(() => undefined);
+    const status = call.callState === 'ringing' ? (call.direction === 'outgoing' ? 'canceled' : 'declined') : 'ended';
+    const result = await updateCallStatusRequest(auth.token, call.call.id, status).catch(() => null);
+    if (result?.systemMessage) applySystemMessage(call.call.conversationId, result.systemMessage);
   }
   setDmState('call', null);
   setDmState('incomingCall', null);
@@ -839,11 +863,8 @@ export async function markCallBusyAndReject(): Promise<void> {
   const auth = currentAuth();
   const offer = dmState.incomingCall;
   if (!auth || !offer) return;
-  try {
-    await updateCallStatusRequest(auth.token, offer.call.id, 'busy');
-  } catch {
-    // ignore
-  }
+  const result = await updateCallStatusRequest(auth.token, offer.call.id, 'busy').catch(() => null);
+  if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
   setDmState('incomingCall', null);
   runtime.pendingAccept = null;
 }

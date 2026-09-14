@@ -50,5 +50,11 @@ export async function POST(event: { request: Request; params: Record<string, str
     createdAt: c.createdAt
   };
 
-  return json({ success: true, call });
+  const systemMessage = c.systemMessage ?? null;
+  if (systemMessage) {
+    systemMessage.conversationId = call.conversationId;
+    systemMessage.senderId = systemMessage.senderId ?? call.callerId;
+  }
+
+  return json({ success: true, call, systemMessage });
 }

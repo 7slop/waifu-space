@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
 -- Widen the constraint on pre-existing databases (idempotent).
 ALTER TABLE public.messages DROP CONSTRAINT IF EXISTS messages_message_type_check;
 ALTER TABLE public.messages ADD CONSTRAINT messages_message_type_check
-  CHECK (message_type IN ('text', 'gif', 'image', 'video'));
+  CHECK (message_type IN ('text', 'gif', 'image', 'video', 'system'));
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON public.messages(conversation_id, created_at DESC);
 -- Replica identity FULL so change-data capture can deliver full rows.

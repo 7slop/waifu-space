@@ -1052,6 +1052,11 @@
     "darkMode": "Empty",
     "callScreenLabel": "Screen",
     "callVideoLabel": "Video",
-    "callVoiceLabel": "Voice"
+    "callVoiceLabel": "Voice",
+    "systemCallStartedVoice": "Voice call started",
+    "systemCallStartedVideo": "Video call started",
+    "systemCallEnded": "Call ended",
+    "systemCallDeclined": "Call declined",
+    "systemCallMissed": "Missed call"
   }
 }

@@ -1052,6 +1052,11 @@
     "darkMode": "空",
     "callScreenLabel": "画面",
     "callVideoLabel": "ビデオ",
-    "callVoiceLabel": "音声"
+    "callVoiceLabel": "音声",
+    "systemCallStartedVoice": "音声通話を開始しました",
+    "systemCallStartedVideo": "ビデオ通話を開始しました",
+    "systemCallEnded": "通話が終了しました",
+    "systemCallDeclined": "通話を拒否しました",
+    "systemCallMissed": "着信がありませんでした"
   }
 }
