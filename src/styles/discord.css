@@ -1077,6 +1077,36 @@
   flex-shrink: 0;
 }
 
+/* Corner state badges (muted mic / deafened) over a call avatar. */
+.dm-call-avatar-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-1, #181825);
+  border: 2px solid var(--surface-2, #313244);
+  color: #fff;
+  z-index: 3;
+}
+
+.dm-call-avatar-badge.muted {
+  background: #f23f43;
+}
+
+.dm-call-avatar-badge.deafened {
+  background: #f0b232;
+}
+
+.dm-call-avatar-badge svg {
+  width: 11px;
+  height: 11px;
+}
+
 .dm-call-avatar {
   border: 2px solid var(--surface-1, #181825);
 }

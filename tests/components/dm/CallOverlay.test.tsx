@@ -171,7 +171,7 @@ describe('CallOverlay', () => {
     restore();
   });
 
-  it('mute toggles the call state in the overlay', async () => {
+  it('mute toggles the call state and badges the avatar', async () => {
     const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
     setDmState('incomingCall', offer);
     const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
@@ -179,9 +179,11 @@ describe('CallOverlay', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
     await flush();
     expect(dmState.call?.muted).toBe(false);
+    expect(container.querySelector('[data-testid="dm-call-muted-badge"]')).not.toBeInTheDocument();
     fireEvent.click(container.querySelector('[data-testid="dm-call-mute"]')!);
     await flush();
     expect(dmState.call?.muted).toBe(true);
+    expect(container.querySelector('[data-testid="dm-call-muted-badge"]')).toBeInTheDocument();
     restore();
   });
 

@@ -14,11 +14,13 @@ import {
 import { state } from '../../lib/store';
 import { t } from '../../lib/i18n';
 import {
+  PhHeadphones,
   PhMicrophone,
   PhMicrophoneSlash,
   PhPhoneCall,
   PhPhoneDisconnect,
   PhPhoneIncoming,
+  PhSpeakerX,
   PhVideoCamera,
   PhVideoCameraFill,
   PhVideoCameraSlash,
@@ -38,6 +40,24 @@ function DmVideoView(props: { stream: () => MediaStream | null; muted?: boolean;
     }
   });
   return <video class={props.class} ref={ref} autoplay playsinline muted={props.muted} />;
+}
+
+/** Corner badge over a call avatar (mic muted, headphones deafened, ...). */
+function AvatarBadge(props: { show: boolean; kind: 'muted' | 'deafened' }) {
+  return (
+    <>
+      <Show when={props.show && props.kind === 'muted'}>
+        <span class="dm-call-avatar-badge muted" data-testid="dm-call-muted-badge" aria-hidden="true">
+          <PhMicrophoneSlash />
+        </span>
+      </Show>
+      <Show when={props.show && props.kind === 'deafened'}>
+        <span class="dm-call-avatar-badge deafened" data-testid="dm-call-deafened-badge" aria-hidden="true">
+          <PhSpeakerX />
+        </span>
+      </Show>
+    </>
+  );
 }
 
 /** Resolves the other participant's avatar from the conversation list. */
@@ -170,6 +190,7 @@ function ActiveCallBar() {
         <div class={`dm-call-avatars${videoActive() ? ' squared' : ''}`} data-testid="dm-call-avatars">
           <div class="dm-call-avatar-slot mine">
             <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
+            <AvatarBadge show={call().muted} kind="muted" />
           </div>
           <div class="dm-call-avatar-slot remote">
             <Show when={ringing()}>
