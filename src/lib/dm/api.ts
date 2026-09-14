@@ -277,6 +277,14 @@ export async function setMyPresenceRequest(
   return data.presence;
 }
 
+export async function heartbeatPresenceRequest(token: string): Promise<void> {
+  await request<{ success: boolean }>(
+    '/api/dm/presence/heartbeat',
+    { method: 'POST' },
+    token
+  );
+}
+
 export async function fetchPresenceBatch(token: string, userIds: string[]): Promise<Record<string, UserPresence>> {
   const data = await request<{ success: boolean; presence: Record<string, UserPresence> }>(
     `/api/dm/presence/batch?userIds=${encodeURIComponent(userIds.join(','))}`,

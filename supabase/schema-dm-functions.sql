@@ -6,6 +6,24 @@
 -- the server routes always pass the verified session user id.
 -- ==========================================================
 
+-- Effective presence for a stored user_presence row. A row whose last-seen
+-- stamp is older than two minutes is treated as offline (the client
+-- heartbeats every ~45s while the page is open), and invisible/offline rows
+-- always read as offline for other users.
+CREATE OR REPLACE FUNCTION public.dm_effective_status(
+  p_status text,
+  p_last_seen timestamptz
+) RETURNS text
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT CASE
+    WHEN p_status IS NULL OR p_status IN ('invisible', 'offline') THEN 'offline'
+    WHEN p_last_seen IS NULL OR p_last_seen < (now() - interval '2 minutes') THEN 'offline'
+    ELSE p_status
+  END;
+$$;
+
 -- Personalized summary of every DM conversation for a user.
 CREATE OR REPLACE FUNCTION public.get_dm_conversations(p_user_id uuid)
 RETURNS jsonb
@@ -65,7 +83,7 @@ BEGIN
         'username', pu.username,
         'avatarUrl', COALESCE(pu.avatar_url, ''),
         'bio', COALESCE(pu.bio, ''),
-        'presenceStatus', COALESCE(pr.status, 'offline'),
+        'presenceStatus', public.dm_effective_status(pr.status, pr.last_seen_at),
         'customStatus', pr.custom_status
       ) AS other_user
       FROM public.conversation_participants op
@@ -132,7 +150,7 @@ BEGIN
 
   SELECT pu.id, pu.username, COALESCE(pu.avatar_url, '') AS avatar_url,
          COALESCE(pu.bio, '') AS bio,
-         COALESCE(pr.status, 'offline') AS presence_status,
+         public.dm_effective_status(pr.status, pr.last_seen_at) AS presence_status,
          pr.custom_status
     INTO v_other
   FROM public.profiles pu
@@ -366,7 +384,7 @@ BEGIN
     SELECT COALESCE(
       jsonb_object_agg(
         user_id::text,
-        jsonb_build_object('userId', user_id, 'status', status, 'customStatus', custom_status, 'lastSeenAt', last_seen_at)
+        jsonb_build_object('userId', user_id, 'status', public.dm_effective_status(status, last_seen_at), 'customStatus', custom_status, 'lastSeenAt', last_seen_at)
       ),
       '{}'::jsonb
     )
@@ -536,6 +554,28 @@ BEGIN
 END;
 $$;
 
+-- Lightweight heartbeat: refresh last_seen_at without touching the stored
+-- status or custom status, so callers can distinguish "stale" from "truly
+-- offline" in the presence readers above.
+CREATE OR REPLACE FUNCTION public.touch_user_presence(p_user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  UPDATE public.user_presence SET last_seen_at = now() WHERE user_id = p_user_id;
+  IF NOT FOUND THEN
+    INSERT INTO public.user_presence (user_id, status, last_seen_at)
+    VALUES (p_user_id, 'online', now());
+  END IF;
+END;
+$$;
+
 -- Grant EXECUTE to the roles in play.
 REVOKE ALL ON FUNCTION public.get_dm_conversations(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_dm_conversations(uuid) TO anon, authenticated, service_role;
@@ -559,3 +599,7 @@ REVOKE ALL ON FUNCTION public.update_call_session(uuid, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.update_call_session(uuid, uuid, text) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.get_user_profile_public(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_user_profile_public(uuid) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.touch_user_presence(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.touch_user_presence(uuid) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.dm_effective_status(text, timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.dm_effective_status(text, timestamptz) TO anon, authenticated, service_role;

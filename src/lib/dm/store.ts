@@ -35,7 +35,8 @@ import {
   listGifFavorites,
   addGifFavorite,
   removeGifFavorite,
-  gifKeyOfUrl
+  gifKeyOfUrl,
+  heartbeatPresenceRequest
 } from './api';
 import { DmRealtime, RealtimePresencePayload } from './realtime';
 import { CallManager, CallState } from './call';
@@ -549,6 +550,17 @@ export async function setOwnPresence(status: PresenceStatus, customStatus?: stri
     });
   } catch {
     setDmState('error', 'Could not update status');
+  }
+}
+
+/** Refreshes the last-seen timestamp on the server without changing the stored status. */
+export async function heartbeatPresence(): Promise<void> {
+  const auth = currentAuth();
+  if (!auth) return;
+  try {
+    await heartbeatPresenceRequest(auth.token);
+  } catch {
+    // Heartbeat failures are transient and non-critical.
   }
 }
 

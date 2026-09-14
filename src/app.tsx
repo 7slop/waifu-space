@@ -14,6 +14,7 @@ import {
 import { defenseGameActive, setDefenseGameActive } from './lib/defense-bridge';
 import { t } from './lib/i18n';
 import { configureDmRuntime, dmState } from './lib/dm/store';
+import { startPresenceAutoDetect } from './lib/dm/presence-auto';
 import { startNotificationScheduler, stopNotificationScheduler, sendNotification } from './lib/notifications';
 import { SakuraCanvas } from './components/SakuraCanvas';
 import { ToastNotification } from './components/ToastNotification';
@@ -85,6 +86,7 @@ function AppLayout(props: { children: any }) {
   const [isAuthChecking, setIsAuthChecking] = createSignal(true);
   const [pendingNavHref, setPendingNavHref] = createSignal<string | null>(null);
   let deadlineInterval: any = null;
+  let autoDetectStop: (() => void) | null = null;
 
   const handleNavClick = (e: MouseEvent, href: string) => {
     if (defenseGameActive()) {
@@ -114,6 +116,9 @@ function AppLayout(props: { children: any }) {
         return { token: user.token, id: user.id, username: user.username, avatarUrl: user.avatarUrl };
       }
     });
+
+    const handle = startPresenceAutoDetect();
+    autoDetectStop = handle.stop;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (defenseGameActive()) {
@@ -188,6 +193,8 @@ function AppLayout(props: { children: any }) {
       colorSchemeQuery.removeEventListener('change', onColorSchemeChange);
       clearInterval(deadlineInterval);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      autoDetectStop?.();
+      autoDetectStop = null;
     });
   });
 
