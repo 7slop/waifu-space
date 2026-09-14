@@ -1,0 +1,700 @@
+import { createStore } from 'solid-js/store';
+import type {
+  CallOfferBroadcast,
+  CallSession,
+  CallSignalPayload,
+  CallType,
+  DmConversationSummary,
+  DmMessage,
+  DmMessageBroadcast,
+  DmUserLite,
+  PresenceStatus,
+  TypingBroadcast,
+  UserPresence
+} from './types';
+import {
+  classifyOutgoingMessage,
+  createCallRequest,
+  createConversation,
+  fetchMessages,
+  fetchMyPresence,
+  fetchPresenceBatch,
+  fetchUnread,
+  GifItem,
+  listConversations,
+  markConversationRead,
+  mergeMessageLists,
+  searchGifs,
+  searchUsers,
+  sendMessageRequest,
+  setMyPresenceRequest,
+  toDmMessage,
+  updateCallStatusRequest
+} from './api';
+import { DmRealtime, RealtimePresencePayload } from './realtime';
+import { CallManager, CallState } from './call';
+
+// ---------------------------------------------------------------------------
+// Client-side DM store
+//
+// Single reactive source of truth for the DM UI: conversations, messages,
+// presence, search and the in-flight call. It talks to the server through the
+// RPC-backed routes (./api) and to the world through Supabase Realtime
+// (./realtime). The dependency injection (auth supplier + notifier) keeps this
+// module fully unit-testable without a browser.
+// ---------------------------------------------------------------------------
+
+export interface DmAuth {
+  token: string;
+  id: string;
+  username: string;
+  avatarUrl?: string;
+}
+
+export interface DmRuntimeDeps {
+  getAuth: () => DmAuth | null;
+  notify?: (opts: { title: string; body: string }) => void;
+  iceServers?: RTCConfiguration['iceServers'];
+}
+
+export interface DmCallUi {
+  call: CallSession;
+  direction: 'incoming' | 'outgoing';
+  remoteName: string;
+  callState: CallState;
+  muted: boolean;
+  videoOff: boolean;
+}
+
+export interface DmStoreState {
+  ready: boolean;
+  connecting: boolean;
+  error: string | null;
+  conversations: DmConversationSummary[];
+  activeConversationId: string | null;
+  loadingMessages: string[];
+  hasOlder: Record<string, boolean>;
+  messages: Record<string, DmMessage[]>;
+  presence: Record<string, UserPresence>;
+  realtimePresence: Record<string, RealtimePresencePayload>;
+  myPresence: UserPresence | null;
+  totalUnread: number;
+  incomingCall: CallOfferBroadcast | null;
+  call: DmCallUi | null;
+  pendingIce: CallSignalPayload[];
+  searchQuery: string;
+  searchResults: DmUserLite[];
+  gifQuery: string;
+  gifResults: GifItem[];
+  gifOpen: boolean;
+  typing: Record<string, string[]>;
+}
+
+interface PendingIncomingCall {
+  call: CallSession;
+  callerName: string;
+}
+
+interface DmRuntime {
+  deps: DmRuntimeDeps;
+  realtime: DmRealtime | null;
+  call: CallManager | null;
+  pendingAccept: PendingIncomingCall | null;
+  lastTypingEmit: number;
+}
+
+const runtime: DmRuntime = {
+  deps: { getAuth: () => null, notify: undefined },
+  realtime: null,
+  call: null,
+  pendingAccept: null,
+  lastTypingEmit: 0
+};
+
+const INITIAL: DmStoreState = {
+  ready: false,
+  connecting: false,
+  error: null,
+  conversations: [],
+  activeConversationId: null,
+  loadingMessages: [],
+  hasOlder: {},
+  messages: {},
+  presence: {},
+  realtimePresence: {},
+  myPresence: null,
+  totalUnread: 0,
+  incomingCall: null,
+  call: null,
+  pendingIce: [],
+  searchQuery: '',
+  searchResults: [],
+  gifQuery: '',
+  gifResults: [],
+  gifOpen: false,
+  typing: {}
+};
+
+export const [dmState, setDmState] = createStore<DmStoreState>(JSON.parse(JSON.stringify(INITIAL)));
+
+/** Configures runtime deps (auth + notifier). Call once at app boot. */
+export function configureDmRuntime(deps: DmRuntimeDeps): void {
+  runtime.deps = { notify: defaultNotify, ...deps };
+}
+
+function currentAuth(): DmAuth | null {
+  return runtime.deps.getAuth();
+}
+
+function notify(title: string, body: string): void {
+  runtime.deps.notify?.({ title, body });
+}
+
+function defaultNotify({ title, body }: { title: string; body: string }): void {
+  void (async () => {
+    const { sendNotification } = await import('../notifications');
+    const { showToast } = await import('../store');
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      sendNotification(title, body);
+    } else {
+      showToast(`${title} — ${body}`);
+    }
+  })();
+}
+
+// ---------------------------------------------------------------------------
+// Realtime wiring
+// ---------------------------------------------------------------------------
+
+function onRealtimeMessage(broadcast: DmMessageBroadcast): void {
+  const auth = currentAuth();
+  const msg = toDmMessage(broadcast.message);
+  const convId = broadcast.conversationId;
+  const active = dmState.activeConversationId === convId;
+  const isMine = !!auth && msg.senderId === auth.id;
+  const wasUnread = dmState.conversations.find(c => c.id === convId)?.unreadCount ?? 0;
+
+  setDmState('messages', convId, (prev = []) => mergeMessageLists([prev, [msg]]));
+  setDmState('conversations', (convs) =>
+    convs
+      .map((c) => {
+        if (c.id !== convId) return c;
+        const unreadCount = isMine || active ? c.unreadCount ?? 0 : (c.unreadCount ?? 0) + 1;
+        return { ...c, lastMessage: msg, updatedAt: msg.createdAt, unreadCount };
+      })
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  );
+
+  const wasIncoming = !isMine;
+  if (wasIncoming && !active && wasUnread === 0) {
+    // Don't double-count: the server unaware increments; this store keeps the
+    // local total roughly in sync with the badge while a conversation is open.
+    setDmState('totalUnread', (n) => n + 1);
+  }
+
+  if (!isMine) {
+    const dnd = dmState.presence[msg.senderId]?.status === 'dnd';
+    const sender = broadcast.senderName || dmState.conversations.find(c => c.id === convId)?.otherUser?.username || 'Someone';
+    if (!dnd) notify(broadcast.senderName || sender, msg.messageType === 'gif' ? 'Sent a GIF' : msg.content || '(attachment)');
+  }
+}
+
+function onRealtimeTyping(broadcast: TypingBroadcast): void {
+  if (broadcast.userId === currentAuth()?.id) return;
+  if (dmState.conversations.find(c => c.id === broadcast.conversationId) === undefined) return;
+  setDmState('typing', broadcast.conversationId, (prev) => {
+    const next = (prev ?? []).filter(id => id !== broadcast.userId);
+    next.push(broadcast.userId);
+    if (next.length > 5) next.splice(0, next.length - 5);
+    return next;
+  });
+  setTimeout(() => {
+    const current = dmState.typing[broadcast.conversationId];
+    if (current?.includes(broadcast.userId)) {
+      const remaining = current.filter(id => id !== broadcast.userId);
+      if (remaining.length === 0) {
+        setDmState('typing', broadcast.conversationId, []);
+      } else {
+        setDmState('typing', broadcast.conversationId, remaining);
+      }
+    }
+  }, 5000);
+}
+
+function onRealtimePresence(map: Record<string, RealtimePresencePayload>): void {
+  setDmState('realtimePresence', map);
+}
+
+function sendSignal(type: CallSignalPayload['type'], callId: string, conversationId: string, extras: Partial<CallSignalPayload>): void {
+  void runtime.realtime?.sendCallSignal({ kind: 'call-signal', callId, conversationId, type, ...extras });
+}
+
+function flushPendingIce(conversationId: string, callId: string): void {
+  const list = dmState.pendingIce;
+  if (!list.length) return;
+  setDmState('pendingIce', []);
+  for (const s of list) sendSignal('ice', callId, conversationId, { candidate: s.candidate });
+}
+
+async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
+  const manager = runtime.call;
+  if (!manager) return;
+  const call = dmState.call;
+
+  if (signal.type === 'offer') {
+    // Caller's offer for an incoming call the user already accepted.
+    if (runtime.pendingAccept && signal.callId === runtime.pendingAccept.call.id && signal.sdp) {
+      const pending = runtime.pendingAccept;
+      runtime.pendingAccept = null;
+      const answer = await manager.acceptOffer(pending.call.id, pending.call.callerId, signal.sdp);
+      if (answer) sendSignal('answer', pending.call.id, pending.call.conversationId, { sdp: answer });
+      flushPendingIce(pending.call.conversationId, pending.call.id);
+    }
+    return;
+  }
+
+  if (!call || signal.callId !== call.call.id) return;
+
+  if (signal.type === 'answer') {
+    if (signal.sdp) await manager.adoptAnswer(signal.sdp);
+    flushPendingIce(signal.conversationId, call.call.id);
+  } else if (signal.type === 'ice' && signal.candidate) {
+    if (call.callState === 'connected') {
+      await manager.adoptIce(signal.candidate);
+    } else {
+      setDmState('pendingIce', (list) => [...list, signal]);
+    }
+  }
+}
+
+function onIncomingCallOffer(broadcast: CallOfferBroadcast): void {
+  if (dmState.incomingCall?.call.id === broadcast.call.id) return;
+  setDmState('incomingCall', broadcast);
+  notify(`${broadcast.callerName} is calling`, callTypeLabel(broadcast.call.callType));
+}
+
+function onIncomingCallCancel(broadcast: CallOfferBroadcast): void {
+  if (dmState.incomingCall?.call.id === broadcast.call.id) {
+    setDmState('incomingCall', null);
+  }
+}
+
+function callTypeLabel(type: CallType): string {
+  return type === 'screen' ? 'Screen share' : type === 'video' ? 'Video call' : 'Voice call';
+}
+
+// ---------------------------------------------------------------------------
+// Call manager plumb + UI helpers
+// ---------------------------------------------------------------------------
+
+function makeCallManager(): CallManager {
+  const manager = runtime.call ?? new CallManager({ iceServers: runtime.deps.iceServers });
+  runtime.call = manager;
+  return manager;
+}
+
+function wireCallManager(call: CallSession, manager: CallManager): void {
+  manager.deps.onStateChange = () => {
+    setDmState('call', (prev) => (prev ? { ...prev, callState: manager.currentState, muted: manager.isMuted(), videoOff: manager.isVideoOff() } : prev));
+  };
+  manager.deps.onIceCandidate = (candidate) => {
+    const convId = call.conversationId;
+    if (dmState.call?.callState === 'connected') {
+      sendSignal('ice', call.id, convId, { candidate });
+    } else {
+      setDmState('pendingIce', (list) => [...list, { kind: 'call-signal', callId: call.id, conversationId: convId, type: 'ice', candidate }]);
+    }
+  };
+}
+
+export const callLocalStream = (): MediaStream | null => runtime.call?.localMedia ?? null;
+export const callRemoteStream = (): MediaStream | null => runtime.call?.remoteMedia ?? null;
+
+// ---------------------------------------------------------------------------
+// Public actions
+// ---------------------------------------------------------------------------
+
+/** Boots the DM system: connects realtime, loads conversations + presence. */
+export async function initDm(): Promise<boolean> {
+  const auth = currentAuth();
+  if (!auth) return false;
+  setDmState({ connecting: true, error: null });
+  try {
+    const config = await (await fetch('/api/dm/config')).json();
+    if (!config?.supabaseUrl || !config?.supabaseAnonKey) {
+      setDmState({ connecting: false, error: 'DM unavailable' });
+      return false;
+    }
+
+    await runtime.realtime?.disconnect().catch(() => undefined);
+    runtime.call?.hangUp('ended');
+    runtime.call = null;
+
+    const rt = new DmRealtime(config, {
+      onMessage: onRealtimeMessage,
+      onTyping: onRealtimeTyping,
+      onCallSignal: (s) => void handleCallSignal(s),
+      onIncomingCall: onIncomingCallOffer,
+      onCallCancel: onIncomingCallCancel,
+      onPresenceChange: onRealtimePresence
+    });
+    runtime.realtime = rt;
+
+    await rt.connect({ id: auth.id, username: auth.username, avatar: auth.avatarUrl });
+
+    const [convs, presence, unread] = await Promise.all([
+      listConversations(auth.token),
+      fetchMyPresence(auth.token),
+      fetchUnread(auth.token)
+    ]);
+    setDmState({ conversations: convs, myPresence: presence, totalUnread: unread, ready: true, connecting: false });
+
+    const participantIds = Array.from(new Set(convs.flatMap(c => (c.otherUser?.id ? [c.otherUser.id] : []))));
+    if (participantIds.length) {
+      const batch = await fetchPresenceBatch(auth.token, participantIds);
+      setDmState('presence', batch);
+    }
+
+    await rt.trackPresence({
+      userId: auth.id,
+      username: auth.username,
+      avatar: auth.avatarUrl,
+      status: visibleFromStored(presence.status),
+      customStatus: presence.customStatus ?? undefined,
+      at: Date.now()
+    });
+    return true;
+  } catch (e) {
+    setDmState({ connecting: false, error: e instanceof Error ? e.message : 'Failed to start DM' });
+    return false;
+  }
+}
+
+function visibleFromStored(status: PresenceStatus): PresenceStatus {
+  return status === 'invisible' || status === 'offline' ? 'offline' : status;
+}
+
+export async function refreshConversations(): Promise<DmConversationSummary[]> {
+  const auth = currentAuth();
+  if (!auth) return [];
+  const convs = await listConversations(auth.token);
+  setDmState('conversations', convs);
+  const participantIds = Array.from(new Set(convs.flatMap(c => (c.otherUser?.id ? [c.otherUser.id] : []))));
+  if (participantIds.length) {
+    const batch = await fetchPresenceBatch(auth.token, participantIds);
+    setDmState('presence', batch);
+  }
+  return convs;
+}
+
+export async function openConversation(otherUserId: string): Promise<void> {
+  const auth = currentAuth();
+  if (!auth) return;
+  try {
+    const conv = await createConversation(auth.token, otherUserId);
+    await selectConversation(conv.id);
+    await refreshConversations();
+  } catch {
+    setDmState('error', 'Could not open that conversation');
+  }
+}
+
+export async function selectConversation(conversationId: string): Promise<void> {
+  const auth = currentAuth();
+  if (!auth) return;
+  setDmState('activeConversationId', conversationId);
+  if (dmState.messages[conversationId] === undefined) {
+    setDmState('loadingMessages', (list) => (list.includes(conversationId) ? list : [...list, conversationId]));
+    try {
+      const msgs = await fetchMessages(auth.token, conversationId, { limit: 50 });
+      setDmState('messages', conversationId, msgs);
+      setDmState('hasOlder', conversationId, msgs.length === 50);
+    } finally {
+      setDmState('loadingMessages', (list) => list.filter(id => id !== conversationId));
+    }
+  }
+  void runtime.realtime?.subscribeConversation(conversationId);
+  const conv = dmState.conversations.find(c => c.id === conversationId);
+  if (conv && (conv.unreadCount ?? 0) > 0) {
+    void markRead(conversationId);
+  }
+}
+
+async function markRead(conversationId: string): Promise<void> {
+  const auth = currentAuth();
+  if (!auth) return;
+  try {
+    await markConversationRead(auth.token, conversationId);
+    setDmState('conversations', (convs) => convs.map(c => (c.id === conversationId ? { ...c, unreadCount: 0, lastReadAt: new Date().toISOString() } : c)));
+    const unread = await fetchUnread(auth.token);
+    setDmState('totalUnread', unread);
+  } catch {
+    // ignore
+  }
+}
+
+export async function loadOlder(): Promise<void> {
+  const auth = currentAuth();
+  const convId = dmState.activeConversationId;
+  if (!auth || !convId) return;
+  const existing = dmState.messages[convId];
+  if (!existing?.length) return;
+  setDmState('loadingMessages', (list) => (list.includes(convId) ? list : [...list, convId]));
+  try {
+    const older = await fetchMessages(auth.token, convId, { before: existing[0].createdAt, limit: 50 });
+    if (older.length) {
+      setDmState('messages', convId, mergeMessageLists([older, existing]));
+    }
+    setDmState('hasOlder', convId, older.length === 50);
+  } finally {
+    setDmState('loadingMessages', (list) => list.filter(id => id !== convId));
+  }
+}
+
+export async function sendText(text: string): Promise<DmMessage | null> {
+  const auth = currentAuth();
+  const convId = dmState.activeConversationId;
+  if (!auth || !convId) return null;
+  const { content, messageType, mediaUrl } = classifyOutgoingMessage(text);
+  if (!content && !mediaUrl) return null;
+  return sendViaApi(convId, { content, messageType, mediaUrl });
+}
+
+export async function sendGif(url: string): Promise<DmMessage | null> {
+  const auth = currentAuth();
+  const convId = dmState.activeConversationId;
+  if (!auth || !convId || !url) return null;
+  return sendViaApi(convId, { content: '', messageType: 'gif', mediaUrl: url });
+}
+
+async function sendViaApi(convId: string, payload: { content: string; messageType: 'text' | 'gif'; mediaUrl: string | null }): Promise<DmMessage | null> {
+  const auth = currentAuth();
+  if (!auth) return null;
+  try {
+    const msg = await sendMessageRequest(auth.token, convId, payload);
+    setDmState('messages', convId, (prev = []) => mergeMessageLists([prev, [msg]]));
+    setDmState('conversations', (convs) =>
+      convs
+        .map(c => (c.id === convId ? { ...c, lastMessage: msg, updatedAt: msg.createdAt, unreadCount: 0 } : c))
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    );
+    const conv = dmState.conversations.find(c => c.id === convId);
+    const otherId = conv?.otherUser?.id;
+    void runtime.realtime?.sendMessage({ kind: 'dm-message', conversationId: convId, message: msg, senderName: auth.username, senderAvatar: auth.avatarUrl });
+    return msg;
+  } catch {
+    setDmState('error', 'Message failed to send');
+    return null;
+  }
+}
+
+export function emitTyping(): void {
+  const auth = currentAuth();
+  const convId = dmState.activeConversationId;
+  if (!auth || !convId) return;
+  const now = Date.now();
+  if (now - runtime.lastTypingEmit < 1500) return;
+  runtime.lastTypingEmit = now;
+  void runtime.realtime?.sendTyping({ kind: 'typing', conversationId: convId, userId: auth.id, userName: auth.username, at: now });
+}
+
+export async function setOwnPresence(status: PresenceStatus, customStatus?: string | null): Promise<void> {
+  const auth = currentAuth();
+  if (!auth) return;
+  try {
+    const presence = await setMyPresenceRequest(auth.token, status, customStatus);
+    setDmState('myPresence', presence);
+    void runtime.realtime?.trackPresence({
+      userId: auth.id,
+      username: auth.username,
+      avatar: auth.avatarUrl,
+      status: visibleFromStored(status),
+      customStatus: customStatus ?? undefined,
+      at: Date.now()
+    });
+  } catch {
+    setDmState('error', 'Could not update status');
+  }
+}
+
+export async function dmSearch(query: string): Promise<DmUserLite[]> {
+  const auth = currentAuth();
+  const trimmed = query.trim();
+  setDmState('searchQuery', query);
+  if (!auth || trimmed.length < 2) {
+    setDmState('searchResults', []);
+    return [];
+  }
+  try {
+    const users = await searchUsers(auth.token, trimmed);
+    setDmState('searchResults', users);
+    return users;
+  } catch {
+    setDmState('searchResults', []);
+    return [];
+  }
+}
+
+export function clearSearch(): void {
+  setDmState({ searchQuery: '', searchResults: [] });
+}
+
+export async function gifSearch(query: string): Promise<GifItem[]> {
+  const auth = currentAuth();
+  setDmState('gifQuery', query);
+  if (!auth) return [];
+  try {
+    const items = await searchGifs(auth.token, query);
+    setDmState('gifResults', items);
+    return items;
+  } catch {
+    setDmState('gifResults', []);
+    return [];
+  }
+}
+
+export function setGifOpen(open: boolean): void {
+  setDmState('gifOpen', open);
+}
+
+// ---------------------------------------------------------------------------
+// Calls
+// ---------------------------------------------------------------------------
+
+export async function startCall(type: CallType): Promise<boolean> {
+  const auth = currentAuth();
+  const conv = dmState.conversations.find(c => c.id === dmState.activeConversationId);
+  const otherId = conv?.otherUser?.id;
+  if (!auth || !conv || !otherId) return false;
+  try {
+    const call = await createCallRequest(auth.token, conv.id, otherId, type);
+    const manager = makeCallManager();
+    const ok = await manager.startLocal({ type, audio: true, video: type === 'video', screen: type === 'screen' });
+    if (!ok) {
+      await updateCallStatusRequest(auth.token, call.id, 'canceled').catch(() => undefined);
+      return false;
+    }
+    wireCallManager(call, manager);
+    setDmState('call', { call, direction: 'outgoing', remoteName: conv.otherUser.username, callState: 'ringing', muted: false, videoOff: type !== 'video' });
+    const offer = await manager.createOffer(call.id, otherId);
+    if (offer) {
+      sendSignal('offer', call.id, conv.id, { sdp: offer });
+      void runtime.realtime?.sendIncomingCallOffer({ kind: 'call-offer', call, callerName: auth.username, offer });
+    }
+    return true;
+  } catch {
+    setDmState('error', 'Call could not be started');
+    return false;
+  }
+}
+
+export async function acceptIncomingCall(): Promise<boolean> {
+  const auth = currentAuth();
+  const offer = dmState.incomingCall;
+  if (!auth || !offer) return false;
+  const { call, callerName } = offer;
+  const manager = makeCallManager();
+  const ok = await manager.startLocal({ type: call.callType, audio: true, video: call.callType === 'video', screen: call.callType === 'screen' });
+  if (!ok) {
+    setDmState('incomingCall', null);
+    return false;
+  }
+  wireCallManager(call, manager);
+  setDmState({ incomingCall: null, call: { call, direction: 'incoming', remoteName: callerName, callState: 'ringing', muted: false, videoOff: call.callType !== 'video' } });
+  void runtime.realtime?.subscribeConversation(call.conversationId);
+  if (offer.offer) {
+    const answer = await manager.acceptOffer(call.id, call.callerId, offer.offer);
+    if (answer) sendSignal('answer', call.id, call.conversationId, { sdp: answer });
+    flushPendingIce(call.conversationId, call.id);
+    return true;
+  }
+  // Offer not yet arrived; it is handled when onCallSignal fires later.
+  runtime.pendingAccept = { call, callerName };
+  return true;
+}
+
+export async function declineIncomingCall(): Promise<void> {
+  const auth = currentAuth();
+  const offer = dmState.incomingCall;
+  setDmState('incomingCall', null);
+  runtime.pendingAccept = null;
+  if (!auth || !offer) return;
+  try {
+    await updateCallStatusRequest(auth.token, offer.call.id, 'declined');
+  } catch {
+    // ignore
+  }
+}
+
+export async function hangUpCall(): Promise<void> {
+  const auth = currentAuth();
+  const call = dmState.call;
+
+  if (!call) {
+    // Caller canceled while ringing / user dismissed the incoming panel.
+    const offer = dmState.incomingCall;
+    setDmState('incomingCall', null);
+    runtime.pendingAccept = null;
+    if (auth && offer?.call.status === 'ringing') {
+      await updateCallStatusRequest(auth.token, offer.call.id, 'declined').catch(() => undefined);
+      void runtime.realtime?.sendCallCancel(offer.call.calleeId, { kind: 'call-offer', call: offer.call, callerName: auth.username });
+    }
+    return;
+  }
+
+  runtime.call?.hangUp('ended');
+  announceCallCancel(call, auth);
+  if (auth) {
+    await updateCallStatusRequest(auth.token, call.call.id, call.callState === 'ringing' ? (call.direction === 'outgoing' ? 'canceled' : 'declined') : 'ended').catch(() => undefined);
+  }
+  setDmState('call', null);
+  setDmState('incomingCall', null);
+}
+
+function announceCallCancel(call: DmCallUi, auth: DmAuth | null): void {
+  if (call.direction === 'outgoing' && auth) {
+    void runtime.realtime?.sendCallCancel(call.call.calleeId, { kind: 'call-offer', call: call.call, callerName: auth.username });
+  }
+}
+
+export async function markCallBusyAndReject(): Promise<void> {
+  const auth = currentAuth();
+  const offer = dmState.incomingCall;
+  if (!auth || !offer) return;
+  try {
+    await updateCallStatusRequest(auth.token, offer.call.id, 'busy');
+  } catch {
+    // ignore
+  }
+  setDmState('incomingCall', null);
+  runtime.pendingAccept = null;
+}
+
+export function toggleMute(): boolean {
+  const manager = runtime.call;
+  if (!manager) return false;
+  manager.toggleMute();
+  setDmState('call', (prev) => (prev ? { ...prev, muted: manager.isMuted() } : prev));
+  return manager.isMuted();
+}
+
+export function toggleVideo(): boolean {
+  const manager = runtime.call;
+  if (!manager) return false;
+  manager.toggleVideo();
+  setDmState('call', (prev) => (prev ? { ...prev, videoOff: manager.isVideoOff() } : prev));
+  return manager.isVideoOff();
+}
+
+export function resetDmStore(): void {
+  setDmState(JSON.parse(JSON.stringify(INITIAL)));
+}
+
+export async function disconnectDm(): Promise<void> {
+  runtime.call?.hangUp('ended');
+  runtime.call = null;
+  runtime.pendingAccept = null;
+  await runtime.realtime?.disconnect().catch(() => undefined);
+  runtime.realtime = null;
+  resetDmStore();
+}

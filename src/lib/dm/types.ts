@@ -103,11 +103,13 @@ export interface CallOfferBroadcast {
   kind: 'call-offer';
   call: CallSession;
   callerName: string;
+  offer?: RTCSessionDescriptionInit;
 }
 
 export interface CallSignalPayload {
   kind: 'call-signal';
   callId: string;
+  conversationId: string;
   type: 'offer' | 'answer' | 'ice';
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
