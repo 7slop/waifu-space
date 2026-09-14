@@ -58,19 +58,21 @@ export function DmMessageGroup(props: {
             when={media()}
             fallback={<GlyphText text={props.message.content} />}
           >
-            <Show when={mediaKind() === 'video'} fallback={<img class="dm-msg-media" src={mediaUrl()!} alt="" loading="lazy" />}>
-              <video class="dm-msg-media" controls preload="metadata" src={mediaUrl()!} />
-            </Show>
-          </Show>
-          <Show when={media() && favId()}>
-            <button
-              class={`dm-msg-fav-btn${isGifFavorited(favId()!) ? ' favorited' : ''}`}
-              data-testid={`dm-msg-fav-${favId()}`}
-              aria-label={isGifFavorited(favId()!) ? 'Unfavorite' : 'Favorite'}
-              onClick={() => void gifToggleFavoriteByUrl(mediaUrl()!, props.message.content)}
-            >
-              {isGifFavorited(favId()!) ? <PhHeartFill /> : <PhHeart />}
-            </button>
+            <div class="dm-msg-media-wrap">
+              <Show when={mediaKind() === 'video'} fallback={<img class="dm-msg-media" src={mediaUrl()!} alt="" loading="lazy" />}>
+                <video class="dm-msg-media" controls preload="metadata" src={mediaUrl()!} />
+              </Show>
+              <Show when={favId()}>
+                <button
+                  class={`dm-msg-fav-btn${isGifFavorited(favId()!) ? ' favorited' : ''}`}
+                  data-testid={`dm-msg-fav-${favId()}`}
+                  aria-label={isGifFavorited(favId()!) ? 'Unfavorite' : 'Favorite'}
+                  onClick={() => void gifToggleFavoriteByUrl(mediaUrl()!, props.message.content)}
+                >
+                  {isGifFavorited(favId()!) ? <PhHeartFill /> : <PhHeart />}
+                </button>
+              </Show>
+            </div>
           </Show>
         </div>
       </div>

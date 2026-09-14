@@ -1196,6 +1196,12 @@
   color: var(--primary-accent, #f5c2e7);
 }
 
+.dm-msg-media-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 360px;
+}
+
 .dm-msg-content video.dm-msg-media {
   max-width: 360px;
   max-height: 280px;
@@ -1205,16 +1211,18 @@
 }
 
 .dm-msg-fav-btn {
-  display: inline-flex;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  margin-top: 4px;
   border: none;
   border-radius: 50%;
-  background: var(--surface-2, #313244);
-  color: var(--text-secondary, #a6adc8);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s ease;
