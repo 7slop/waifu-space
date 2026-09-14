@@ -659,6 +659,19 @@
   opacity: 0.4;
 }
 
+/* The event being moved stays put in the grid (it keeps its layout slot) but is
+   hidden while the drag-move preview shows where it will land. */
+.week-event-card.is-dragging-source {
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.is-dragging-event,
+body.is-dragging-event .week-event-card {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
 .card-title {
   font-weight: 700;
   margin-bottom: 2px;
@@ -1212,7 +1225,39 @@ body.is-resizing-event {
 .drag-create-time {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
+}
+
+/* DRAG-TO-MOVE PLACEMENT PREVIEW (event/task move) */
+/* Opaque, real-sized copy of the event rendered in the target column so the
+   user sees exactly where the item will land, snapped to the 5-minute grid. */
+.drag-move-preview {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  z-index: 45;
+  pointer-events: none;
+  border-radius: 8px;
+  padding: 5px 8px;
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  outline: 2px dashed rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.drag-preview-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.drag-preview-time {
+  font-size: 10px;
+  opacity: 0.92;
+  color: #fff;
 }
 
 /* RECURRENCE BADGES */
@@ -1255,6 +1300,173 @@ body.is-resizing-event {
 @keyframes holiday-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* ---------------- VIEW SETTINGS (time format, notifications) ---------------- */
+
+.view-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vs-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-muted, #a0a0b0);
+  margin: 0;
+}
+
+.vs-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vs-row + .vs-row {
+  margin-top: 4px;
+}
+
+.vs-label-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vs-status {
+  font-size: 11px;
+  color: var(--text-muted, #a0a0b0);
+}
+
+.vs-notif-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.vs-test-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.vs-test-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.vs-section-divider {
+  height: 1px;
+  background: var(--border-color, rgba(255, 255, 255, 0.15));
+  margin: 4px 0;
+}
+
+.vs-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vs-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.vs-desc {
+  font-size: 11px;
+  color: var(--text-muted, #a0a0b0);
+  margin-top: 2px;
+}
+
+.vs-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vs-options {
+  display: flex;
+  gap: 6px;
+}
+
+.vs-option {
+  flex: 1;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vs-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.vs-option.active {
+  background: var(--primary-accent, #ff6584);
+  border-color: var(--primary-accent, #ff6584);
+  color: #fff;
+}
+
+.vs-divider {
+  height: 1px;
+  background: var(--border-color, rgba(255, 255, 255, 0.15));
+}
+
+/* Toggle switch */
+.vs-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 40px;
+  height: 22px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.vs-switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.vs-switch:checked {
+  background: var(--primary-accent, #ff6584);
+  border-color: var(--primary-accent, #ff6584);
+}
+
+.vs-switch:checked::before {
+  transform: translateX(18px);
 }
 
 .modal-title-icon {
@@ -1417,6 +1629,185 @@ body.is-resizing-event {
 .popover-badge-holiday {
   letter-spacing: 0.3px;
 }
+
+/* ---------------- SCHEDULE / AGENDA VIEW ---------------- */
+.schedule-view-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.schedule-day-group {
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--surface-1) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+  border-radius: 12px;
+  padding: 0 0 6px;
+  min-height: 120px;
+  flex: 1 1 0;
+}
+
+.schedule-day-group.today {
+  border-color: var(--primary-accent);
+  background: color-mix(in srgb, var(--primary-accent) 4%, var(--surface-1) 60%);
+}
+
+.schedule-day-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+  backdrop-filter: blur(4px);
+  border-radius: 12px 12px 0 0;
+}
+
+.schedule-day-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  flex-shrink: 0;
+}
+
+.schedule-day-header.today .schedule-day-num {
+  background: var(--primary-accent);
+  color: #fff;
+}
+
+.schedule-day-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.schedule-day-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.schedule-day-header.today .schedule-day-name {
+  color: var(--primary-accent);
+}
+
+.schedule-today-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--primary-accent);
+}
+
+.schedule-day-body {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 12px;
+}
+
+.schedule-event-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.schedule-event-row:hover {
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.schedule-event-row.completed .schedule-ev-title {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.schedule-ev-dot {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.schedule-ev-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.schedule-ev-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-ev-time {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.schedule-ev-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.schedule-task-check {
+  flex-shrink: 0;
+  accent-color: var(--primary-accent, #ff6584);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.schedule-ev-emoji {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.schedule-ev-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.schedule-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 14px 16px;
+  margin: 0;
 
 /* Defaults for mobile drawer helpers (hidden on desktop) */
 .gcal-sidebar-toggle-btn,

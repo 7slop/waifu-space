@@ -214,7 +214,7 @@ export interface AppState {
   };
   rpg: RpgState;
   calendar: {
-    view: 'month' | 'week' | 'day';
+    view: 'month' | 'week' | 'day' | '4day' | 'schedule';
     selectedDate: string;
     events: CalendarEventItem[];
     occurrenceOverrides: CalendarOccurrenceOverride[];
@@ -244,6 +244,10 @@ export interface AppState {
     llmModel: string;
     countryHolidays: string[];
     showCulturalHolidays: boolean;
+    notificationsEnabled: boolean;
+    timeFormat: '24h' | '12h';
+    soundEnabled: boolean;
+    weekStart: number;
   };
   chat: {
     messages: ChatMessage[];
@@ -327,7 +331,11 @@ export const DEFAULT_STATE: AppState = {
     llmApiKey: '',
     llmModel: 'gemini-1.5-flash',
     countryHolidays: [],
-    showCulturalHolidays: false
+    showCulturalHolidays: false,
+    notificationsEnabled: false,
+    timeFormat: '12h',
+    soundEnabled: true,
+    weekStart: 1
   },
   chat: {
     messages: [
@@ -1936,6 +1944,25 @@ export function dateKeyOf(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+/**
+ * Ordered JS day-of-week indexes (0=Sun) beginning at `weekStart`
+ * (0=Sunday, 1=Monday, 6=Saturday). Used to lay out week/month grids and
+ * their weekday headers so the first column always matches the setting.
+ */
+export function weekdayOrder(weekStart: number): number[] {
+  const ws = ((weekStart % 7) + 7) % 7;
+  return Array.from({ length: 7 }, (_, i) => (ws + i) % 7);
+}
+
+/** The first day of the week (per `weekStart`) that `d` falls within. */
+export function startOfWeek(d: Date, weekStart: number): Date {
+  const res = new Date(d);
+  const diff = (res.getDay() - ((weekStart % 7) + 7) % 7 + 7) % 7;
+  res.setDate(res.getDate() - diff);
+  res.setHours(0, 0, 0, 0);
+  return res;
 }
 
 export function getOccurrenceForDate(ev: CalendarEventItem, targetDate: Date): CalendarEventItem {

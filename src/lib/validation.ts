@@ -139,6 +139,10 @@ export interface CleanSettings {
   llmModel?: string;
   countryHolidays?: string[];
   showCulturalHolidays?: boolean;
+  notificationsEnabled?: boolean;
+  timeFormat?: '24h' | '12h';
+  soundEnabled?: boolean;
+  weekStart?: number;
 }
 
 function toBool(raw: unknown, fallback: boolean): boolean {
@@ -194,6 +198,13 @@ export function sanitizeSettings(input: Record<string, unknown>, fallback: Clean
     out.countryHolidays = codes;
   }
   if (has('showCulturalHolidays')) out.showCulturalHolidays = toBool(input.showCulturalHolidays, fallback.showCulturalHolidays ?? false);
+  if (has('notificationsEnabled')) out.notificationsEnabled = toBool(input.notificationsEnabled, fallback.notificationsEnabled ?? false);
+  if (has('timeFormat')) out.timeFormat = input.timeFormat === '24h' ? '24h' : '12h';
+  if (has('soundEnabled')) out.soundEnabled = toBool(input.soundEnabled, fallback.soundEnabled ?? true);
+  if (has('weekStart')) {
+    const ws = Number(input.weekStart);
+    out.weekStart = ws === 0 || ws === 1 || ws === 6 ? ws : (fallback.weekStart ?? 1);
+  }
 
   return out;
 }

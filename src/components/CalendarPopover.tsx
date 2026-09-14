@@ -1,7 +1,7 @@
 import { Show } from 'solid-js';
 import { CalendarEventItem } from '../lib/ical';
 import { toggleTask } from '../lib/store';
-import { t, getLocale, holidayTooltip } from '../lib/i18n';
+import { t, getLocale, holidayTooltip, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { useFocusTrap } from '../lib/accessibility';
 import { PhArrowLeft, PhCheckCircle, PhPencilSimple, PhTrash, PhX, PhMapPin, GlyphText } from './icons';
@@ -30,7 +30,7 @@ export function CalendarPopover(props: {
         const timeStr = () =>
           ev().allDay
             ? t('calendar.popover.allDay')
-            : `${s().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${e().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            : `${formatClock(s())} – ${formatClock(e())}`;
 
         const handleDelete = () => {
           props.onDeleteEvent(ev());

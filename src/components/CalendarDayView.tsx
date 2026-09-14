@@ -1,8 +1,10 @@
-import { For, Show, onMount, createSignal } from 'solid-js';
+import { For, Show, onMount, createSignal, createMemo } from 'solid-js';
 import { CalendarEventItem } from '../lib/ical';
 import { updateCalendarEvent, toggleTask, showToast, isSameDay, getEventsForDate } from '../lib/store';
 import { layoutTimedEvents } from '../lib/calendar-layout';
-import { t, getLocale, holidayTooltip } from '../lib/i18n';
+import { minuteFromClientY, snapMinute } from '../lib/calendar-drag';
+import { useNow, timePercentOfDay } from '../lib/live-time';
+import { t, getLocale, holidayTooltip, hourMinute, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
 import { PhArrowsClockwise, PhMapPin, GlyphText } from './icons';
@@ -30,18 +32,21 @@ export function CalendarDayView(props: {
   const allDayEvents = () => dayEvents().filter(ev => ev.allDay);
   const timedLayouts = () => layoutTimedEvents(dayEvents().filter(ev => !ev.allDay));
 
-  const getCurrentTimePercent = () => {
-    const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    return (minutes / 1440) * 100;
-  };
+  const now = useNow();
+  const currentTimePercent = () => timePercentOfDay(now());
 
 const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
-    if (!e.dataTransfer) return;
     if (ev._holiday) {
       e.preventDefault();
       return;
     }
+    // Timed events/tasks use the pointer-based move-drag with a live placement
+    // preview (see startEventDrag); only all-day pills route through native DnD.
+    if (!ev.allDay) {
+      e.preventDefault();
+      return;
+    }
+    if (!e.dataTransfer) return;
     e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'calendar-event', id: ev.id, dateKey: ev.dateKey }));
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -54,9 +59,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
   const minuteFromColumn = (e: DragEvent | MouseEvent): number => {
     const colEl = (e.target as HTMLElement).closest('.week-day-column') as HTMLElement | null;
     if (!colEl) return 0;
-    const rect = colEl.getBoundingClientRect();
-    const relY = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
-    return Math.max(0, Math.min(1425, Math.round((relY / rect.height) * 96) * 15));
+    return Math.min(1425, minuteFromClientY(e.clientY, colEl));
   };
 
   const handleDrop = (e: DragEvent) => {
@@ -105,6 +108,119 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
     }
   };
 
+  // ---- Event move-drag with live placement preview (5-min snap) ----
+  interface DragMoveState {
+    id: string;
+    dateKey?: string;
+    title: string;
+    color: string;
+    durationMin: number;
+    startMin: number;
+    moved: boolean;
+  }
+  const [dragMove, setDragMove] = createSignal<DragMoveState | null>(null);
+  // A real drag also produces a click on release; swallow that click so the
+  // event modal does not pop open right after a move.
+  let suppressClickAfterDrag = false;
+
+  const activeDrag = () => {
+    const d = dragMove();
+    return d && d.moved ? d : null;
+  };
+
+  const startEventDrag = (e: MouseEvent, ev: CalendarEventItem) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.event-resize-handle') || target.tagName === 'INPUT' || target.tagName === 'BUTTON') return;
+    if (ev._holiday) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const s = new Date(ev.start);
+    const e2 = new Date(ev.end || ev.start);
+    const durationMin = Math.max(30, Math.round((e2.getTime() - s.getTime()) / 60000));
+
+    setDragMove({
+      id: ev.id,
+      dateKey: ev.dateKey,
+      title: ev.title,
+      color: ev.color || '#ff6584',
+      durationMin,
+      startMin: snapMinute(s.getHours() * 60 + s.getMinutes()),
+      moved: false
+    });
+
+    const onMove = (moveEv: MouseEvent) => {
+      if (typeof document !== 'undefined') document.body.classList.add('is-dragging-event');
+      const colEl = (moveEv.target as HTMLElement).closest('.week-day-column') as HTMLElement | null;
+      setDragMove(prev => {
+        if (!prev) return prev;
+        if (!colEl) return prev;
+        const snapped = minuteFromClientY(moveEv.clientY, colEl);
+        const maxStart = 1440 - prev.durationMin;
+        return {
+          ...prev,
+          startMin: Math.max(0, Math.min(maxStart, snapMinute(snapped))),
+          moved: true
+        };
+      });
+    };
+
+    const onKey = (k: KeyboardEvent) => {
+      if (k.key !== 'Escape') return;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('keydown', onKey);
+      }
+      if (typeof document !== 'undefined') document.body.classList.remove('is-dragging-event');
+      setDragMove(null);
+    };
+
+    const onUp = () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('keydown', onKey);
+      }
+      if (typeof document !== 'undefined') document.body.classList.remove('is-dragging-event');
+
+      const d = dragMove();
+      setDragMove(null);
+      if (!d || !d.moved) return; // not a drag, plain click
+
+      const evt = props.events.find(x => x.id === d.id);
+      if (!evt || evt._holiday) return;
+
+      const minute = Math.min(d.startMin, 1425);
+      const newStart = new Date(props.currentDate);
+      newStart.setHours(0, 0, 0, 0);
+      newStart.setMinutes(minute);
+      const newEnd = new Date(newStart.getTime() + d.durationMin * 60000);
+
+      suppressClickAfterDrag = true;
+
+      const m60 = minute % 60;
+      const dateStr = `${Math.floor(minute / 60)}:${m60 < 10 ? '0' + m60 : m60}`;
+
+      if (d.dateKey && evt.recurrence && evt.recurrence !== 'none' && props.onRequestMove) {
+        props.onRequestMove(evt, newStart, newEnd, d.dateKey);
+      } else {
+        updateCalendarEvent(evt.id, {
+          start: newStart.toISOString(),
+          end: newEnd.toISOString()
+        });
+      }
+      showToast(t('calendar.toasts.rescheduled', { title: evt.title, date: dateStr }));
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      window.addEventListener('keydown', onKey);
+    }
+  };
+
   // ---- Event resize (Google Calendar style) ----
   interface ResizeState {
     id: string;
@@ -138,7 +254,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
     const onMove = (moveEv: MouseEvent) => {
       const rect = colEl.getBoundingClientRect();
       const relY = Math.max(0, Math.min(rect.height - 1, moveEv.clientY - rect.top));
-      const minute = Math.max(0, Math.min(1425, Math.round((relY / rect.height) * 96) * 15));
+      const minute = Math.min(1425, snapMinute((relY / rect.height) * 1440));
       setResize(prev => {
         if (!prev) return prev;
         let { newStartMin, newEndMin } = prev;
@@ -216,7 +332,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
     const relY = Math.max(0, Math.min(rect.height - 1, e.clientY - rect.top));
     const fraction = relY / rect.height;
     const exactMin = fraction * 1440;
-    const snappedMin = Math.floor(exactMin / 15) * 15;
+    const snappedMin = snapMinute(exactMin);
 
     setDragCreate({
       startMin: snappedMin,
@@ -229,7 +345,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
       const currRelY = Math.max(0, Math.min(currRect.height - 1, moveEv.clientY - currRect.top));
       const currFrac = currRelY / currRect.height;
       const currExactMin = currFrac * 1440;
-      const currSnappedMin = Math.round(currExactMin / 15) * 15;
+      const currSnappedMin = snapMinute(currExactMin);
 
       setDragCreate(prev => {
         if (!prev) return null;
@@ -278,9 +394,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
   const formatDragTime = (min: number) => {
     const h = Math.floor(min / 60);
     const m = min % 60;
-    const period = h < 12 ? 'AM' : 'PM';
-    const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${displayH}:${m < 10 ? '0' + m : m} ${period}`;
+    return hourMinute(h, m);
   };
 
   return (
@@ -315,6 +429,11 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                   e.stopPropagation();
                   props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                 }}
+                onContextMenu={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
+                }}
                 onKeyDown={e => onActivateKey(e, () => props.onOpenEvent(ev))}
               >
                 {ev.type === 'task' && (
@@ -341,10 +460,12 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
           <For each={Array.from({ length: 24 })}>
             {(_, idx) => {
               const h = idx();
-              const label = h === 0 ? '' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
+              // Memoized so the gutter re-renders instantly when the
+              // 12h/24h setting changes (a plain read inside <For> wouldn't).
+              const label = createMemo(() => (h === 0 ? '' : hourMinute(h, 0)));
               return (
                 <div class="time-slot-label">
-                  <span>{label}</span>
+                  <span>{label()}</span>
                 </div>
               );
             }}
@@ -371,7 +492,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
             {isToday() && (
               <div
                 class="current-time-line"
-                style={{ top: `${getCurrentTimePercent()}%` }}
+                style={{ top: `${currentTimePercent()}%` }}
               />
             )}
 
@@ -400,19 +521,45 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
               }}
             </Show>
 
+            {/* Drag-to-move placement preview (event snaps to the target slot) */}
+            <Show when={activeDrag()}>
+              {(drag) => {
+                const d = drag();
+                const topPct = (d.startMin / 1440) * 100;
+                const heightPct = Math.max(2.2, (d.durationMin / 1440) * 100);
+                return (
+                  <div
+                    class="drag-move-preview"
+                    style={{
+                      top: `${topPct}%`,
+                      height: `${heightPct}%`,
+                      background: d.color
+                    }}
+                  >
+                    <span class="drag-preview-title">{d.title}</span>
+                    <span class="drag-preview-time">
+                      {formatDragTime(d.startMin)} – {formatDragTime(d.startMin + d.durationMin)}
+                    </span>
+                  </div>
+                );
+              }}
+            </Show>
+
             <div class="week-events-layer">
               <For each={timedLayouts()}>
                 {layout => {
                   const ev = layout.ev;
                   const s = new Date(ev.start);
                   const e = new Date(ev.end || ev.start);
-                  const timeStr = `${s.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${e.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                  // Memoized so the label updates in place when the time format
+                  // setting is switched (avoids a full card re-creation).
+                  const timeStr = createMemo(() => `${formatClock(s)} - ${formatClock(e)}`);
                   const isResizing = resize()?.id === ev.id;
                   const preview = applyResizePreview(ev, layout);
 
                   return (
                     <div
-                      class={`week-event-card ${ev.type === 'task' && ev.completed ? 'completed' : ''} ${isResizing ? 'is-resizing' : ''}`}
+                      class={`week-event-card ${ev.type === 'task' && ev.completed ? 'completed' : ''} ${isResizing ? 'is-resizing' : ''} ${dragMove()?.id === ev.id && dragMove()?.moved ? 'is-dragging-source' : ''}`}
                       style={{
                         top: `${preview.topPct}%`,
                         height: `${preview.heightPct}%`,
@@ -423,17 +570,17 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                       role="button"
                       tabindex="0"
                       aria-label={t('calendar.a11y.openEvent', { title: ev.title })}
-                      draggable={!ev._holiday}
-                      onDragStart={e => handleDragStart(e, ev)}
-                      onDragOver={e => {
-                        e.stopPropagation();
-                        handleDragOver(e);
-                      }}
-                      onDrop={e => {
-                        e.stopPropagation();
-                        handleDrop(e);
-                      }}
+                      onMouseDown={e => startEventDrag(e, ev)}
                       onClick={e => {
+                        e.stopPropagation();
+                        if (suppressClickAfterDrag) {
+                          suppressClickAfterDrag = false;
+                          return;
+                        }
+                        props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
+                      }}
+                      onContextMenu={e => {
+                        e.preventDefault();
                         e.stopPropagation();
                         props.onOpenEvent(ev, e.currentTarget.getBoundingClientRect());
                       }}
@@ -461,7 +608,7 @@ const handleDragStart = (e: DragEvent, ev: CalendarEventItem) => {
                           <span class="card-repeat-icon" title={`Repeats: ${ev.recurrence}`}><PhArrowsClockwise /></span>
                         )}
                       </div>
-                      <span class="card-time">{timeStr}</span>
+                      <span class="card-time">{timeStr()}</span>
                       {ev.location && <span class="card-loc"><PhMapPin /> {ev.location}</span>}
                       <div
                         class="event-resize-handle"

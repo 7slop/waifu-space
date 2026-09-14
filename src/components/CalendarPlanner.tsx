@@ -27,7 +27,9 @@ import { CountryHolidaysModal } from './CountryHolidaysModal';
 import { CalendarMonthView } from './CalendarMonthView';
 import { CalendarWeekView } from './CalendarWeekView';
 import { CalendarDayView } from './CalendarDayView';
+import { CalendarScheduleView } from './CalendarScheduleView';
 import { t, getLocale, formatDate } from '../lib/i18n';
+import { startOfWeek } from '../lib/store';
 import { onActivateKey } from '../lib/accessibility';
 import {
   PhPlus,
@@ -73,6 +75,11 @@ export function CalendarPlanner() {
   // popping up on top of the country-holidays picker).
   const hasOpenOverlay = () =>
     holidaysModalOpen() || isModalOpen() || repeatScopeRequest() !== null || pendingDelete() !== null;
+
+  // The browser-notification scheduler now lives in the global AppLayout so it
+  // keeps running across every page of WaifuSpace, not just while the calendar
+  // route is mounted. It stays safe on the server (createEffect never runs
+  // during SSR and the scheduler no-ops outside the browser).
 
   // Filtered events
   const filteredEvents = createMemo(() => {
@@ -152,6 +159,10 @@ const sidebarTasks = createMemo(() => {
       d.setMonth(d.getMonth() + dir);
     } else if (view === 'week') {
       d.setDate(d.getDate() + dir * 7);
+    } else if (view === '4day') {
+      d.setDate(d.getDate() + dir * 4);
+    } else if (view === 'schedule') {
+      d.setDate(d.getDate() + dir * 7);
     } else if (view === 'day') {
       d.setDate(d.getDate() + dir);
     }
@@ -170,15 +181,26 @@ const sidebarTasks = createMemo(() => {
     const d = currentDate();
     const view = state.calendar.view;
     const loc = getLocale();
+    const ws = state.settings.weekStart ?? 0;
     if (view === 'month') {
       return d.toLocaleDateString(loc, { month: 'long', year: 'numeric' });
     }
     if (view === 'week') {
-      const start = new Date(d);
-      start.setDate(start.getDate() - start.getDay());
+      const start = startOfWeek(d, ws);
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
       return `${start.toLocaleDateString(loc, { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString(loc, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    }
+    if (view === '4day') {
+      const start = startOfWeek(d, ws);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 3);
+      return `${start.toLocaleDateString(loc, { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString(loc, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    }
+    if (view === 'schedule') {
+      const end = new Date(d);
+      end.setDate(d.getDate() + 6);
+      return `${t('calendar.views.schedule')}: ${d.toLocaleDateString(loc, { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString(loc, { month: 'short', day: 'numeric', year: 'numeric' })}`;
     }
     return d.toLocaleDateString(loc, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   };
@@ -349,6 +371,10 @@ const sidebarTasks = createMemo(() => {
       setState('calendar', 'view', 'week');
     } else if (e.key === 'd' || e.key === 'D') {
       setState('calendar', 'view', 'day');
+    } else if (e.key === 'x' || e.key === 'X') {
+      setState('calendar', 'view', '4day');
+    } else if (e.key === 'a' || e.key === 'A') {
+      setState('calendar', 'view', 'schedule');
     } else if (e.key === 'c' || e.key === 'C') {
       openCreateModal(currentDate());
     } else if (e.key === 'Escape') {
@@ -505,11 +531,27 @@ const sidebarTasks = createMemo(() => {
             </button>
             <button
               type="button"
+              class={`view-btn ${state.calendar.view === '4day' ? 'active' : ''}`}
+              onClick={() => setState('calendar', 'view', '4day')}
+              title="Shortcut: 'x'"
+            >
+              {t('calendar.views.fourDay')}
+            </button>
+            <button
+              type="button"
               class={`view-btn ${state.calendar.view === 'day' ? 'active' : ''}`}
               onClick={() => setState('calendar', 'view', 'day')}
               title="Shortcut: 'd'"
             >
               {t('calendar.views.day')}
+            </button>
+            <button
+              type="button"
+              class={`view-btn ${state.calendar.view === 'schedule' ? 'active' : ''}`}
+              onClick={() => setState('calendar', 'view', 'schedule')}
+              title="Shortcut: 'a'"
+            >
+              {t('calendar.views.schedule')}
             </button>
           </div>
         </div>
@@ -685,10 +727,11 @@ const sidebarTasks = createMemo(() => {
             />
           </Show>
 
-          <Show when={state.calendar.view === 'week'}>
+          <Show when={state.calendar.view === 'week' || state.calendar.view === '4day'}>
             <CalendarWeekView
               currentDate={currentDate()}
               events={viewEvents()}
+              dayCount={state.calendar.view === '4day' ? 4 : 7}
               onSelectSlot={d => openCreateModal(d, 'event')}
               onSelectRange={range => openCreateModal(range.start, 'event', range)}
               onOpenEvent={(ev, rect) => openPopover(ev, rect)}
@@ -704,6 +747,14 @@ const sidebarTasks = createMemo(() => {
               onSelectRange={range => openCreateModal(range.start, 'event', range)}
               onOpenEvent={(ev, rect) => openPopover(ev, rect)}
               onRequestMove={handleRequestMove}
+            />
+          </Show>
+
+          <Show when={state.calendar.view === 'schedule'}>
+            <CalendarScheduleView
+              startDate={currentDate()}
+              events={viewEvents()}
+              onOpenEvent={(ev, rect) => openPopover(ev, rect)}
             />
           </Show>
         </main>

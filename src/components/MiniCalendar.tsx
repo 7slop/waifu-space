@@ -2,6 +2,10 @@ import { createSignal, createEffect, untrack, For } from 'solid-js';
 import { t, getLocale } from '../lib/i18n';
 import { onActivateKey } from '../lib/accessibility';
 import { PhCaretLeft, PhCaretRight } from './icons';
+import { weekdayOrder } from '../lib/store';
+import { state } from '../lib/store';
+
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 export function MiniCalendar(props: {
   selectedDate: Date;
@@ -38,7 +42,8 @@ export function MiniCalendar(props: {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
 
-    const startIdx = firstDay.getDay();
+    const order = weekdayOrder(state.settings.weekStart ?? 0);
+    const startIdx = order.indexOf(firstDay.getDay());
     const totalDays = lastDay.getDate();
     const prevMonthDays = new Date(year, month, 0).getDate();
 
@@ -88,13 +93,9 @@ export function MiniCalendar(props: {
         </div>
       </div>
       <div class="mini-cal-grid">
-        <div class="mini-day-label">{t('calendar.weekdaysInitial.sun')}</div>
-        <div class="mini-day-label">{t('calendar.weekdaysInitial.mon')}</div>
-        <div class="mini-day-label">{t('calendar.weekdaysInitial.tue')}</div>
-        <div class="mini-day-label">{t('calendar.weekdaysInitial.wed')}</div>
-        <div class="mini-day-label">{t('calendar.weekdaysInitial.thu')}</div>
-        <div class="mini-day-label">{t('calendar.weekdaysInitial.fri')}</div>
-        <div class="mini-day-label">{t('calendar.weekdaysInitial.sat')}</div>
+        {weekdayOrder(state.settings.weekStart ?? 0).map(dow => (
+          <div class="mini-day-label">{t(`calendar.weekdaysInitial.${DAY_KEYS[dow]}`)}</div>
+        ))}
 
         <For each={daysInGrid()}>
           {item => {
