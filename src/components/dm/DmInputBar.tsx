@@ -1,7 +1,7 @@
 import { createSignal, Show } from 'solid-js';
 import { dmState, emitTyping, sendText, setEmojiOpen, setGifOpen } from '../../lib/dm/store';
 import { t } from '../../lib/i18n';
-import { PhPaperPlaneTilt } from '../icons';
+import { PhPaperPlaneTilt, PhSmiley } from '../icons';
 import { GifPicker } from './GifPicker';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -70,7 +70,7 @@ export function DmInputBar() {
             }}
             title={t('dm.emojiTooltip')}
           >
-            <span class="dm-emoji-btn-glyph">😊</span>
+            <PhSmiley class="dm-emoji-btn-glyph" />
           </button>
           <button
             class="dm-gif-btn"

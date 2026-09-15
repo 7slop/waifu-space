@@ -740,6 +740,13 @@
 .dm-emoji-btn-glyph {
   font-size: 19px;
   line-height: 1;
+  width: 19px;
+  height: 19px;
+}
+
+.dm-emoji-btn-glyph svg {
+  width: 19px;
+  height: 19px;
 }
 
 .dm-gif-btn:hover,
