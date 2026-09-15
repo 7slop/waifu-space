@@ -835,6 +835,19 @@
   box-shadow: var(--card-shadow, 0 4px 12px rgba(0, 0, 0, 0.3));
 }
 
+/* Keep the picker inside the viewport: anchor to the left edge instead of the
+   right when there is no room on the left, and open below when there is no
+   head room above the trigger. */
+.dm-emoji-picker.opens-left {
+  left: 0;
+  right: auto;
+}
+
+.dm-emoji-picker.opens-down {
+  top: calc(100% + 10px);
+  bottom: auto;
+}
+
 .dm-emoji-cats {
   display: flex;
   gap: 4px;
