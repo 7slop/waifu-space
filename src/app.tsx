@@ -13,7 +13,7 @@ import {
 } from './lib/store';
 import { defenseGameActive, setDefenseGameActive } from './lib/defense-bridge';
 import { t } from './lib/i18n';
-import { configureDmRuntime, dmState } from './lib/dm/store';
+import { configureDmRuntime, initDm, disconnectDm, dmState } from './lib/dm/store';
 import { startPresenceAutoDetect } from './lib/dm/presence-auto';
 import { startNotificationScheduler, stopNotificationScheduler, sendNotification } from './lib/notifications';
 import { SakuraCanvas } from './components/SakuraCanvas';
@@ -106,16 +106,6 @@ function AppLayout(props: { children: any }) {
 
   onMount(() => {
     loadState();
-
-    // DM runtime is wired once for the whole session; `getAuth` reads the
-    // reactive store so a login/logout is reflected immediately.
-    configureDmRuntime({
-      getAuth: () => {
-        const user = state.user;
-        if (!user?.token || !user.id) return null;
-        return { token: user.token, id: user.id, username: user.username, avatarUrl: user.avatarUrl };
-      }
-    });
 
     const handle = startPresenceAutoDetect();
     autoDetectStop = handle.stop;
@@ -211,6 +201,27 @@ function AppLayout(props: { children: any }) {
       startNotificationScheduler();
     } else {
       stopNotificationScheduler();
+    }
+  });
+
+  // DM realtime is wired once for the whole session and stays alive on every
+  // page of the SPA: incoming calls must ring and messages must arrive live
+  // whichever tab the peer is on. `getAuth` reads the reactive store so a
+  // login/logout is reflected immediately; the effect only re-runs when the
+  // user identity actually changes (not on token refreshes from /api/auth/me).
+  createEffect(() => {
+    const uid = state.user?.id ?? null;
+    if (uid) {
+      configureDmRuntime({
+        getAuth: () => {
+          const user = state.user;
+          if (!user?.token || !user.id) return null;
+          return { token: user.token, id: user.id, username: user.username, avatarUrl: user.avatarUrl };
+        }
+      });
+      void initDm();
+    } else {
+      void disconnectDm();
     }
   });
 

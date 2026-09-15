@@ -1,25 +1,16 @@
-import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { initDm, disconnectDm, dmState } from '../../lib/dm/store';
+import { Show } from 'solid-js';
+import { dmState } from '../../lib/dm/store';
 import { t } from '../../lib/i18n';
 import { DmSidebar } from './DmSidebar';
 import { DmChatPanel } from './DmChatPanel';
 
 /**
  * The home page when a registered user is signed in: a Discord-style DM
- * interface. Boots the DM realtime connections + data on mount, and tears them
- * down on unmount or logout.
+ * interface. The DM realtime runtime is booted globally in the app shell (see
+ * app.tsx) so incoming calls ring and messages arrive live on every page; this
+ * page only renders the sidebar + chat from the shared `dmState`.
  */
 export function DmHome() {
-  const [booted, setBooted] = createSignal(false);
-
-  onMount(() => {
-    void initDm().finally(() => setBooted(true));
-  });
-
-  onCleanup(() => {
-    void disconnectDm();
-  });
-
   const ready = () => dmState.ready;
 
   return (

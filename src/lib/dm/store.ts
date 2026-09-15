@@ -462,6 +462,11 @@ export async function initDm(): Promise<boolean> {
     ]);
     setDmState({ conversations: convs, myPresence: presence, totalUnread: unread, ready: true, connecting: false });
 
+    // Subscribe to every conversation channel for the whole session so messages
+    // and call signals arrive live no matter which page the user is on (the
+    // channel set is small and unsubscribe only happens on disconnect).
+    for (const c of convs) void rt.subscribeConversation(c.id);
+
     const participantIds = Array.from(new Set(convs.flatMap(c => (c.otherUser?.id ? [c.otherUser.id] : []))));
     if (participantIds.length) {
       const batch = await fetchPresenceBatch(auth.token, participantIds);

@@ -177,6 +177,10 @@ describe('dm store boot + conversations', () => {
     expect(dmState.myPresence?.status).toBe('online');
     expect(rt.instances[0].connect).toHaveBeenCalledWith({ id: 'u-me', username: 'alice', avatar: 'https://x/a.png' });
     expect(rt.instances[0].trackPresence).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u-me', status: 'online' }));
+    // Every conversation channel is subscribed at boot so messages + call
+    // signals arrive live regardless of which page/conversation is open.
+    expect(rt.instances[0].subscribeConversation).toHaveBeenCalledWith('c1');
+    expect(rt.instances[0].subscribeConversation).toHaveBeenCalledWith('c2');
   });
 
   it('selectConversation loads messages and subscribes to the realtime channel', async () => {

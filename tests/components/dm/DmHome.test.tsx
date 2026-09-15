@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, cleanup, waitFor } from '@solidjs/testing-library';
 import { DmHome } from '../../../src/components/dm/DmHome';
+import { initDm } from '../../../src/lib/dm/store';
 import { resetForDmTests, stubFetch, flush } from '../../dm-helpers';
 import type { DmMessageBroadcast } from '../../../src/lib/dm/types';
 
@@ -60,10 +61,11 @@ describe('DmHome', () => {
     resetForDmTests();
   });
 
-  it('boots the DM runtime and renders the sidebar + empty chat', async () => {
+  it('renders the sidebar + empty chat once the global DM runtime is booted', async () => {
     const restore = bootRoutes();
+    await initDm();
     const { container } = render(() => <DmHome />);
-    await waitFor(() => expect(container.querySelector('[data-testid="dm-sidebar"]')).toBeInTheDocument());
+    expect(container.querySelector('[data-testid="dm-sidebar"]')).toBeInTheDocument();
     expect(container.querySelector('[data-testid="dm-conv-c1"]')).toBeInTheDocument();
     expect(container.querySelector('[data-testid="dm-chat-empty"]')).toBeInTheDocument();
     restore();
@@ -71,8 +73,8 @@ describe('DmHome', () => {
 
   it('opens a conversation and feeds realtime messages into the list', async () => {
     const restore = bootRoutes();
+    await initDm();
     const { container } = render(() => <DmHome />);
-    await waitFor(() => expect(container.querySelector('[data-testid="dm-sidebar"]')).toBeInTheDocument());
     fireEvent.click(container.querySelector('[data-testid="dm-conv-c1"]')!);
     await waitFor(() => expect(container.querySelector('.dm-msg-content')).toHaveTextContent('first'));
 
@@ -92,8 +94,8 @@ describe('DmHome', () => {
 
   it('tracks presence on the realtime channel after boot', async () => {
     const restore = bootRoutes();
+    await initDm();
     const { container } = render(() => <DmHome />);
-    await waitFor(() => expect(container.querySelector('[data-testid="dm-sidebar"]')).toBeInTheDocument());
     await flush();
     const rt = FakeRealtime.instances[FakeRealtime.instances.length - 1];
     expect(rt.presences.length).toBe(1);
@@ -101,20 +103,21 @@ describe('DmHome', () => {
     restore();
   });
 
-  it('shows an error state when boot fails', async () => {
+  it('shows an error state when the DM boot fails', async () => {
     const restore = stubFetch({
       '/api/dm/config': () => ({ body: { supabaseUrl: 'https://x.supabase.co', supabaseAnonKey: 'anon', isConfigured: true } }),
       '/api/dm/conversations': () => ({ body: { success: false }, status: 500 })
     });
+    await initDm();
     const { container } = render(() => <DmHome />);
-    await waitFor(() => expect(container.querySelector('.dm-boot-error')).toBeInTheDocument());
+    expect(container.querySelector('.dm-boot-error')).toBeInTheDocument();
     restore();
   });
 
   it('opens the peer profile popover from the chat header identity', async () => {
     const restore = bootRoutes();
+    await initDm();
     const { container } = render(() => <DmHome />);
-    await waitFor(() => expect(container.querySelector('[data-testid="dm-sidebar"]')).toBeInTheDocument());
     fireEvent.click(container.querySelector('[data-testid="dm-conv-c1"]')!);
     await waitFor(() => expect(container.querySelector('[data-testid="dm-chat-identity"]')).toBeInTheDocument());
 
