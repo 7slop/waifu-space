@@ -14,6 +14,7 @@ import {
 import { defenseGameActive, setDefenseGameActive } from './lib/defense-bridge';
 import { t } from './lib/i18n';
 import { configureDmRuntime, initDm, disconnectDm, dmState } from './lib/dm/store';
+import { CallOverlay } from './components/dm/CallOverlay';
 import { startPresenceAutoDetect } from './lib/dm/presence-auto';
 import { startNotificationScheduler, stopNotificationScheduler, sendNotification } from './lib/notifications';
 import { SakuraCanvas } from './components/SakuraCanvas';
@@ -358,6 +359,11 @@ function AppLayout(props: { children: any }) {
         isOpen={isLeaderboardOpen()}
         onClose={closeLeaderboard}
       />
+
+      {/* GLOBAL DM CALL DOCK — rings on every page of the SPA */}
+      <Show when={state.user}>
+        <CallOverlay />
+      </Show>
 
       {/* DEFENSE NAVIGATION LEAVE MODAL */}
       <Show when={pendingNavHref()}>

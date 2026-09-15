@@ -77,9 +77,15 @@ function HeadphonesSlash(props: { class?: string }) {
   );
 }
 
-/** Resolves the other participant's avatar from the conversation list. */
+/**
+ * Resolves the other participant from the conversation list of whichever call
+ * is active. The dock is global, so it must NOT depend on the active chat
+ * conversation — an incoming call has to show the caller even when no
+ * conversation is currently selected.
+ */
 function peerInfo() {
-  const conv = dmState.conversations.find((c) => c.id === dmState.activeConversationId);
+  const active = dmState.call?.call ?? dmState.incomingCall?.call ?? null;
+  const conv = active ? dmState.conversations.find((c) => c.id === active.conversationId) : undefined;
   return { name: conv?.otherUser?.username ?? '', avatar: conv?.otherUser?.avatarUrl ?? null };
 }
 

@@ -7,12 +7,12 @@ import { DmAvatar } from './DmAvatar';
 import { DmMessageList } from './DmMessageList';
 import { DmInputBar } from './DmInputBar';
 import { DmProfilePopover } from './DmProfilePopover';
-import { CallOverlay } from './CallOverlay';
 
 /**
  * The right-hand chat region: conversation header (identity + single call
- * button), the top-docked call panel, the message timeline, the composer,
- * and an anchored profile popup for the other participant.
+ * button), the message timeline, the composer, and an anchored profile popup
+ * for the other participant. The call dock itself is rendered globally in the
+ * app shell so incoming calls ring on any page.
  */
 export function DmChatPanel() {
   const [profileTarget, setProfileTarget] = createSignal<{ id: string; anchor: () => DOMRect } | null>(null);
@@ -37,8 +37,6 @@ export function DmChatPanel() {
   return (
     <section class="dm-chat" data-testid="dm-chat">
       <Show when={conv()} fallback={<DmChatEmpty />}>
-        <CallOverlay />
-
         <header class="dm-chat-header">
           <button class="dm-chat-identity" data-testid="dm-chat-identity" ref={identityBtnRef} onClick={openHeaderProfile}>
             <DmAvatar
