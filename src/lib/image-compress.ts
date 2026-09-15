@@ -78,3 +78,27 @@ export async function compressImage(
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * Compresses an image intended as a full-screen wallpaper.
+ * Keeps a large enough dimension for crisp backgrounds while still
+ * capping the resulting data URL so it fits comfortably in localStorage.
+ * Max dimensions: 1920x1920, quality 0.75 -> typically 150KB-450KB.
+ */
+export async function compressWallpaper(
+  file: File | Blob,
+  maxWidth = 1920,
+  maxHeight = 1920,
+  quality = 0.75
+): Promise<{ blob: Blob; dataUrl: string }> {
+  const result = await compressImage(file, maxWidth, maxHeight, quality);
+
+  // Safety net: if the encoded wallpaper still exceeds ~4.5MB (extremely
+  // unlikely after downscale), re-encode at a smaller size to stay under
+  // typical localStorage quotas.
+  if (result.dataUrl.length > 4_500_000) {
+    return compressImage(file, 1280, 1280, 0.65);
+  }
+
+  return result;
+}

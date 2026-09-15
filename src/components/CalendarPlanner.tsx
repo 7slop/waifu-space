@@ -40,7 +40,8 @@ import {
   PhCaretRight,
   PhArrowsClockwise,
   PhX,
-  PhList
+  PhList,
+  PhCake
 } from './icons';
 import { SettingsIcon } from './icons';
 
@@ -570,7 +571,7 @@ const sidebarTasks = createMemo(() => {
         {/* LEFT SIDEBAR */}
         <aside class={`gcal-sidebar ${mobileSidebarOpen() ? 'mobile-open' : ''}`}>
           <div class="mobile-sidebar-header">
-            <span class="mobile-sidebar-title">{t('calendar.sidebar.myCalendars')}</span>
+            <span class="mobile-sidebar-title"><PhCalendar /> {t('calendar.sidebar.myCalendars')}</span>
             <button
               type="button"
               class="gcal-icon-btn mobile-sidebar-close"
@@ -595,7 +596,7 @@ const sidebarTasks = createMemo(() => {
 
           {/* MY CALENDARS FILTER */}
           <div class="gcal-category-box">
-            <h4 class="sidebar-heading">{t('calendar.sidebar.myCalendars')}</h4>
+            <h4 class="sidebar-heading"><PhCalendar /> {t('calendar.sidebar.myCalendars')}</h4>
             <label class="cal-filter-item">
               <input
                 type="checkbox"
@@ -621,7 +622,7 @@ const sidebarTasks = createMemo(() => {
                 onChange={e => setState('calendar', 'filterBirthdays', e.currentTarget.checked)}
               />
               <span class="filter-dot" style={{ background: '#e84393' }} />
-              {t('calendar.sidebar.birthdays')}
+              <PhCake /> {t('calendar.sidebar.birthdays')}
             </label>
           </div>
 

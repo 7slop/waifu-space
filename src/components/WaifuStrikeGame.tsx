@@ -23,6 +23,7 @@ import {
 import { WEAPON_CATALOG, strikeAudio } from '../lib/strike/strike-weapons';
 import { t } from '../lib/i18n';
 import { state, addCoins, gainBondExp } from '../lib/store';
+import { PhX, PhStar, EmojiIcon } from './icons';
 import '../styles/strike.css';
 
 const ACTION_LABELS: Record<keyof StrikeKeybindings, string> = {
@@ -805,7 +806,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
             'letter-spacing': '0.22em',
             'white-space': 'nowrap'
           }}>
-            ✦ SPAWN PROTECTION ✦
+            <EmojiIcon glyph="✦" /> SPAWN PROTECTION <EmojiIcon glyph="✦" />
           </div>
         </div>
       </Show>
@@ -823,18 +824,18 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
           <div class="strike-esc-modal" onClick={(e) => e.stopPropagation()}>
             <div class="strike-esc-header">
               <div class="strike-esc-title">
-                <h2>⛩️ {t('strike.mapName') || 'Kyoto'} (Tactical 3-Lane)</h2>
-                <div class="strike-esc-mode">⚡ {t('strike.modeTitle') || 'Waifu Strike DM'}</div>
+                <h2><EmojiIcon glyph="⛩" /> {t('strike.mapName') || 'Kyoto'} (Tactical 3-Lane)</h2>
+                <div class="strike-esc-mode"><EmojiIcon glyph="⚡" /> {t('strike.modeTitle') || 'Waifu Strike DM'}</div>
               </div>
               <div class="strike-esc-player-count">
-                👥 {peerCount() + 1} Player{peerCount() > 0 ? 's' : ''} Online
+                <EmojiIcon glyph="👥" /> {peerCount() + 1} Player{peerCount() > 0 ? 's' : ''} Online
               </div>
             </div>
 
             {/* Quick Actions */}
             <div class="strike-esc-actions-bar">
               <button class="btn-esc-resume" onClick={handleResumeMatch}>
-                ▶ Resume Match [Esc]
+                <EmojiIcon glyph="▶" /> Resume Match [Esc]
               </button>
             </div>
 
@@ -844,13 +845,13 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                 class={`strike-esc-tab-btn ${escTab() === 'controls' ? 'active' : ''}`}
                 onClick={() => setEscTab('controls')}
               >
-                🎮 Controls
+                <EmojiIcon glyph="🎮" /> Controls
               </button>
               <button
                 class={`strike-esc-tab-btn ${escTab() === 'graphics' ? 'active' : ''}`}
                 onClick={() => setEscTab('graphics')}
               >
-                🖥️ Graphics
+                <EmojiIcon glyph="🖥" /> Graphics
               </button>
             </div>
 
@@ -866,7 +867,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
               {/* Controls Tab */}
               <Show when={escTab() === 'controls'}>
                 <div class="strike-esc-section">
-                  <h3>🎮 Controls & Key Rebinding</h3>
+                  <h3><EmojiIcon glyph="🎮" /> Controls & Key Rebinding</h3>
                   <p class="strike-esc-hint">Click any key button below to rebind. Press Esc to cancel.</p>
 
                   <div class="strike-rebind-grid">
@@ -891,7 +892,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                 </div>
 
                 <div class="strike-esc-section">
-                  <h3>⚙️ Mouse & Audio</h3>
+                  <h3><EmojiIcon glyph="⚙" /> Mouse & Audio</h3>
 
                   {/* Mouse Sensitivity */}
                   <div class="strike-setting-row">
@@ -956,7 +957,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                       }}
                       onClick={toggleFullscreen}
                     >
-                      {isFullscreen() ? '🗗 Exit Fullscreen' : '⛶ Fullscreen'}
+                      {isFullscreen() ? <EmojiIcon glyph="🗗" /> : <EmojiIcon glyph="⛶" />} {isFullscreen() ? 'Exit Fullscreen' : 'Fullscreen'}
                     </button>
                   </div>
                 </div>
@@ -966,7 +967,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
               <Show when={escTab() === 'graphics'}>
                 {/* Quality Presets */}
                 <div class="strike-esc-section">
-                  <h3>🖥️ Quality Presets</h3>
+                  <h3><EmojiIcon glyph="🖥" /> Quality Presets</h3>
                   <p class="strike-esc-hint">Default is Low for smooth framerates on all devices.</p>
                   <div class="strike-preset-grid">
                     <div
@@ -1002,7 +1003,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
 
                 {/* Granular Visual Settings */}
                 <div class="strike-esc-section">
-                  <h3>⚙️ Granular Visual Settings</h3>
+                  <h3><EmojiIcon glyph="⚙" /> Granular Visual Settings</h3>
 
                   {/* Shadows Setting */}
                   <div class="strike-setting-row">
@@ -1148,19 +1149,19 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
           <div class="strike-loadout-modal" onClick={(e) => e.stopPropagation()}>
             <div class="strike-loadout-header">
               <div>
-                <h2>🎒 Tactical Armory & Loadout</h2>
+                <h2><EmojiIcon glyph="🎒" /> Tactical Armory & Loadout</h2>
                 <div class="strike-loadout-sub">
                   Select your primary rifle, sidearm, melee blade, and tactical ordnance [Press B or Esc to close]
                 </div>
               </div>
-              <button class="strike-loadout-close" onClick={handleCloseLoadout}>✕</button>
+              <button class="strike-loadout-close" onClick={handleCloseLoadout}><PhX /></button>
             </div>
 
             <div class="strike-loadout-body">
               {/* Category 1: PRIMARY WEAPONS */}
               <div class="strike-loadout-cat">
                 <div class="strike-loadout-cat-title">
-                  <span>🔫 PRIMARY WEAPON</span>
+                  <span><EmojiIcon glyph="🔫" /> PRIMARY WEAPON</span>
                   <span class="strike-loadout-cat-hint">Select your main firearm</span>
                 </div>
                 <div class="strike-loadout-grid">
@@ -1175,7 +1176,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                         <span class="loadout-equipped-badge">EQUIPPED</span>
                       </Show>
                     </div>
-                    <div class="loadout-card-name">🌸 Sakura Rifle (AR-47)</div>
+                    <div class="loadout-card-name"><EmojiIcon glyph="🌸" /> Sakura Rifle (AR-47)</div>
                     <div class="loadout-stats-grid">
                       <div class="loadout-stat"><span class="stat-lbl">Damage</span><span class="stat-val">24 (53 Head)</span></div>
                       <div class="loadout-stat"><span class="stat-lbl">Fire Rate</span><span class="stat-val">600 RPM</span></div>
@@ -1195,7 +1196,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                         <span class="loadout-equipped-badge">EQUIPPED</span>
                       </Show>
                     </div>
-                    <div class="loadout-card-name">⚡ Aether Railgun (SR-99)</div>
+                    <div class="loadout-card-name"><EmojiIcon glyph="⚡" /> Aether Railgun (SR-99)</div>
                     <div class="loadout-stats-grid">
                       <div class="loadout-stat"><span class="stat-lbl">Damage</span><span class="stat-val" style={{ color: '#ffd32a' }}>105 (168 Head)</span></div>
                       <div class="loadout-stat"><span class="stat-lbl">Optic</span><span class="stat-val">Pinpoint Scope</span></div>
@@ -1209,7 +1210,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
               {/* Category 2: SECONDARY WEAPON */}
               <div class="strike-loadout-cat">
                 <div class="strike-loadout-cat-title">
-                  <span>🔫 SECONDARY SIDEARM</span>
+                  <span><EmojiIcon glyph="🔫" /> SECONDARY SIDEARM</span>
                   <span class="strike-loadout-cat-hint">Standard issue heavy sidearm</span>
                 </div>
                 <div class="strike-loadout-grid">
@@ -1218,7 +1219,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                       <span class="loadout-card-tag">Heavy Hand Cannon</span>
                       <span class="loadout-equipped-badge">EQUIPPED</span>
                     </div>
-                    <div class="loadout-card-name">🦅 Neo Deagle (.50 AE)</div>
+                    <div class="loadout-card-name"><EmojiIcon glyph="🦅" /> Neo Deagle (.50 AE)</div>
                     <div class="loadout-stats-grid">
                       <div class="loadout-stat"><span class="stat-lbl">Damage</span><span class="stat-val">32 (70 Head)</span></div>
                       <div class="loadout-stat"><span class="stat-lbl">Fire Rate</span><span class="stat-val">320 RPM</span></div>
@@ -1232,7 +1233,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
               {/* Category 3: HAND / MELEE WEAPONS */}
               <div class="strike-loadout-cat">
                 <div class="strike-loadout-cat-title">
-                  <span>🗡️ HAND / MELEE WEAPON</span>
+                  <span><EmojiIcon glyph="🗡" /> HAND / MELEE WEAPON</span>
                   <span class="strike-loadout-cat-hint">Choose between sprint agility or lethal sword damage</span>
                 </div>
                 <div class="strike-loadout-grid">
@@ -1247,7 +1248,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                         <span class="loadout-equipped-badge">EQUIPPED</span>
                       </Show>
                     </div>
-                    <div class="loadout-card-name">🦊 Kitsune Knife</div>
+                    <div class="loadout-card-name"><EmojiIcon glyph="🦊" /> Kitsune Knife</div>
                     <div class="loadout-stats-grid">
                       <div class="loadout-stat"><span class="stat-lbl">Slash</span><span class="stat-val">35 DMG</span></div>
                       <div class="loadout-stat"><span class="stat-lbl">Heavy</span><span class="stat-val">65 DMG</span></div>
@@ -1267,7 +1268,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                         <span class="loadout-equipped-badge">EQUIPPED</span>
                       </Show>
                     </div>
-                    <div class="loadout-card-name">⚔️ Muramasa Katana</div>
+                    <div class="loadout-card-name"><EmojiIcon glyph="⚔" /> Muramasa Katana</div>
                     <div class="loadout-stats-grid">
                       <div class="loadout-stat"><span class="stat-lbl">Slash</span><span class="stat-val" style={{ color: '#ff7597' }}>55 DMG</span></div>
                       <div class="loadout-stat"><span class="stat-lbl">Heavy</span><span class="stat-val" style={{ color: '#ff7597' }}>95 DMG</span></div>
@@ -1281,7 +1282,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
               {/* Category 4: TACTICAL GRENADE */}
               <div class="strike-loadout-cat">
                 <div class="strike-loadout-cat-title">
-                  <span>💣 TACTICAL GRENADE (Pick 1)</span>
+                  <span><EmojiIcon glyph="💣" /> TACTICAL GRENADE (Pick 1)</span>
                   <span class="strike-loadout-cat-hint">Thrown ordnance equipped every round [4] / G</span>
                 </div>
                 <div class="strike-loadout-grid">
@@ -1296,7 +1297,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                         <span class="loadout-equipped-badge">EQUIPPED</span>
                       </Show>
                     </div>
-                    <div class="loadout-card-name">🍾 Kitsune Molotov</div>
+                    <div class="loadout-card-name"><EmojiIcon glyph="🍾" /> Kitsune Molotov</div>
                     <div class="loadout-stats-grid">
                       <div class="loadout-stat"><span class="stat-lbl">Damage</span><span class="stat-val">20 DMG/sec (5/0.25s)</span></div>
                       <div class="loadout-stat"><span class="stat-lbl">Duration</span><span class="stat-val">6.0s</span></div>
@@ -1316,7 +1317,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                         <span class="loadout-equipped-badge">EQUIPPED</span>
                       </Show>
                     </div>
-                    <div class="loadout-card-name">💨 Mist Veil Smoke</div>
+                    <div class="loadout-card-name"><EmojiIcon glyph="💨" /> Mist Veil Smoke</div>
                     <div class="loadout-stats-grid">
                       <div class="loadout-stat"><span class="stat-lbl">Vision</span><span class="stat-val" style={{ color: '#00cec9' }}>Obstructed</span></div>
                       <div class="loadout-stat"><span class="stat-lbl">Duration</span><span class="stat-val">16.0s</span></div>
@@ -1336,7 +1337,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                         <span class="loadout-equipped-badge">EQUIPPED</span>
                       </Show>
                     </div>
-                    <div class="loadout-card-name">💣 Type-97 HE Grenade</div>
+                    <div class="loadout-card-name"><EmojiIcon glyph="💣" /> Type-97 HE Grenade</div>
                     <div class="loadout-stats-grid">
                       <div class="loadout-stat"><span class="stat-lbl">Damage</span><span class="stat-val" style={{ color: '#ffd32a' }}>100 at Center</span></div>
                       <div class="loadout-stat"><span class="stat-lbl">Blast Radius</span><span class="stat-val">6.5m Falloff</span></div>
@@ -1350,9 +1351,9 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
 
             <div class="strike-loadout-footer">
               <div class="loadout-summary-chips">
-                <span class="loadout-chip">Primary: {loadout().primary === 'rifle' ? '🌸 Sakura Rifle' : '⚡ Aether Railgun'}</span>
-                <span class="loadout-chip">Melee: {loadout().melee === 'katana' ? '⚔️ Muramasa Katana' : '🦊 Kitsune Knife'}</span>
-                <span class="loadout-chip">Grenade: {GRENADE_CATALOG[loadout().grenade]?.icon || '💣'} {GRENADE_CATALOG[loadout().grenade]?.name || 'HE Grenade'}</span>
+                <span class="loadout-chip">Primary: {loadout().primary === 'rifle' ? <><EmojiIcon glyph="🌸" /> Sakura Rifle</> : <><EmojiIcon glyph="⚡" /> Aether Railgun</>}</span>
+                <span class="loadout-chip">Melee: {loadout().melee === 'katana' ? <><EmojiIcon glyph="⚔" /> Muramasa Katana</> : <><EmojiIcon glyph="🦊" /> Kitsune Knife</>}</span>
+                <span class="loadout-chip">Grenade: <EmojiIcon glyph={GRENADE_CATALOG[loadout().grenade]?.icon || '💣'} /> {GRENADE_CATALOG[loadout().grenade]?.name || 'HE Grenade'}</span>
               </div>
               <button class="btn-loadout-confirm" onClick={handleCloseLoadout}>
                 ✔ Equip & Resume Match [Esc / B]
@@ -1415,7 +1416,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
               <span class="kf-killer">{entry.killerName}</span>
               <span class="kf-weapon">{entry.weaponId.toUpperCase()}</span>
               <Show when={entry.isHeadshot}>
-                <span class="kf-headshot" title="Headshot">💀</span>
+                <span class="kf-headshot" title="Headshot"><EmojiIcon glyph="💀" /></span>
               </Show>
               <span class="kf-victim">{entry.victimName}</span>
             </div>
@@ -1451,7 +1452,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
           {/* Armor */}
           <div class="hud-armor-card">
             <div class="hud-armor-val">
-              🛡️ {armor()}
+              <EmojiIcon glyph="🛡" /> {armor()}
             </div>
             <div class="hud-armor-bar">
               <div
@@ -1501,7 +1502,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
             }}
           >
             <span class="hud-slot-key">[4]</span>
-            <span>{GRENADE_CATALOG[loadout().grenade]?.icon || '💣'} {GRENADE_CATALOG[loadout().grenade]?.name?.split(' ')[0] || 'Grenade'}</span>
+            <span><EmojiIcon glyph={GRENADE_CATALOG[loadout().grenade]?.icon || '💣'} /> {GRENADE_CATALOG[loadout().grenade]?.name?.split(' ')[0] || 'Grenade'}</span>
             <Show when={emptyGrenadeNudge()}>
               <div class="hud-slot-empty-notice">Empty (3 Kills = +1)</div>
             </Show>
@@ -1534,7 +1535,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
       <Show when={showControlsOverlay()}>
         <div class="strike-lock-overlay" onClick={handleStartPlay}>
           <div class="strike-lock-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>🌸 {t('strike.title') || 'Waifu Strike'}</h2>
+            <h2><EmojiIcon glyph="🌸" /> {t('strike.title') || 'Waifu Strike'}</h2>
             <p style={{ color: '#a4b0be', 'margin-bottom': '16px' }}>
               {t('strike.desc') || 'Endless casual tactical deathmatch. Drop in, click to lock mouse, and frag!'}
             </p>
@@ -1542,19 +1543,23 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
             <button
               class="btn-start-strike"
               style={{
-                background: 'linear-gradient(135deg, #ff7597, #e84393)',
-                color: '#fff',
+                background: 'var(--primary-accent)',
+                color: 'var(--accent-contrast)',
                 border: 'none',
                 padding: '12px 32px',
-                'border-radius': '12px',
+                'border-radius': 'var(--radius-md)',
                 'font-weight': 'bold',
                 'font-size': '1.1rem',
                 cursor: 'pointer',
-                'margin-top': '6px'
+                'margin-top': '6px',
+                'box-shadow': 'var(--card-shadow)',
+                display: 'inline-flex',
+                'align-items': 'center',
+                gap: '8px'
               }}
               onClick={handleStartPlay}
             >
-              🎮 {t('strike.dropInBtn') || 'Drop In & Play'}
+              <EmojiIcon glyph="🎮" /> {t('strike.dropInBtn') || 'Drop In & Play'}
             </button>
           </div>
         </div>
@@ -1564,7 +1569,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
       <Show when={focusLost() && !showControlsOverlay()}>
         <div class="strike-lock-overlay">
           <div class="strike-lock-modal" style={{ 'text-align': 'center' }}>
-            <h2>⏸️ Game Paused</h2>
+            <h2><EmojiIcon glyph="⏸" /> Game Paused</h2>
             <p style={{ color: '#a4b0be', 'margin-bottom': '18px' }}>
               The window lost focus. Press Esc or click below to drop back in.
             </p>
@@ -1601,7 +1606,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
         <div class="strike-scoreboard-overlay">
           <div class="strike-scoreboard-modal">
             <div class="scoreboard-header">
-              <h3>🏆 {t('strike.scoreboardTitle') || 'Deathmatch Leaderboard'}</h3>
+              <h3><EmojiIcon glyph="🏆" /> {t('strike.scoreboardTitle') || 'Deathmatch Leaderboard'}</h3>
               <span style={{ color: '#00cec9' }}>Kyoto Tactical Map (P2P)</span>
             </div>
 
@@ -1626,7 +1631,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                       <tr class={p.id === 0 ? 'is-local' : ''}>
                         <td>#{idx() + 1}</td>
                         <td style={{ color: p.avatarOutfit }}>
-                          {p.id === 0 ? '⭐ ' : ''}{p.name}
+                          {p.id === 0 ? <PhStar /> : ''}{p.name}
                         </td>
                         <td>{p.kills}</td>
                         <td>{p.deaths}</td>
@@ -1648,7 +1653,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
       <Show when={showSummaryModal() && matchSummary()}>
         <div class="strike-lock-overlay">
           <div class="strike-summary-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>🎉 {t('strike.summaryTitle') || 'Match Report'}</h2>
+            <h2><EmojiIcon glyph="🎉" /> {t('strike.summaryTitle') || 'Match Report'}</h2>
             <p style={{ color: '#a4b0be' }}>
               {t('strike.summarySubtitle') || 'Endless casual deathmatch session results'}
             </p>

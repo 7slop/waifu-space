@@ -24,7 +24,8 @@ import {
   PhCheckCircle,
   PhLock,
   PhWarningCircle,
-  PhRunning
+  PhRunning,
+  EmojiIcon
 } from './icons';
 
 const WaifuStrikeGame = lazy(() =>
@@ -110,7 +111,6 @@ export function RpgHub() {
               >
                 <span><PhSword /></span>
                 <span>{t('rpg.tabs.defense')}</span>
-                <span class="gamemode-badge">Live</span>
               </button>
 
               <button
@@ -119,7 +119,6 @@ export function RpgHub() {
               >
                 <span><PhLightning /></span>
                 <span>{t('strike.title') || 'Waifu Strike 3D'}</span>
-                <span class="gamemode-badge" style={{ background: '#ff7597' }}>New</span>
               </button>
 
               <button
@@ -128,7 +127,6 @@ export function RpgHub() {
               >
                 <span><PhSparkle /></span>
                 <span>{t('rpg.tabs.moreModes')}</span>
-                <span class="gamemode-badge soon">{t('rpg.gamemodes.soon')}</span>
               </button>
             </div>
 
@@ -228,7 +226,7 @@ export function RpgHub() {
                     return (
                       <div class={`milestone-card ${isClaimed() ? 'claimed' : canClaim() ? 'can-claim' : 'locked'}`}>
                         <div class="milestone-badge">
-                          <span class="badge-icon">{milestone.icon}</span>
+                          <span class="badge-icon"><EmojiIcon glyph={milestone.icon} /></span>
                           <span class="badge-lvl">Lv {milestone.level}</span>
                         </div>
 
