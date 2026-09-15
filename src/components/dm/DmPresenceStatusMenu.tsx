@@ -67,7 +67,7 @@ export function DmPresenceStatusMenu() {
   };
 
   return (
-    <div class="dm-status-wrap" ref={wrapRef}>
+    <div class="dm-status-wrap" ref={wrapRef} onClick={(e) => e.stopPropagation()}>
       <button
         class="dm-user-status-btn"
         data-testid="dm-status-menu-btn"

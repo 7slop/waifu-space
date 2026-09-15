@@ -125,4 +125,22 @@ describe('DmSidebar', () => {
     expect(container.querySelector('[data-testid="dm-profile-name"]')).toHaveTextContent('me');
     restore();
   });
+
+  it('does not open the own profile popover when selecting a status from the presence menu', async () => {
+    seed();
+    const restore = stubFetch({
+      '/api/dm/presence': () => ({
+        body: { success: true, presence: { userId: 'u-me', status: 'dnd', customStatus: null, lastSeenAt: '2025-01-01T00:00:00.000Z' } }
+      })
+    });
+    const { container } = render(() => <DmSidebar />);
+    fireEvent.click(container.querySelector('[data-testid="dm-status-menu-btn"]')!);
+    expect(container.querySelector('[data-testid="dm-status-menu"]')).toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-status-dnd"]')!);
+    await flush();
+    expect(container.querySelector('[data-testid="dm-profile-popover"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-status-menu"]')).not.toBeInTheDocument();
+    expect(dmState.myPresence?.status).toBe('dnd');
+    restore();
+  });
 });
