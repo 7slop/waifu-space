@@ -71,6 +71,7 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
   const [gizmoMode, setGizmoMode] = createSignal<'translate' | 'rotate' | 'scale'>('translate');
   const [snap, setSnap] = createSignal(true);
   const [snapStep, setSnapStep] = createSignal(0.5);
+  const [snapToGround, setSnapToGroundModal] = createSignal(true);
   const [isFullscreen, setIsFullscreen] = createSignal(false);
 
   const refresh = () => {
@@ -215,6 +216,12 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
     setSnapStep(step);
     controller?.setSnap(true);
     setSnap(true);
+  };
+
+  const handleToggleSnapToGround = () => {
+    const next = !snapToGround();
+    controller?.setSnapToGround(next);
+    setSnapToGroundModal(next);
   };
 
   const handleDelete = () => {
@@ -700,6 +707,9 @@ export function StrikeMapEditor(props: { onExit?: () => void }) {
             </div>
             <div class="edi-inspector-row">
               <CheckRow label="Snap to grid" checked={snap()} onChange={handleToggleSnap} />
+            </div>
+            <div class="edi-inspector-row">
+              <CheckRow label="Snap to ground" checked={snapToGround()} onChange={handleToggleSnapToGround} />
             </div>
             <div class="edi-snap-steps">
               <button class={`edi-btn ${snapStep() === 0.25 ? 'active' : ''}`} onClick={() => handleSnapStep(0.25)}>0.25</button>

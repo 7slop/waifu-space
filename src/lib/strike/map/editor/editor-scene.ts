@@ -3,6 +3,7 @@ import {
   Scene,
   ArcRotateCamera,
   Vector3,
+  Ray,
   Color3,
   Color4,
   AbstractMesh,
@@ -112,7 +113,21 @@ export const COMPONENT_PARAM_SPECS: Record<
   parkBench: {},
   storeSign: {
     glyph: { type: 'choice', label: 'Sign text', default: '茶', choices: ['茶', '酒', '食', '花', '店', '石'] }
-  }
+  },
+  fountain: { tiers: { type: 'number', label: 'Tiers', default: 3 } },
+  flowerPot: { size: { type: 'number', label: 'Size', default: 1 } },
+  bambooWaterFeature: {},
+  rockGarden: { scale: { type: 'number', label: 'Scale', default: 1 } },
+  stonePath: { length: { type: 'number', label: 'Length', default: 5 } },
+  windChime: {},
+  stoneArch: { scale: { type: 'number', label: 'Scale', default: 1 } },
+  pagoda: { tiers: { type: 'number', label: 'Tiers', default: 3 } },
+  shrineTable: {},
+  bannerPole: {
+    color: { type: 'choice', label: 'Banner color', default: 'red', choices: ['red', 'white'] }
+  },
+  pathMarker: {},
+  ornamentalBridge: { span: { type: 'number', label: 'Span', default: 4 } }
 };
 
 /** Camera fly speed in meters/second (Shift triples it). */
@@ -150,6 +165,8 @@ export class StrikeMapEditorController {
   snapEnabled = true;
   translateSnap = 0.5;
   rotateSnap = Math.PI / 12; // 15°
+  /** When true, objects rest on the surface below them when moved/placed. */
+  snapToGroundEnabled = true;
 
   onChange?: () => void;
 
@@ -685,6 +702,38 @@ export class StrikeMapEditorController {
     this.applySnap();
   }
 
+  setSnapToGround(enabled: boolean): void {
+    this.snapToGroundEnabled = enabled;
+    this.onChange?.();
+  }
+
+  /**
+   * Raycasts straight down from a point and returns the surface below,
+   * so an object can be dropped onto the ground — or onto whatever object
+   * / platform happens to be underneath it.
+   */
+  private snapToGroundPoint(point: Vector3, excludeRoot?: AbstractMesh): Vector3 {
+    if (!this.snapToGroundEnabled) return point.clone();
+    const p = point.clone();
+    const excludeId = excludeRoot ? this.resolveIdOf(excludeRoot) : null;
+    try {
+      const ray = new Ray(new Vector3(p.x, p.y + 400, p.z), new Vector3(0, -1, 0), 800);
+      const pick = this.scene.pickWithRay(ray, (m) => {
+        // Don't snap an object onto its own meshes (root + component children).
+        if (excludeRoot && m === excludeRoot) return false;
+        if (excludeId) {
+          const meta = m.metadata as { editorId?: string } | undefined;
+          if (meta && meta.editorId === excludeId) return false;
+        }
+        return true;
+      });
+      if (pick?.pickedPoint) p.y = pick.pickedPoint.y;
+    } catch {
+      /* fall through — keep the current height */
+    }
+    return p;
+  }
+
   setTranslateSnap(step: number): void {
     this.translateSnap = step;
     if (this.snapEnabled) this.applySnap();
@@ -753,6 +802,14 @@ export class StrikeMapEditorController {
       control.rotation.z = Math.round(control.rotation.z / this.rotateSnap) * this.rotateSnap;
     }
 
+    if (this.snapToGroundEnabled) {
+      const snapped = this.snapToGroundPoint(control.position, control);
+      if (this.snapEnabled) {
+        snapped.y = Math.round(snapped.y / this.translateSnap) * this.translateSnap;
+      }
+      control.position.y = snapped.y;
+    }
+
     obj.position = [control.position.x, control.position.y, control.position.z];
     obj.rotation = [control.rotation.x, control.rotation.y, control.rotation.z];
     if (obj.kind === 'component') {
@@ -777,6 +834,7 @@ export class StrikeMapEditorController {
   addBox(): void {
     this.recordHistory();
     const id = nextEditorId(this.layout);
+    const projected = this.snapToGroundPoint(this.projectOnGround());
     const box: MapBoxObject = {
       id,
       name: `Box_${id}`,
@@ -784,7 +842,7 @@ export class StrikeMapEditorController {
       w: 2,
       h: 2,
       d: 2,
-      position: [0, 1, 0],
+      position: [projected.x, projected.y + 1, projected.z],
       rotation: [0, 0, 0],
       material: 'plaster',
       collidable: true
@@ -800,8 +858,9 @@ export class StrikeMapEditorController {
     if (!def) return;
     this.recordHistory();
     const position: [number, number, number] = [0, 0, 0];
-    const projected = this.projectOnGround();
+    const projected = this.snapToGroundPoint(this.projectOnGround());
     position[0] = projected.x;
+    position[1] = projected.y;
     position[2] = projected.z;
     const obj = createComponentObject(componentId, def.label, position);
     this.layout.objects.push(obj);
