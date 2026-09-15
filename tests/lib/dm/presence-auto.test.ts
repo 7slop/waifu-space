@@ -50,7 +50,56 @@ describe('presence-auto', () => {
     restore();
   });
 
+  it('reload (pagehide) cancels the deferred offline write so the stored status survives', async () => {
+    resetForDmTests();
+    const posts: string[] = [];
+    const status = (s: PresenceStatus) => ({ userId: 'u-me', status: s, customStatus: null, lastSeenAt: new Date().toISOString() });
+    const restore = stubFetch({
+      '/api/dm/presence': (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        if (body.status) posts.push(body.status);
+        return { body: { success: true, presence: status(body.status as PresenceStatus) } };
+      }
+    });
+    setMyStatus('online');
+    const handle = startPresenceAutoDetect({ idleMs: 60_000, evalMs: 20, heartbeatMs: 60_000, hiddenMs: 100 });
+    setVisibility('hidden');
+    await vi.advanceTimersByTimeAsync(10);
+    window.dispatchEvent(new Event('pagehide'));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(dmState.myPresence?.status).toBe('online');
+    expect(posts).toEqual([]);
+    handle.stop();
+    restore();
+  });
+
+  it('writes offline while hidden, then restores online when the user returns', async () => {
+    resetForDmTests();
+    const status = (s: PresenceStatus) => ({ userId: 'u-me', status: s, customStatus: null, lastSeenAt: new Date().toISOString() });
+    const restore = stubFetch({
+      '/api/dm/presence': (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        return { body: { success: true, presence: status(body.status as PresenceStatus) } };
+      }
+    });
+    setMyStatus('online');
+    const handle = startPresenceAutoDetect({ idleMs: 60_000, evalMs: 20, heartbeatMs: 60_000, hiddenMs: 100 });
+    setVisibility('hidden');
+    await vi.advanceTimersByTimeAsync(250);
+    expect(dmState.myPresence?.status).toBe('offline');
+    setVisibility('visible');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(dmState.myPresence?.status).toBe('online');
+    handle.stop();
+    restore();
+  });
+
   function setMyStatus(status: PresenceStatus) {
     setDmState('myPresence', { status, customStatus: null });
+  }
+
+  function setVisibility(state: 'visible' | 'hidden') {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: state });
+    document.dispatchEvent(new Event('visibilitychange'));
   }
 });
