@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS public.messages (
   content TEXT NOT NULL DEFAULT '',
   message_type TEXT NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'gif', 'image', 'video')),
   media_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+  created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  edited_at TIMESTAMPTZ,
+  reply_to_id UUID REFERENCES public.messages(id) ON DELETE SET NULL
 );
 
 -- Widen the constraint on pre-existing databases (idempotent).
@@ -39,6 +41,7 @@ ALTER TABLE public.messages ADD CONSTRAINT messages_message_type_check
   CHECK (message_type IN ('text', 'gif', 'image', 'video', 'system'));
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON public.messages(conversation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_reply_to ON public.messages(reply_to_id);
 -- Replica identity FULL so change-data capture can deliver full rows.
 ALTER TABLE public.messages REPLICA IDENTITY FULL;
 

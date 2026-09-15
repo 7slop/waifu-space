@@ -34,6 +34,10 @@ export interface DmMessage {
   messageType: MessageType;
   mediaUrl?: string | null;
   createdAt: string;
+  /** Set when the sender edited the message; renders an "(edited)" marker. */
+  editedAt?: string | null;
+  /** Id of the message this one replies to, if any. */
+  replyToId?: string | null;
   /** Per-emoji reaction buckets, empty when unreacted. */
   reactions?: DmReaction[];
 }

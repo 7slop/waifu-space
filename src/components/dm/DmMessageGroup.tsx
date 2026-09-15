@@ -1,9 +1,9 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { isOwnMessage, mediaSourceOf, gifKeyOfUrl, formatMessageTime, MediaKind } from '../../lib/dm/api';
-import { gifToggleFavoriteByUrl, isGifFavorited, toggleReaction } from '../../lib/dm/store';
+import { dmState, gifToggleFavoriteByUrl, isGifFavorited, toggleReaction, setReplyTarget, editMessage, deleteMessage } from '../../lib/dm/store';
 import { QUICK_REACTIONS } from '../../lib/dm/emoji';
 import { t } from '../../lib/i18n';
-import { PhHeart, PhHeartFill, PhPhoneCall, PhPhoneDisconnect, PhPhoneIncoming, PhPlus, PhSmiley } from '../icons';
+import { PhArrowBendUpLeft, PhHeart, PhHeartFill, PhPencilSimple, PhPhoneCall, PhPhoneDisconnect, PhPhoneIncoming, PhPlus, PhSmiley, PhTrash } from '../icons';
 import { DmAvatar } from './DmAvatar';
 import { DmEmojiText, EmojiGlyph } from './DmEmojiText';
 import { EmojiPicker } from './EmojiPicker';
@@ -48,18 +48,54 @@ export function DmMessageGroup(props: {
 
   const [addOpen, setAddOpen] = createSignal(false);
   const [pickerOpen, setPickerOpen] = createSignal(false);
+  const [menu, setMenu] = createSignal<{ x: number; y: number } | null>(null);
+  const [editing, setEditing] = createSignal(false);
+  const [editValue, setEditValue] = createSignal('');
 
-  const closeAddOnClickAway = (e: PointerEvent) => {
-    if (!addOpen()) return;
+  const closePopups = (e: PointerEvent) => {
     const el = e.target as HTMLElement | null;
     if (!el || !el.closest('.dm-reaction-add-anchor')) {
       setAddOpen(false);
       setPickerOpen(false);
     }
+    if (!el || (!el.closest('.dm-msg-menu') && !el.closest('.dm-msg'))) setMenu(null);
   };
 
-  onMount(() => document.addEventListener('pointerdown', closeAddOnClickAway));
-  onCleanup(() => document.removeEventListener('pointerdown', closeAddOnClickAway));
+  onMount(() => document.addEventListener('pointerdown', closePopups, true));
+  onCleanup(() => document.removeEventListener('pointerdown', closePopups, true));
+
+  const closeMenuOnKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') setMenu(null);
+  };
+  onMount(() => document.addEventListener('keydown', closeMenuOnKey));
+  onCleanup(() => document.removeEventListener('keydown', closeMenuOnKey));
+
+  const openMenu = (e: MouseEvent) => {
+    e.preventDefault();
+    const menuW = 176;
+    const menuH = 88;
+    setMenu({
+      x: Math.max(4, Math.min(e.clientX, window.innerWidth - menuW - 4)),
+      y: Math.max(4, Math.min(e.clientY, window.innerHeight - menuH - 4))
+    });
+  };
+
+  const replyTarget = () => {
+    const convId = props.message.conversationId;
+    const list = dmState.messages[convId] ?? [];
+    return list.find((m) => m.id === props.message.replyToId) ?? null;
+  };
+
+  const saveEdit = async () => {
+    const value = editValue().trim();
+    if (!value) return;
+    const ok = await editMessage(props.message.id, value);
+    if (ok) setEditing(false);
+    setMenu(null);
+  };
+
+  const canEdit = () => own() && props.message.messageType === 'text';
+  const canDelete = () => own() && props.message.messageType !== 'system';
 
   const react = (emoji: string) => {
     void toggleReaction(props.message.id, emoji);
@@ -106,6 +142,7 @@ export function DmMessageGroup(props: {
       class={`dm-msg${props.showAvatar ? ' dm-msg-header' : ' dm-msg-cont'}${own() ? ' dm-msg-own' : ''}`}
       data-testid="dm-message"
       data-message-id={props.message.id}
+      onContextMenu={openMenu}
     >
       <Show when={props.message.messageType === 'system'} fallback={
         <>
@@ -129,9 +166,26 @@ export function DmMessageGroup(props: {
                 </button>
                 <span class="dm-msg-time" title={new Date(props.message.createdAt).toLocaleString()}>
                   {formatMessageTime(props.message.createdAt)}
+                  <Show when={props.message.editedAt}>
+                    <span class="dm-msg-edited"> · {t('dm.edited')}</span>
+                  </Show>
                 </span>
               </div>
             </Show>
+<Show when={replyTarget()}>
+              <div class="dm-reply-quote" data-testid="dm-reply-quote">
+                <PhArrowBendUpLeft class="dm-reply-quote-icon" />
+                <div class="dm-reply-quote-inner">
+                  <span class="dm-reply-quote-author">
+                    {isOwnMessage(replyTarget()!, props.myUserId) ? t('dm.replyingToYou') : t('dm.replyingTo', { name: props.senderName })}
+                  </span>
+                  <span class="dm-reply-quote-text">
+                    {replyTarget()!.messageType === 'text' ? replyTarget()!.content : `[${replyTarget()!.messageType}]`}
+                  </span>
+                </div>
+              </div>
+            </Show>
+            <Show when={editing() && props.message.messageType === 'text'} fallback={
             <div class="dm-msg-content">
               <Show
                 when={media()}
@@ -154,6 +208,35 @@ export function DmMessageGroup(props: {
                 </div>
               </Show>
             </div>
+            }
+            >
+              <div class="dm-msg-edit">
+                <textarea
+                  class="dm-msg-edit-input"
+                  data-testid="dm-msg-edit-input"
+                  value={editValue()}
+                  onInput={(e) => setEditValue(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void saveEdit();
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setEditing(false);
+                    }
+                  }}
+                />
+                <div class="dm-msg-edit-actions">
+                  <button class="dm-msg-edit-save" data-testid="dm-msg-edit-save" onClick={() => void saveEdit()}>
+                    {t('dm.saveEdit')}
+                  </button>
+                  <button class="dm-msg-edit-cancel" data-testid="dm-msg-edit-cancel" onClick={() => setEditing(false)}>
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </div>
+            </Show>
             <div class="dm-reactions-row" data-testid="dm-reactions-row">
                 <For each={props.message.reactions ?? []}>
                   {(reaction) => {
@@ -220,6 +303,57 @@ export function DmMessageGroup(props: {
         <div class="dm-msg-system" data-testid="dm-message-system">
           {systemIcon()}
           <span class="dm-system-text">{systemLabel()}</span>
+        </div>
+      </Show>
+      <Show when={menu()}>
+        <div
+          class="dm-msg-menu"
+          data-testid="dm-msg-menu"
+          style={{ top: `${menu()!.y}px`, left: `${menu()!.x}px` }}
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            class="dm-msg-menu-item"
+            data-testid="dm-msg-menu-reply"
+            role="menuitem"
+            onClick={() => {
+              setReplyTarget(props.message.id);
+              setMenu(null);
+            }}
+          >
+            <PhArrowBendUpLeft />
+            {t('dm.reply')}
+          </button>
+          <Show when={canEdit()}>
+            <button
+              class="dm-msg-menu-item"
+              data-testid="dm-msg-menu-edit"
+              role="menuitem"
+              onClick={() => {
+                setEditValue(props.message.content);
+                setEditing(true);
+                setMenu(null);
+              }}
+            >
+              <PhPencilSimple />
+              {t('dm.edit')}
+            </button>
+          </Show>
+          <Show when={canDelete()}>
+            <button
+              class="dm-msg-menu-item danger"
+              data-testid="dm-msg-menu-delete"
+              role="menuitem"
+              onClick={() => {
+                if (confirm(t('dm.confirmDelete'))) void deleteMessage(props.message.id);
+                setMenu(null);
+              }}
+            >
+              <PhTrash />
+              {t('dm.delete')}
+            </button>
+          </Show>
         </div>
       </Show>
     </div>

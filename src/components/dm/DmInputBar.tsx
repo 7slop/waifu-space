@@ -1,7 +1,9 @@
-import { createSignal, Show } from 'solid-js';
-import { dmState, emitTyping, sendText, setEmojiOpen, setGifOpen } from '../../lib/dm/store';
+import { createSignal, For, Show } from 'solid-js';
+import { dmState, emitTyping, sendText, setEmojiOpen, setGifOpen, setReplyTarget } from '../../lib/dm/store';
+import { isOwnMessage } from '../../lib/dm/api';
+import type { DmMessage } from '../../lib/dm/types';
 import { t } from '../../lib/i18n';
-import { PhPaperPlaneTilt, PhSmiley } from '../icons';
+import { PhPaperPlaneTilt, PhSmiley, PhX } from '../icons';
 import { GifPicker } from './GifPicker';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -21,10 +23,20 @@ export function DmInputBar() {
     return ids.length ? [`${conv?.otherUser?.username ?? 'Someone'}`] : [];
   };
 
+  const replyTarget = (): (DmMessage & { senderName: string }) | null => {
+    const convId = dmState.activeConversationId;
+    const list = convId ? dmState.messages[convId] ?? [] : [];
+    const msg = list.find((m) => m.id === dmState.replyingTo);
+    if (!msg) return null;
+    const conv = dmState.conversations.find((c) => c.id === convId);
+    const senderName = msg.senderId === conv?.otherUser?.id ? conv?.otherUser?.username : 'you';
+    return { ...msg, senderName };
+  };
+
   const send = () => {
     const value = text().trim();
     if (!value || !dmState.activeConversationId) return;
-    void sendText(value);
+    void sendText(value, dmState.replyingTo);
     setText('');
   };
 
@@ -39,6 +51,21 @@ export function DmInputBar() {
       <Show when={typingNames().length > 0}>
         <div class="dm-typing-indicator" data-testid="dm-typing-indicator">
           {t('dm.typingOne', { name: typingNames()[0] })}
+        </div>
+      </Show>
+      <Show when={replyTarget()}>
+        <div class="dm-reply-preview" data-testid="dm-reply-preview">
+          <div class="dm-reply-preview-content">
+            <span class="dm-reply-preview-label">
+              {t('dm.replyingTo', { name: replyTarget()!.senderName ?? 'them' })}
+            </span>
+            <span class="dm-reply-preview-text">
+              {replyTarget()!.messageType === 'text' ? replyTarget()!.content.slice(0, 80) : `[${replyTarget()!.messageType}]`}
+            </span>
+          </div>
+          <button class="dm-reply-preview-cancel" data-testid="dm-reply-preview-cancel" onClick={() => setReplyTarget(null)}>
+            <PhX />
+          </button>
         </div>
       </Show>
       <div class="dm-input-bar">

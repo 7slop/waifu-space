@@ -55,7 +55,7 @@ describe('DmInputBar', () => {
     fireEvent.input(textarea, { target: { value: 'hello bob' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     await flush();
-    expect(posted).toEqual({ content: 'hello bob', messageType: 'text', mediaUrl: null });
+    expect(posted).toEqual({ content: 'hello bob', messageType: 'text', mediaUrl: null, replyToId: null });
     expect(dmState.messages.c1?.[0]?.content).toBe('hello bob');
     restore();
   });
@@ -102,5 +102,64 @@ describe('DmInputBar', () => {
     expect(container.querySelector('[data-testid="dm-emoji-picker"]')).toBeInTheDocument();
     fireEvent.pointerDown(document.body);
     expect(container.querySelector('[data-testid="dm-emoji-picker"]')).not.toBeInTheDocument();
+  });
+
+  it('shows a reply preview when replying and passes the reply id on send', async () => {
+    seedConv();
+    setDmState('messages', 'c1', [
+      {
+        id: 'm0',
+        conversationId: 'c1',
+        senderId: 'u-bob',
+        content: 'need a hand',
+        messageType: 'text',
+        createdAt: '2025-01-01T10:00:00.000Z'
+      }
+    ]);
+    setDmState('replyingTo', 'm0');
+    let posted: any = null;
+    const restore = stubFetch({
+      '/api/dm/conversations/c1/messages': (url, init) => {
+        if (init.method === 'POST') {
+          posted = JSON.parse(String(init.body));
+          return {
+            body: {
+              success: true,
+              message: { id: 'm-new', conversationId: 'c1', senderId: 'u-me', content: posted.content, messageType: posted.messageType, mediaUrl: posted.mediaUrl, replyToId: posted.replyToId, createdAt: '2025-01-03T00:00:00.000Z' }
+            },
+            status: 201
+          };
+        }
+        return { body: { success: true, messages: [] } };
+      }
+    });
+    const { container } = render(() => <DmInputBar />);
+    expect(container.querySelector('[data-testid="dm-reply-preview"]')).toBeInTheDocument();
+    const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
+    fireEvent.input(textarea, { target: { value: 'on it' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    await flush();
+    expect(posted).toEqual({ content: 'on it', messageType: 'text', mediaUrl: null, replyToId: 'm0' });
+    expect(dmState.replyingTo).toBeNull();
+    restore();
+  });
+
+  it('cancels reply mode from the preview bar', () => {
+    seedConv();
+    setDmState('messages', 'c1', [
+      {
+        id: 'm0',
+        conversationId: 'c1',
+        senderId: 'u-bob',
+        content: 'need a hand',
+        messageType: 'text',
+        createdAt: '2025-01-01T10:00:00.000Z'
+      }
+    ]);
+    setDmState('replyingTo', 'm0');
+    const { container } = render(() => <DmInputBar />);
+    expect(container.querySelector('[data-testid="dm-reply-preview"]')).toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-reply-preview-cancel"]')!);
+    expect(container.querySelector('[data-testid="dm-reply-preview"]')).not.toBeInTheDocument();
   });
 });

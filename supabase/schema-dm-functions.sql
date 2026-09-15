@@ -70,7 +70,9 @@ BEGIN
         'content', m.content,
         'messageType', m.message_type,
         'mediaUrl', m.media_url,
-        'createdAt', m.created_at
+        'createdAt', m.created_at,
+        'editedAt', m.edited_at,
+        'replyToId', m.reply_to_id
       ) AS last_msg
       FROM public.messages m
       WHERE m.conversation_id = c.id
@@ -187,7 +189,8 @@ CREATE OR REPLACE FUNCTION public.send_dm_message(
   p_conversation_id uuid,
   p_content text DEFAULT '',
   p_message_type text DEFAULT 'text',
-  p_media_url text DEFAULT NULL
+  p_media_url text DEFAULT NULL,
+  p_reply_to_id uuid DEFAULT NULL
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -195,6 +198,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_msg public.messages%ROWTYPE;
+  v_reply_ok boolean;
 BEGIN
   IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
     RAISE EXCEPTION 'p_user_id does not match the session user';
@@ -219,8 +223,19 @@ BEGIN
     RAISE EXCEPTION 'message too long';
   END IF;
 
-  INSERT INTO public.messages (conversation_id, sender_id, content, message_type, media_url)
-  VALUES (p_conversation_id, p_user_id, COALESCE(p_content, ''), p_message_type, p_media_url)
+  IF p_reply_to_id IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM public.messages m
+      JOIN public.conversation_participants cp ON cp.conversation_id = m.conversation_id
+      WHERE m.id = p_reply_to_id AND cp.user_id = p_user_id
+    ) INTO v_reply_ok;
+    IF NOT v_reply_ok THEN
+      RAISE EXCEPTION 'reply target not found';
+    END IF;
+  END IF;
+
+  INSERT INTO public.messages (conversation_id, sender_id, content, message_type, media_url, reply_to_id)
+  VALUES (p_conversation_id, p_user_id, COALESCE(p_content, ''), p_message_type, p_media_url, p_reply_to_id)
   RETURNING * INTO v_msg;
 
   UPDATE public.conversations SET updated_at = now() WHERE id = p_conversation_id;
@@ -233,8 +248,97 @@ BEGIN
     'messageType', v_msg.message_type,
     'mediaUrl', v_msg.media_url,
     'createdAt', v_msg.created_at,
+    'editedAt', v_msg.edited_at,
+    'replyToId', v_msg.reply_to_id,
     'reactions', '[]'::jsonb
   );
+END;
+$$;
+
+-- Edit a text message: only the sender may edit, and only text messages.
+CREATE OR REPLACE FUNCTION public.update_dm_message(
+  p_user_id uuid,
+  p_message_id uuid,
+  p_content text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_msg public.messages%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF p_content IS NULL OR char_length(p_content) = 0 OR char_length(p_content) > 4000 THEN
+    RAISE EXCEPTION 'invalid message content';
+  END IF;
+
+  SELECT * INTO v_msg
+  FROM public.messages
+  WHERE id = p_message_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'message not found';
+  END IF;
+
+  IF v_msg.sender_id <> p_user_id THEN
+    RAISE EXCEPTION 'only the sender can edit this message';
+  END IF;
+
+  IF v_msg.message_type <> 'text' THEN
+    RAISE EXCEPTION 'only text messages can be edited';
+  END IF;
+
+  UPDATE public.messages
+     SET content = p_content, edited_at = now()
+   WHERE id = p_message_id
+  RETURNING * INTO v_msg;
+
+  RETURN jsonb_build_object(
+    'id', v_msg.id,
+    'conversationId', v_msg.conversation_id,
+    'senderId', v_msg.sender_id,
+    'content', v_msg.content,
+    'messageType', v_msg.message_type,
+    'mediaUrl', v_msg.media_url,
+    'createdAt', v_msg.created_at,
+    'editedAt', v_msg.edited_at,
+    'replyToId', v_msg.reply_to_id
+  );
+END;
+$$;
+
+-- Delete a message: only the sender may permanently delete their own.
+CREATE OR REPLACE FUNCTION public.delete_dm_message(
+  p_user_id uuid,
+  p_message_id uuid
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_msg public.messages%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  SELECT * INTO v_msg FROM public.messages WHERE id = p_message_id FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'message not found';
+  END IF;
+
+  IF v_msg.sender_id <> p_user_id THEN
+    RAISE EXCEPTION 'only the sender can delete this message';
+  END IF;
+
+  DELETE FROM public.messages WHERE id = p_message_id;
 END;
 $$;
 
@@ -293,6 +397,8 @@ BEGIN
       'messageType', m.message_type,
       'mediaUrl', m.media_url,
       'createdAt', m.created_at,
+      'editedAt', m.edited_at,
+      'replyToId', m.reply_to_id,
       'reactions', (
         SELECT COALESCE(jsonb_agg(jsonb_build_object(
             'emoji', rx.emoji,
@@ -704,8 +810,12 @@ REVOKE ALL ON FUNCTION public.get_dm_conversations(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_dm_conversations(uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.get_or_create_dm_conversation(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_or_create_dm_conversation(uuid, uuid) TO anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text, uuid) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.update_dm_message(uuid, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.update_dm_message(uuid, uuid, text) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.delete_dm_message(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.delete_dm_message(uuid, uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.get_dm_messages(uuid, uuid, timestamptz, int) FROM PUBLIC;

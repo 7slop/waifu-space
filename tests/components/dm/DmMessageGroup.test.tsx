@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
 import { DmMessageGroup, parseDmSystemContent } from '../../../src/components/dm/DmMessageGroup';
 import { dmState, setDmState } from '../../../src/lib/dm/store';
@@ -247,5 +247,130 @@ describe('DmMessageGroup', () => {
     expect(parseDmSystemContent('{"kind":"call-started","callType":"video"}')).toEqual({ kind: 'call-started', callType: 'video' });
     expect(parseDmSystemContent('call-started')).toEqual({ kind: 'call-started' });
     expect(parseDmSystemContent('')).toEqual({ kind: '' });
+  });
+
+  it('opens a context menu on right-click with edit/delete only for own text messages', () => {
+    const { container } = render(() => (
+      <DmMessageGroup message={msg({ senderId: 'u-me' })} showAvatar senderName="me" myUserId="u-me" />
+    ));
+    fireEvent.contextMenu(container.querySelector('.dm-msg')!);
+    expect(container.querySelector('[data-testid="dm-msg-menu"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-msg-menu-reply"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-msg-menu-edit"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-msg-menu-delete"]')).toBeInTheDocument();
+  });
+
+  it('hides edit/delete when the message is not owned', () => {
+    const { container } = render(() => (
+      <DmMessageGroup message={msg({ senderId: 'u-bob' })} showAvatar senderName="Bob" myUserId="u-me" />
+    ));
+    fireEvent.contextMenu(container.querySelector('.dm-msg')!);
+    expect(container.querySelector('[data-testid="dm-msg-menu"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-msg-menu-reply"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-msg-menu-edit"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-msg-menu-delete"]')).not.toBeInTheDocument();
+  });
+
+  it('start reply flow sets the reply target', () => {
+    const { container } = render(() => (
+      <DmMessageGroup message={msg({ senderId: 'u-bob' })} showAvatar senderName="Bob" myUserId="u-me" />
+    ));
+    fireEvent.contextMenu(container.querySelector('.dm-msg')!);
+    fireEvent.click(container.querySelector('[data-testid="dm-msg-menu-reply"]')!);
+    expect(dmState.replyingTo).toBe('m1');
+  });
+
+  it('edits an owned text message via context menu + inline editor', async () => {
+    const message = msg({ senderId: 'u-me', content: 'old text' });
+    const restore = stubFetch({
+      '/api/dm/conversations/c1/messages': (url, init) => {
+        if (init.method === 'PATCH') {
+          const body = JSON.parse(String(init.body));
+          expect(body).toEqual({ messageId: 'm1', content: 'new text' });
+          return {
+            body: {
+              success: true,
+              message: { ...message, content: 'new text', editedAt: '2025-01-01T11:00:00.000Z' }
+            },
+            status: 200
+          };
+        }
+        return { body: { success: true, messages: [] } };
+      }
+    });
+    setDmState('activeConversationId', 'c1');
+    setDmState('messages', 'c1', [message]);
+    const { container } = render(() => (
+      <DmMessageGroup message={message} showAvatar senderName="me" myUserId="u-me" />
+    ));
+    fireEvent.contextMenu(container.querySelector('.dm-msg')!);
+    fireEvent.click(container.querySelector('[data-testid="dm-msg-menu-edit"]')!);
+    expect(container.querySelector('[data-testid="dm-msg-edit-input"]')).toBeInTheDocument();
+    const input = container.querySelector('[data-testid="dm-msg-edit-input"]') as HTMLTextAreaElement;
+    fireEvent.input(input, { target: { value: 'new text' } });
+    fireEvent.click(container.querySelector('[data-testid="dm-msg-edit-save"]')!);
+    await flush();
+    expect(dmState.messages.c1?.[0]?.content).toBe('new text');
+    expect(dmState.messages.c1?.[0]?.editedAt).toBe('2025-01-01T11:00:00.000Z');
+    restore();
+  });
+
+  it('renders an edited marker when editedAt is set', () => {
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({ senderId: 'u-me', content: 'edited msg', editedAt: '2025-01-01T11:00:00.000Z' })}
+        showAvatar
+        senderName="me"
+        myUserId="u-me"
+      />
+    ));
+    expect(container.querySelector('.dm-msg-edited')).toHaveTextContent('edited');
+  });
+
+  it('deletes an owned message via the context menu', async () => {
+    const message = msg({ senderId: 'u-me' });
+    let deleted = false;
+    const confirmStub = vi.fn(() => true);
+    window.confirm = confirmStub as any;
+    const restore = stubFetch({
+      '/api/dm/conversations/c1/messages': (url, init) => {
+        if (init.method === 'DELETE') {
+          deleted = true;
+          expect(JSON.parse(String(init.body))).toEqual({ messageId: 'm1' });
+          return { body: { success: true }, status: 200 };
+        }
+        return { body: { success: true, messages: [] } };
+      }
+    });
+    setDmState('activeConversationId', 'c1');
+    setDmState('messages', 'c1', [message]);
+    const { container } = render(() => (
+      <DmMessageGroup message={message} showAvatar senderName="me" myUserId="u-me" />
+    ));
+    fireEvent.contextMenu(container.querySelector('.dm-msg')!);
+    fireEvent.click(container.querySelector('[data-testid="dm-msg-menu-delete"]')!);
+    await flush();
+    expect(deleted).toBe(true);
+    expect(dmState.messages.c1 ?? []).toHaveLength(0);
+    delete (window as Partial<Window & { confirm: any }>).confirm;
+    restore();
+  });
+
+  it('renders a reply quote for a message that references a local target', () => {
+    setDmState('activeConversationId', 'c1');
+    setDmState('messages', 'c1', [
+      { ...msg({ id: 'm0', content: 'original', senderId: 'u-bob' }) },
+      { ...msg({ id: 'm1', content: 'reply!', replyToId: 'm0' }) }
+    ]);
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({ id: 'm1', content: 'reply!', replyToId: 'm0' })}
+        showAvatar
+        senderName="Bob"
+        myUserId="u-me"
+      />
+    ));
+    expect(container.querySelector('[data-testid="dm-reply-quote"]')).toBeInTheDocument();
+    expect(container.querySelector('.dm-reply-quote-author')).toHaveTextContent('Replying to @Bob');
   });
 });

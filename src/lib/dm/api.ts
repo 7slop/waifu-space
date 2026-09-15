@@ -120,6 +120,8 @@ export function toDmMessage(raw: any): DmMessage {
     messageType,
     mediaUrl: (raw?.mediaUrl ?? raw?.media_url ?? null) || null,
     createdAt: String(raw?.createdAt ?? raw?.created_at ?? new Date().toISOString()),
+    editedAt: raw?.editedAt ?? raw?.edited_at ?? null,
+    replyToId: (raw?.replyToId ?? raw?.reply_to_id ?? null) || null,
     reactions: Array.isArray(raw?.reactions) ? raw.reactions.map(toDmReaction) : undefined
   };
 }
@@ -231,7 +233,7 @@ export async function fetchMessages(
 export async function sendMessageRequest(
   token: string,
   conversationId: string,
-  payload: { content: string; messageType: MessageType; mediaUrl?: string | null }
+  payload: { content: string; messageType: MessageType; mediaUrl?: string | null; replyToId?: string | null }
 ): Promise<DmMessage> {
   const data = await request<{ success: boolean; message: DmMessage }>(
     `/api/dm/conversations/${conversationId}/messages`,
@@ -239,6 +241,25 @@ export async function sendMessageRequest(
     token
   );
   return data.message;
+}
+
+/** Edits a text message owned by the current user. */
+export async function updateMessageRequest(token: string, conversationId: string, messageId: string, content: string): Promise<DmMessage> {
+  const data = await request<{ success: boolean; message: DmMessage }>(
+    `/api/dm/conversations/${conversationId}/messages`,
+    { method: 'PATCH', body: JSON.stringify({ messageId, content }) },
+    token
+  );
+  return data.message;
+}
+
+/** Deletes a message owned by the current user. */
+export async function deleteMessageRequest(token: string, conversationId: string, messageId: string): Promise<void> {
+  await request<{ success: boolean }>(
+    `/api/dm/conversations/${conversationId}/messages`,
+    { method: 'DELETE', body: JSON.stringify({ messageId }) },
+    token
+  );
 }
 
 /** Toggles the current user's emoji reaction on a message. */

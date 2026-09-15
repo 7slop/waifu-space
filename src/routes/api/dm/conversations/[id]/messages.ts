@@ -28,6 +28,8 @@ function toMessage(m: any): DmMessage {
     messageType: toMessageType(m.messageType),
     mediaUrl: m.mediaUrl ?? null,
     createdAt: m.createdAt,
+    editedAt: m.editedAt ?? null,
+    replyToId: m.replyToId ?? null,
     reactions: parseReactions(m.reactions)
   };
 }
@@ -81,6 +83,7 @@ export async function POST(event: { request: Request; params: Record<string, str
   const messageType: MessageType = VALID_MESSAGE_TYPES.includes(rawType) ? rawType : 'text';
   const content = typeof body?.content === 'string' ? body.content.slice(0, MAX_MESSAGE_LENGTH) : '';
   const mediaUrl = typeof body?.mediaUrl === 'string' ? body.mediaUrl.slice(0, 2048) : null;
+  const replyToId = typeof body?.replyToId === 'string' && body.replyToId.length <= 64 ? body.replyToId : null;
 
   if (messageType === 'text' && content.trim() === '') {
     return badRequestResponse('Message cannot be empty');
@@ -97,7 +100,8 @@ export async function POST(event: { request: Request; params: Record<string, str
     p_conversation_id: conversationId,
     p_content: messageType === 'text' ? content : '',
     p_message_type: messageType,
-    p_media_url: mediaUrl
+    p_media_url: mediaUrl,
+    p_reply_to_id: replyToId
   });
 
   if (error) {
@@ -111,4 +115,66 @@ export async function POST(event: { request: Request; params: Record<string, str
   const message = toMessage(m);
 
   return json({ success: true, message }, { status: 201 });
+}
+
+export async function PATCH(event: { request: Request; params: Record<string, string> }) {
+  const ctx = resolveDmContext(event.request);
+  if (ctx instanceof Response) return ctx;
+
+  let body: any;
+  try {
+    body = await event.request.json();
+  } catch {
+    return badRequestResponse('Invalid JSON body');
+  }
+
+  const messageId = typeof body?.messageId === 'string' ? body.messageId : null;
+  if (!messageId) return badRequestResponse('message id is required');
+
+  const content = typeof body?.content === 'string' ? body.content.slice(0, MAX_MESSAGE_LENGTH) : '';
+  if (content.trim() === '') return badRequestResponse('Message cannot be empty');
+
+  const { data, error } = await ctx.supabase.rpc('update_dm_message', {
+    p_user_id: ctx.session.userId,
+    p_message_id: messageId,
+    p_content: content
+  });
+
+  if (error) {
+    if (error.message.includes('only the sender')) {
+      return json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+    return json({ success: false, error: error.message }, { status: 500 });
+  }
+
+  return json({ success: true, message: toMessage(data as any) });
+}
+
+export async function DELETE(event: { request: Request; params: Record<string, string> }) {
+  const ctx = resolveDmContext(event.request);
+  if (ctx instanceof Response) return ctx;
+
+  let body: any;
+  try {
+    body = await event.request.json();
+  } catch {
+    return badRequestResponse('Invalid JSON body');
+  }
+
+  const messageId = typeof body?.messageId === 'string' ? body.messageId : null;
+  if (!messageId) return badRequestResponse('message id is required');
+
+  const { error } = await ctx.supabase.rpc('delete_dm_message', {
+    p_user_id: ctx.session.userId,
+    p_message_id: messageId
+  });
+
+  if (error) {
+    if (error.message.includes('only the sender')) {
+      return json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+    return json({ success: false, error: error.message }, { status: 500 });
+  }
+
+  return json({ success: true });
 }

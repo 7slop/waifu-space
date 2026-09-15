@@ -34,6 +34,8 @@ import {
   setMyPresenceRequest,
   toDmMessage,
   updateCallStatusRequest,
+  updateMessageRequest,
+  deleteMessageRequest,
   toggleReactionRequest,
   listGifFavorites,
   addGifFavorite,
@@ -105,6 +107,8 @@ export interface DmStoreState {
   gifFavorites: GifItem[];
   emojiOpen: boolean;
   typing: Record<string, string[]>;
+  /** Id of the message the composer is currently replying to, if any. */
+  replyingTo: string | null;
 }
 
 interface PendingIncomingCall {
@@ -158,7 +162,8 @@ const INITIAL: DmStoreState = {
   gifTab: 'search',
   gifFavorites: [],
   emojiOpen: false,
-  typing: {}
+  typing: {},
+  replyingTo: null
 };
 
 export const [dmState, setDmState] = createStore<DmStoreState>(JSON.parse(JSON.stringify(INITIAL)));
@@ -551,13 +556,15 @@ export async function loadOlder(): Promise<void> {
   }
 }
 
-export async function sendText(text: string): Promise<DmMessage | null> {
+export async function sendText(text: string, replyToId?: string | null): Promise<DmMessage | null> {
   const auth = currentAuth();
   const convId = dmState.activeConversationId;
   if (!auth || !convId) return null;
   const { content, messageType, mediaUrl } = classifyOutgoingMessage(text);
   if (!content && !mediaUrl) return null;
-  return sendViaApi(convId, { content, messageType, mediaUrl });
+  const msg = await sendViaApi(convId, { content, messageType, mediaUrl, replyToId });
+  if (msg) setDmState('replyingTo', null);
+  return msg;
 }
 
 export async function sendGif(url: string): Promise<DmMessage | null> {
@@ -567,7 +574,7 @@ export async function sendGif(url: string): Promise<DmMessage | null> {
   return sendViaApi(convId, { content: '', messageType: 'gif', mediaUrl: url });
 }
 
-async function sendViaApi(convId: string, payload: { content: string; messageType: MessageType; mediaUrl: string | null }): Promise<DmMessage | null> {
+async function sendViaApi(convId: string, payload: { content: string; messageType: MessageType; mediaUrl: string | null; replyToId?: string | null }): Promise<DmMessage | null> {
   const auth = currentAuth();
   if (!auth) return null;
   try {
@@ -579,12 +586,59 @@ async function sendViaApi(convId: string, payload: { content: string; messageTyp
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     );
     const conv = dmState.conversations.find(c => c.id === convId);
-    const otherId = conv?.otherUser?.id;
     void runtime.realtime?.sendMessage({ kind: 'dm-message', conversationId: convId, message: msg, senderName: auth.username, senderAvatar: auth.avatarUrl });
     return msg;
   } catch {
     setDmState('error', 'Message failed to send');
     return null;
+  }
+}
+
+/** Targets the next composed message at an earlier message (reply). */
+export function setReplyTarget(messageId: string | null): void {
+  setDmState('replyingTo', messageId);
+}
+
+/** Edits one of the current user's text messages in place. */
+export async function editMessage(messageId: string, content: string): Promise<DmMessage | null> {
+  const auth = currentAuth();
+  const convId = dmState.activeConversationId;
+  const trimmed = content.trim();
+  if (!auth || !convId || !trimmed) return null;
+  try {
+    const msg = await updateMessageRequest(auth.token, convId, messageId, trimmed);
+    setDmState('messages', convId, (prev = []) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...msg, reactions: m.reactions ?? msg.reactions }
+          : m
+      )
+    );
+    setDmState('conversations', (convs) =>
+      convs.map((c) =>
+        c.id === convId && c.lastMessage?.id === messageId ? { ...c, lastMessage: { ...c.lastMessage, ...msg } } : c
+      )
+    );
+    return msg;
+  } catch {
+    setDmState('error', 'Message failed to edit');
+    return null;
+  }
+}
+
+/** Permanently deletes one of the current user's messages. */
+export async function deleteMessage(messageId: string): Promise<boolean> {
+  const auth = currentAuth();
+  const convId = dmState.activeConversationId;
+  if (!auth || !convId) return false;
+  try {
+    await deleteMessageRequest(auth.token, convId, messageId);
+    setDmState('messages', convId, (prev = []) => prev.filter((m) => m.id !== messageId));
+    if (dmState.replyingTo === messageId) setDmState('replyingTo', null);
+    return true;
+  } catch {
+    setDmState('error', 'Message failed to delete');
+    return false;
   }
 }
 
