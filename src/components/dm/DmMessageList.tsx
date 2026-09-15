@@ -22,6 +22,25 @@ const SCROLL_SNAP_MARGIN = 120;
 /** The currently mounted message timeline, driven by scrollDmThreadToBottom(). */
 let mountedScrollEl: HTMLDivElement | null = null;
 
+/**
+ * Grace window (ms) after a scroll-to-bottom during which media load events
+ * (GIFs/images that grow the row and push the old 'bottom' upward) still snap
+ * to the true bottom even if the reader is momentarily detected as not-near.
+ * The window is scoped to the exact timeline element and is cancelled as soon
+ * as the reader manually scrolls away from the bottom.
+ */
+const SCROLL_GRACE_MS = 600;
+let scrollGraceUntil = 0;
+let scrollGraceEl: HTMLDivElement | null = null;
+
+function inGraceWindow(el: HTMLDivElement): boolean {
+  return typeof performance !== 'undefined' && performance.now() < scrollGraceUntil && scrollGraceEl === el;
+}
+
+function cancelGrace(el: HTMLDivElement) {
+  if (scrollGraceEl === el) scrollGraceUntil = 0;
+}
+
 /** Scrolls a conversation's message view to the newest message. */
 export function scrollDmToBottom(el: HTMLDivElement) {
   el.scrollTop = el.scrollHeight;
@@ -36,15 +55,19 @@ function isNearBottom(el: HTMLDivElement): boolean {
  * requestAnimationFrame so media that loads after the message row is inserted
  * (GIFs/images change the row height) can settle before the final position is
  * computed — this lands at the true bottom instead of "almost at the bottom".
- * Deferred frames only re-snap while the reader is still near the bottom so a
- * deliberate scroll up into history is never yanked back down.
+ * Deferred frames re-snap while the reader is still near the bottom (or while
+ * the short grace window is open, which covers the moment a just-sent GIF's
+ * row grows past the previously computed bottom) so a deliberate scroll up
+ * into history is never yanked back down.
  */
 export function scrollDmThreadToBottom() {
   const el = mountedScrollEl;
   if (!el) return;
+  scrollGraceUntil = performance.now() + SCROLL_GRACE_MS;
+  scrollGraceEl = el;
   el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
   const tick = () => {
-    if (!mountedScrollEl || !isNearBottom(mountedScrollEl)) return;
+    if (!mountedScrollEl || !(isNearBottom(mountedScrollEl) || inGraceWindow(mountedScrollEl))) return;
     mountedScrollEl.scrollTop = Math.max(0, mountedScrollEl.scrollHeight - mountedScrollEl.clientHeight);
   };
   requestAnimationFrame(tick);
@@ -52,13 +75,17 @@ export function scrollDmThreadToBottom() {
 }
 
 /**
- * Re-scrolls to the bottom only when the reader is already near it (used by
- * media load events so a freshly sent GIF snaps closed instead of leaving a
- * gap at the bottom of the timeline).
+ * Re-scrolls to the bottom when the reader is already near it, or within the
+ * short post-send grace window (used by media load events so a freshly sent
+ * GIF snaps closed instead of leaving a gap at the bottom of the timeline).
+ * Each snap refreshes the grace window so a stream of async-loading media
+ * (GIFs, Twemoji rows) keeps pinning until everything settles.
  */
 export function scrollDmThreadToBottomIfNear() {
   const el = mountedScrollEl;
-  if (!el || !isNearBottom(el)) return;
+  if (!el || !(isNearBottom(el) || inGraceWindow(el))) return;
+  scrollGraceUntil = performance.now() + SCROLL_GRACE_MS;
+  scrollGraceEl = el;
   requestAnimationFrame(() => {
     el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
   });
@@ -80,6 +107,7 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
 
   const trackScroll = (el: HTMLDivElement) => {
     setNearTop(el.scrollTop <= 60);
+    if (!isNearBottom(el)) cancelGrace(el);
   };
 
   // --- Auto-scroll (issue B) ---
@@ -121,6 +149,10 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
       const newestIsMine = isOwnMessage(list[count - 1], state.user?.id);
       const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_SNAP_MARGIN;
       if (newestIsMine || nearBottom) scrollDmThreadToBottom();
+    } else if (prepended) {
+      // Older history was prepended (load-more): never yank the viewport, and
+      // drop any in-flight grace-window re-snaps so they can't stomp it.
+      cancelGrace(el);
     }
     lastMessageCount = count;
     lastFirstId = firstId;

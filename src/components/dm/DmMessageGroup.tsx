@@ -211,7 +211,7 @@ export function DmMessageGroup(props: {
                 <div class={`dm-msg-content${bigEmoji() ? ' dm-msg-content-bigemoji' : ''}`}>
                   <Show
                     when={media()}
-                    fallback={<DmEmojiText text={props.message.content} />}
+                    fallback={<DmEmojiText text={props.message.content} onImageLoad={scrollDmThreadToBottomIfNear} />}
                   >
                     <div class="dm-msg-media-wrap">
                       <Show when={mediaKind() === 'video'} fallback={<img class="dm-msg-media" src={mediaUrl()!} alt="" loading="lazy" onLoad={scrollDmThreadToBottomIfNear} />}>

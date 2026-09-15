@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
-import { DmMessageList } from '../../../src/components/dm/DmMessageList';
+import { DmMessageList, scrollDmThreadToBottomIfNear } from '../../../src/components/dm/DmMessageList';
 import { dmState, setDmState } from '../../../src/lib/dm/store';
 import { resetForDmTests, flush } from '../../dm-helpers';
 import type { DmMessage } from '../../../src/lib/dm/types';
@@ -156,6 +156,7 @@ describe('DmMessageList auto-scroll (issue B)', () => {
     const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
     defineGeometry(list, 1000);
     list.scrollTop = 100;
+    list.dispatchEvent(new Event('scroll'));
     defineGeometry(list, 1100);
     setDmState('messages', {
       ...dmState.messages,
@@ -186,6 +187,7 @@ describe('DmMessageList auto-scroll (issue B)', () => {
     const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
     defineGeometry(list, 1000);
     list.scrollTop = 800;
+    list.dispatchEvent(new Event('scroll'));
     defineGeometry(list, 1200);
     setDmState('messages', {
       ...dmState.messages,
@@ -193,5 +195,24 @@ describe('DmMessageList auto-scroll (issue B)', () => {
     });
     await flush();
     expect(list.scrollTop).toBe(800);
+  });
+
+  it('media that loads late still snaps shut within the send grace window', async () => {
+    seed([mk('m1', 'u-me', '2025-01-01T10:00:00.000Z')]);
+    const { container } = render(() => <DmMessageList />);
+    const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
+    defineGeometry(list, 700);
+    setDmState('messages', {
+      ...dmState.messages,
+      c1: [...dmState.messages.c1!, { ...mk('m2', 'u-me', '2025-01-01T10:01:00.000Z'), messageType: 'gif', mediaUrl: 'https://media.tenor.com/x.gif' }]
+    });
+    await flush();
+    expect(list.scrollTop).toBe(500);
+    // The GIF row finished loading and grew the timeline below the previous
+    // bottom; the onLoad handler runs while the grace window is still open.
+    defineGeometry(list, 1100);
+    scrollDmThreadToBottomIfNear();
+    await flush();
+    expect(list.scrollTop).toBe(900);
   });
 });
