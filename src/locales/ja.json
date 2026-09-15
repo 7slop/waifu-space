@@ -174,7 +174,7 @@
       "myCalendars": "マイカレンダー",
       "events": "予定",
       "tasks": "タスク",
-      "birthdays": "誕生日 🎂",
+      "birthdays": "誕生日",
       "quickTaskPlaceholder": "+ タスクを追加してEnter",
       "repeats": "繰り返し: {rule}"
     },

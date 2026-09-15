@@ -1789,11 +1789,6 @@ body.is-resizing-event {
   margin: 0;
 }
 
-.schedule-ev-emoji {
-  flex-shrink: 0;
-  font-size: 16px;
-}
-
 .schedule-ev-icon {
   display: inline-flex;
   align-items: center;
@@ -1801,6 +1796,11 @@ body.is-resizing-event {
   font-size: 12px;
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+.schedule-ev-birthday {
+  font-size: 16px;
+  color: var(--text-secondary);
 }
 
 .schedule-empty {
