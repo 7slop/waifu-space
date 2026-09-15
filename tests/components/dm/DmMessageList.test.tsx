@@ -81,10 +81,35 @@ describe('DmMessageList', () => {
     expect(container.querySelectorAll('.dm-msg-cont').length).toBe(2);
   });
 
-  it('renders a load-older button while more history exists', () => {
+  it('renders a load-older button at the top while more history exists', () => {
     seed([mk('m1', 'u-bob', '2025-01-01T10:00:00.000Z')]);
     setDmState('hasOlder', 'c1', true);
     const { container } = render(() => <DmMessageList />);
+    const btn = container.querySelector('[data-testid="dm-load-older"]');
+    expect(btn).toBeInTheDocument();
+    // The button sits above the first message, not below the last one.
+    const firstMsg = container.querySelector('.dm-msg, .dm-day-divider');
+    expect(firstMsg).toBeTruthy();
+    if (btn && firstMsg) {
+      const btnRect = btn.compareDocumentPosition(firstMsg);
+      expect(btnRect & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('hides the load-older button once scrolled away from the top', async () => {
+    seed([mk('m1', 'u-bob', '2025-01-01T10:00:00.000Z')]);
+    setDmState('hasOlder', 'c1', true);
+    const { container } = render(() => <DmMessageList />);
+    const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
+    expect(container.querySelector('[data-testid="dm-load-older"]')).toBeInTheDocument();
+    list.scrollTop = 400;
+    list.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await flush();
+    expect(container.querySelector('[data-testid="dm-load-older"]')).not.toBeInTheDocument();
+    // Scrolling back to the top brings it back.
+    list.scrollTop = 0;
+    list.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await flush();
     expect(container.querySelector('[data-testid="dm-load-older"]')).toBeInTheDocument();
   });
 });

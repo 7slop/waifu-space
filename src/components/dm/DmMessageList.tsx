@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { state } from '../../lib/store';
 import { dmState, loadOlder } from '../../lib/dm/store';
 import { formatDayDivider, isOwnMessage } from '../../lib/dm/api';
@@ -73,6 +73,14 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
   const convId = () => dmState.activeConversationId;
   const messages = () => dmState.messages[convId() ?? ''] ?? [];
   const otherUser = () => dmState.conversations.find((c) => c.id === convId())?.otherUser;
+
+  // The "load older" button only appears while the reader is near the top of
+  // the history, where older messages would actually be inserted.
+  const [nearTop, setNearTop] = createSignal(true);
+
+  const trackScroll = (el: HTMLDivElement) => {
+    setNearTop(el.scrollTop <= 60);
+  };
 
   // --- Auto-scroll (issue B) ---
   let lastConvId: string | null = null;
@@ -149,7 +157,24 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
     isOwnMessage(msg, state.user?.id) ? state.user?.avatarUrl : otherUser()?.avatarUrl;
 
   return (
-    <div class="dm-messages" data-testid="dm-messages" ref={(el) => (mountedScrollEl = el)}>
+    <div
+      class="dm-messages"
+      data-testid="dm-messages"
+      ref={(el) => (mountedScrollEl = el)}
+      onScroll={(e) => trackScroll(e.currentTarget as HTMLDivElement)}
+    >
+      <Show when={dmState.hasOlder[convId() ?? ''] && nearTop()}>
+        <div class="dm-load-older">
+          <button
+            class="dm-load-older-btn"
+            data-testid="dm-load-older"
+            disabled={dmState.loadingMessages.includes(convId() ?? '')}
+            onClick={() => void loadOlder()}
+          >
+            {t('dm.loadOlder')}
+          </button>
+        </div>
+      </Show>
       <Show when={messages().length === 0}>
         <div class="dm-no-messages">{t('dm.noMessages')}</div>
       </Show>
@@ -173,18 +198,6 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
           )
         }
       </For>
-      <Show when={dmState.hasOlder[convId() ?? '']}>
-        <div class="dm-load-older">
-          <button
-            class="dm-load-older-btn"
-            data-testid="dm-load-older"
-            disabled={dmState.loadingMessages.includes(convId() ?? '')}
-            onClick={() => void loadOlder()}
-          >
-            {t('dm.loadOlder')}
-          </button>
-        </div>
-      </Show>
     </div>
   );
 }
