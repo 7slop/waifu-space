@@ -205,6 +205,26 @@ describe('CallOverlay', () => {
     await flush();
     expect(dmState.call?.deafened).toBe(false);
     expect(container.querySelector('[data-testid="dm-call-deafened-badge"]')).not.toBeInTheDocument();
+
+    restore();
+  });
+
+  it('deafened badge draws a single diagonal slash, not a crossed X', async () => {
+    const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);
+    await flush();
+    const badgeSvg = container.querySelector('[data-testid="dm-call-deafened-badge"] svg')!;
+    const paths = badgeSvg.querySelectorAll('path');
+    // Headphones body + one slash stroke only.
+    expect(paths.length).toBe(2);
+    // A single diagonal slash is one line command; a crossed X needs four.
+    const slashD = paths[1].getAttribute('d') ?? '';
+    expect(slashD.split('L').length - 1).toBe(1);
     restore();
   });
 

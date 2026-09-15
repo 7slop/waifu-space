@@ -60,7 +60,7 @@ function AvatarBadge(props: { show: boolean; kind: 'muted' | 'deafened' }) {
   );
 }
 
-/** Crossed headphones icon (Discord-style "deafened" glyph). */
+/** Headphones with a single diagonal slash (Discord-style "deafened" glyph). */
 function HeadphonesSlash(props: { class?: string }) {
   return (
     <svg
@@ -72,7 +72,7 @@ function HeadphonesSlash(props: { class?: string }) {
       aria-hidden="true"
     >
       <path d="M201.89 54.66A103.43 103.43 0 0 0 128.79 24H128A104 104 0 0 0 24 128v56a24 24 0 0 0 24 24h16a24 24 0 0 0 24-24v-40a24 24 0 0 0-24-24H40.36A88 88 0 0 1 128 40h.67a87.71 87.71 0 0 1 87 80H192a24 24 0 0 0-24 24v40a24 24 0 0 0 24 24h16a24 24 0 0 0 24-24v-56a103.4 103.4 0 0 0-30.11-73.34M64 136a8 8 0 0 1 8 8v40a8 8 0 0 1-8 8H48a8 8 0 0 1-8-8v-48Zm152 48a8 8 0 0 1-8 8h-16a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h24Z" />
-      <path d="M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z" />
+      <path d="M209.92 214.42a8 8 0 0 1-11.89 10.7L76.24 89.1a8 8 0 1 1 11.89-10.7Z" />
     </svg>
   );
 }
