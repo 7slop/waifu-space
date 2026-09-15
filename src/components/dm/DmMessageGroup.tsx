@@ -1,13 +1,20 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { isOwnMessage, mediaSourceOf, gifKeyOfUrl, formatMessageTime, MediaKind } from '../../lib/dm/api';
 import { dmState, gifToggleFavoriteByUrl, isGifFavorited, toggleReaction, setReplyTarget, editMessage, deleteMessage } from '../../lib/dm/store';
-import { QUICK_REACTIONS } from '../../lib/dm/emoji';
+import { QUICK_REACTIONS, isSingleEmoji } from '../../lib/dm/emoji';
 import { t } from '../../lib/i18n';
 import { PhArrowBendUpLeft, PhHeart, PhHeartFill, PhPencilSimple, PhPhoneCall, PhPhoneDisconnect, PhPhoneIncoming, PhPlus, PhSmiley, PhTrash } from '../icons';
 import { DmAvatar } from './DmAvatar';
 import { DmEmojiText, EmojiGlyph } from './DmEmojiText';
 import { EmojiPicker } from './EmojiPicker';
 import type { DmMessage } from '../../lib/dm/types';
+
+/** Lets any message row close every other row's open context menu. */
+const openMenuClosers = new Set<() => void>();
+
+function closeAllMessageMenus() {
+  for (const close of [...openMenuClosers]) close();
+}
 
 /** Parses a system payload stored in `content` ({"kind":"call-started","callType":"voice"}). */
 export interface DmSystemContent {
@@ -41,6 +48,8 @@ export function DmMessageGroup(props: {
   onAuthorClick?: (senderId: string, el: HTMLElement) => void;
 }) {
   const own = () => isOwnMessage(props.message, props.myUserId);
+  const deleted = () => Boolean(props.message.deletedAt);
+  const bigEmoji = () => props.message.messageType === 'text' && isSingleEmoji(props.message.content.trim());
   const media = () => mediaSourceOf(props.message);
   const mediaKind = (): MediaKind | null => media()?.kind ?? null;
   const mediaUrl = (): string | null => media()?.url ?? null;
@@ -58,11 +67,17 @@ export function DmMessageGroup(props: {
       setAddOpen(false);
       setPickerOpen(false);
     }
-    if (!el || (!el.closest('.dm-msg-menu') && !el.closest('.dm-msg'))) setMenu(null);
+    if (!el || !el.closest('.dm-msg-menu')) setMenu(null);
   };
 
   onMount(() => document.addEventListener('pointerdown', closePopups, true));
   onCleanup(() => document.removeEventListener('pointerdown', closePopups, true));
+
+  onMount(() => {
+    const closer = () => setMenu(null);
+    openMenuClosers.add(closer);
+    onCleanup(() => openMenuClosers.delete(closer));
+  });
 
   const closeMenuOnKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape') setMenu(null);
@@ -72,6 +87,7 @@ export function DmMessageGroup(props: {
 
   const openMenu = (e: MouseEvent) => {
     e.preventDefault();
+    closeAllMessageMenus();
     const menuW = 176;
     const menuH = 88;
     setMenu({
@@ -94,8 +110,8 @@ export function DmMessageGroup(props: {
     setMenu(null);
   };
 
-  const canEdit = () => own() && props.message.messageType === 'text';
-  const canDelete = () => own() && props.message.messageType !== 'system';
+  const canEdit = () => own() && props.message.messageType === 'text' && !deleted();
+  const canDelete = () => own() && props.message.messageType !== 'system' && !deleted();
 
   const react = (emoji: string) => {
     void toggleReaction(props.message.id, emoji);
@@ -180,64 +196,76 @@ export function DmMessageGroup(props: {
                     {isOwnMessage(replyTarget()!, props.myUserId) ? t('dm.replyingToYou') : t('dm.replyingTo', { name: props.senderName })}
                   </span>
                   <span class="dm-reply-quote-text">
-                    {replyTarget()!.messageType === 'text' ? replyTarget()!.content : `[${replyTarget()!.messageType}]`}
+                    {replyTarget()!.deletedAt
+                      ? t('dm.deletedMessage')
+                      : replyTarget()!.messageType === 'text'
+                        ? replyTarget()!.content
+                        : `[${replyTarget()!.messageType}]`}
                   </span>
                 </div>
               </div>
             </Show>
-            <Show when={editing() && props.message.messageType === 'text'} fallback={
-            <div class="dm-msg-content">
-              <Show
-                when={media()}
-                fallback={<DmEmojiText text={props.message.content} />}
-              >
-                <div class="dm-msg-media-wrap">
-                  <Show when={mediaKind() === 'video'} fallback={<img class="dm-msg-media" src={mediaUrl()!} alt="" loading="lazy" />}>
-                    <video class="dm-msg-media" controls preload="metadata" src={mediaUrl()!} />
-                  </Show>
-                  <Show when={favId()}>
-                    <button
-                      class={`dm-msg-fav-btn${isGifFavorited(favId()!) ? ' favorited' : ''}`}
-                      data-testid={`dm-msg-fav-${favId()}`}
-                      aria-label={isGifFavorited(favId()!) ? 'Unfavorite' : 'Favorite'}
-                      onClick={() => void gifToggleFavoriteByUrl(mediaUrl()!, props.message.content)}
-                    >
-                      {isGifFavorited(favId()!) ? <PhHeartFill /> : <PhHeart />}
-                    </button>
-                  </Show>
-                </div>
-              </Show>
-            </div>
-            }
-            >
-              <div class="dm-msg-edit">
-                <textarea
-                  class="dm-msg-edit-input"
-                  data-testid="dm-msg-edit-input"
-                  value={editValue()}
-                  onInput={(e) => setEditValue(e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      void saveEdit();
-                    }
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      setEditing(false);
-                    }
-                  }}
-                />
-                <div class="dm-msg-edit-actions">
-                  <button class="dm-msg-edit-save" data-testid="dm-msg-edit-save" onClick={() => void saveEdit()}>
-                    {t('dm.saveEdit')}
-                  </button>
-                  <button class="dm-msg-edit-cancel" data-testid="dm-msg-edit-cancel" onClick={() => setEditing(false)}>
-                    {t('common.cancel')}
-                  </button>
-                </div>
+            <Show when={deleted()}>
+              <div class="dm-msg-content dm-msg-deleted">
+                <span class="dm-msg-deleted-text">{t('dm.deletedMessage')}</span>
               </div>
             </Show>
-            <div class="dm-reactions-row" data-testid="dm-reactions-row">
+            <Show when={!deleted()}>
+              <Show when={editing() && props.message.messageType === 'text'} fallback={
+                <div class={`dm-msg-content${bigEmoji() ? ' dm-msg-content-bigemoji' : ''}`}>
+                  <Show
+                    when={media()}
+                    fallback={<DmEmojiText text={props.message.content} />}
+                  >
+                    <div class="dm-msg-media-wrap">
+                      <Show when={mediaKind() === 'video'} fallback={<img class="dm-msg-media" src={mediaUrl()!} alt="" loading="lazy" />}>
+                        <video class="dm-msg-media" controls preload="metadata" src={mediaUrl()!} />
+                      </Show>
+                      <Show when={favId()}>
+                        <button
+                          class={`dm-msg-fav-btn${isGifFavorited(favId()!) ? ' favorited' : ''}`}
+                          data-testid={`dm-msg-fav-${favId()}`}
+                          aria-label={isGifFavorited(favId()!) ? 'Unfavorite' : 'Favorite'}
+                          onClick={() => void gifToggleFavoriteByUrl(mediaUrl()!, props.message.content)}
+                        >
+                          {isGifFavorited(favId()!) ? <PhHeartFill /> : <PhHeart />}
+                        </button>
+                      </Show>
+                    </div>
+                  </Show>
+                </div>
+              }
+              >
+                <div class="dm-msg-edit">
+                  <textarea
+                    class="dm-msg-edit-input"
+                    data-testid="dm-msg-edit-input"
+                    value={editValue()}
+                    onInput={(e) => setEditValue(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void saveEdit();
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setEditing(false);
+                      }
+                    }}
+                  />
+                  <div class="dm-msg-edit-actions">
+                    <button class="dm-msg-edit-save" data-testid="dm-msg-edit-save" onClick={() => void saveEdit()}>
+                      {t('dm.saveEdit')}
+                    </button>
+                    <button class="dm-msg-edit-cancel" data-testid="dm-msg-edit-cancel" onClick={() => setEditing(false)}>
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            </Show>
+            <Show when={!deleted()}>
+              <div class="dm-reactions-row" data-testid="dm-reactions-row">
                 <For each={props.message.reactions ?? []}>
                   {(reaction) => {
                     const mine = () => (props.myUserId ? reaction.userIds.includes(props.myUserId) : false);
@@ -285,7 +313,7 @@ export function DmMessageGroup(props: {
                       </button>
                     </div>
                   </Show>
-                  <Show when={pickerOpen()}>
+<Show when={pickerOpen()}>
                     <EmojiPicker
                       onSelect={(emoji) => {
                         react(emoji);
@@ -296,7 +324,8 @@ export function DmMessageGroup(props: {
                     />
                   </Show>
                 </div>
-              </div>
+            </div>
+              </Show>
           </div>
         </>
       }>

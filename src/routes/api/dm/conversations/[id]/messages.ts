@@ -6,7 +6,7 @@ const MAX_MESSAGE_LENGTH = 4000;
 const VALID_MESSAGE_TYPES: MessageType[] = ['text', 'gif', 'image', 'video'];
 
 function toMessageType(raw: any): MessageType {
-  if (raw === 'gif' || raw === 'image' || raw === 'video') return raw;
+  if (raw === 'gif' || raw === 'image' || raw === 'video' || raw === 'system') return raw;
   return 'text';
 }
 
@@ -29,6 +29,7 @@ function toMessage(m: any): DmMessage {
     mediaUrl: m.mediaUrl ?? null,
     createdAt: m.createdAt,
     editedAt: m.editedAt ?? null,
+    deletedAt: m.deletedAt ?? null,
     replyToId: m.replyToId ?? null,
     reactions: parseReactions(m.reactions)
   };

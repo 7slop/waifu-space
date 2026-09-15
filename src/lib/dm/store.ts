@@ -468,6 +468,10 @@ export async function initDm(): Promise<boolean> {
       customStatus: presence.customStatus ?? undefined,
       at: Date.now()
     });
+
+    // Load saved GIF favorites so message hover hearts reflect them before
+    // the picker has ever been opened.
+    void gifLoadFavorites();
     return true;
   } catch (e) {
     setDmState({ connecting: false, error: e instanceof Error ? e.message : 'Failed to start DM' });
@@ -626,14 +630,26 @@ export async function editMessage(messageId: string, content: string): Promise<D
   }
 }
 
-/** Permanently deletes one of the current user's messages. */
+/** Soft-deletes one of the current user's messages (renders as deleted). */
 export async function deleteMessage(messageId: string): Promise<boolean> {
   const auth = currentAuth();
   const convId = dmState.activeConversationId;
   if (!auth || !convId) return false;
   try {
     await deleteMessageRequest(auth.token, convId, messageId);
-    setDmState('messages', convId, (prev = []) => prev.filter((m) => m.id !== messageId));
+    const deletedAt = new Date().toISOString();
+    setDmState('messages', convId, (prev = []) =>
+      prev.map((m) =>
+        m.id === messageId ? { ...m, deletedAt, content: '', mediaUrl: null, reactions: [] } : m
+      )
+    );
+    setDmState('conversations', (convs) =>
+      convs.map((c) =>
+        c.id === convId && c.lastMessage?.id === messageId
+          ? { ...c, lastMessage: { ...c.lastMessage, deletedAt, content: '', mediaUrl: null } }
+          : c
+      )
+    );
     if (dmState.replyingTo === messageId) setDmState('replyingTo', null);
     return true;
   } catch {

@@ -60,7 +60,11 @@ export function DmInputBar() {
               {t('dm.replyingTo', { name: replyTarget()!.senderName ?? 'them' })}
             </span>
             <span class="dm-reply-preview-text">
-              {replyTarget()!.messageType === 'text' ? replyTarget()!.content.slice(0, 80) : `[${replyTarget()!.messageType}]`}
+              {replyTarget()!.deletedAt
+                ? t('dm.deletedMessage')
+                : replyTarget()!.messageType === 'text'
+                  ? replyTarget()!.content.slice(0, 80)
+                  : `[${replyTarget()!.messageType}]`}
             </span>
           </div>
           <button class="dm-reply-preview-cancel" data-testid="dm-reply-preview-cancel" onClick={() => setReplyTarget(null)}>

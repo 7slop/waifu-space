@@ -327,7 +327,7 @@ describe('DmMessageGroup', () => {
     expect(container.querySelector('.dm-msg-edited')).toHaveTextContent('edited');
   });
 
-  it('deletes an owned message via the context menu', async () => {
+  it('soft-deletes an owned message via the context menu', async () => {
     const message = msg({ senderId: 'u-me' });
     let deleted = false;
     const confirmStub = vi.fn(() => true);
@@ -351,9 +351,59 @@ describe('DmMessageGroup', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-msg-menu-delete"]')!);
     await flush();
     expect(deleted).toBe(true);
-    expect(dmState.messages.c1 ?? []).toHaveLength(0);
+    expect(dmState.messages.c1).toHaveLength(1);
+    expect(dmState.messages.c1?.[0]?.deletedAt).toBeTruthy();
+    expect(dmState.messages.c1?.[0]?.content).toBe('');
     delete (window as Partial<Window & { confirm: any }>).confirm;
     restore();
+  });
+
+  it('renders a deleted message as (deleted message) without media, reactions or edit menu', () => {
+    setDmState('activeConversationId', 'c1');
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({ senderId: 'u-me', deletedAt: '2025-01-01T12:00:00.000Z', content: 'secret', reactions: [{ emoji: '👍', count: 1, userIds: ['u-me'] }] })}
+        showAvatar
+        senderName="me"
+        myUserId="u-me"
+      />
+    ));
+    expect(container.querySelector('.dm-msg-deleted-text')).toHaveTextContent('(deleted message)');
+    expect(container.querySelector('[data-testid="dm-reactions-row"]')).not.toBeInTheDocument();
+    fireEvent.contextMenu(container.querySelector('.dm-msg')!);
+    expect(container.querySelector('[data-testid="dm-msg-menu-edit"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-msg-menu-delete"]')).not.toBeInTheDocument();
+  });
+
+  it('shows (deleted message) in a reply quote when the target was deleted', () => {
+    setDmState('activeConversationId', 'c1');
+    setDmState('messages', 'c1', [
+      { ...msg({ id: 'm0', senderId: 'u-bob', deletedAt: '2025-01-01T12:00:00.000Z', content: '' }) },
+      { ...msg({ id: 'm1', content: 'reply!', replyToId: 'm0' }) }
+    ]);
+    const { container } = render(() => (
+      <DmMessageGroup
+        message={msg({ id: 'm1', content: 'reply!', replyToId: 'm0' })}
+        showAvatar
+        senderName="Bob"
+        myUserId="u-me"
+      />
+    ));
+    expect(container.querySelector('.dm-reply-quote-text')).toHaveTextContent('(deleted message)');
+  });
+
+  it('renders a message containing a single emoji with the large-emoji class', () => {
+    const { container } = render(() => (
+      <DmMessageGroup message={msg({ content: '😂' })} showAvatar senderName="Bob" myUserId="u-me" />
+    ));
+    expect(container.querySelector('.dm-msg-content')).toHaveClass('dm-msg-content-bigemoji');
+  });
+
+  it('does not upscale mixed text+emoji messages', () => {
+    const { container } = render(() => (
+      <DmMessageGroup message={msg({ content: 'hello 😂' })} showAvatar senderName="Bob" myUserId="u-me" />
+    ));
+    expect(container.querySelector('.dm-msg-content')).not.toHaveClass('dm-msg-content-bigemoji');
   });
 
   it('renders a reply quote for a message that references a local target', () => {

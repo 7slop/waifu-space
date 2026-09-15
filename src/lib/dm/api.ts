@@ -121,6 +121,7 @@ export function toDmMessage(raw: any): DmMessage {
     mediaUrl: (raw?.mediaUrl ?? raw?.media_url ?? null) || null,
     createdAt: String(raw?.createdAt ?? raw?.created_at ?? new Date().toISOString()),
     editedAt: raw?.editedAt ?? raw?.edited_at ?? null,
+    deletedAt: raw?.deletedAt ?? raw?.deleted_at ?? null,
     replyToId: (raw?.replyToId ?? raw?.reply_to_id ?? null) || null,
     reactions: Array.isArray(raw?.reactions) ? raw.reactions.map(toDmReaction) : undefined
   };

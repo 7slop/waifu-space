@@ -1,4 +1,4 @@
-import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { state } from '../../lib/store';
 import { dmState } from '../../lib/dm/store';
 import { fetchUserProfileRequest, formatJoinDate } from '../../lib/dm/api';
@@ -19,19 +19,31 @@ const POPOVER_EST_HEIGHT = 330;
  */
 export function DmProfilePopover(props: { userId: string; anchor: () => DOMRect | null; onClose: () => void }) {
   const [pos, setPos] = createSignal<{ top: number; left: number; openUp: boolean }>({ top: 80, left: 20, openUp: false });
+  const [profile, setProfile] = createSignal<DmUserProfile | null>(null);
+  let lastLoadedUserId: string | null = null;
 
-  const [profile] = createResource<DmUserProfile | null, string>(
-    props.userId,
-    async (id) => {
-      const token = state.user?.token;
-      if (!token || !id) return null;
-      try {
-        return await fetchUserProfileRequest(token, id);
-      } catch {
-        return null;
-      }
-    }
-  );
+  // Fetch the profile imperatively instead of createResource: reading a
+  // resource suspends, and the app's top-level <Suspense> has no fallback so
+  // the whole layout vanishes while the fetch is in flight.
+  createEffect(() => {
+    const id = props.userId;
+    if (!id || id === lastLoadedUserId) return;
+    lastLoadedUserId = id;
+    let alive = true;
+    setProfile(null);
+    const token = state.user?.token;
+    if (!token) return;
+    fetchUserProfileRequest(token, id)
+      .then((p) => {
+        if (alive) setProfile(p);
+      })
+      .catch(() => {
+        if (alive) setProfile(null);
+      });
+    onCleanup(() => {
+      alive = false;
+    });
+  });
 
   const presence = () => {
     const realtime = dmState.realtimePresence[props.userId]?.status;

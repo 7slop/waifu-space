@@ -17,6 +17,7 @@ function realtimeStatusMap(): Record<string, any> {
 function previewFor(conv: DmConversationSummary): string {
   const last = conv.lastMessage;
   if (!last) return '';
+  if (last.deletedAt) return t('dm.deletedMessage');
   const media = mediaSourceOf(last);
   if (media) return media.kind === 'video' ? 'Video' : media.kind === 'gif' ? 'GIF' : 'Image';
   return last.content;

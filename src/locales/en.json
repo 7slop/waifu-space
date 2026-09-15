@@ -1001,6 +1001,7 @@
     "edited": "edited",
     "saveEdit": "Save",
     "confirmDelete": "Delete this message? This cannot be undone.",
+    "deletedMessage": "(deleted message)",
     "replyingToYou": "Replying to yourself",
     "replyingTo": "Replying to @{name}",
     "gifTooltip": "Send a GIF",

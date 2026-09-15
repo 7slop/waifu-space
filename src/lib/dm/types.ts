@@ -36,6 +36,8 @@ export interface DmMessage {
   createdAt: string;
   /** Set when the sender edited the message; renders an "(edited)" marker. */
   editedAt?: string | null;
+  /** Set when the sender deleted the message; renders "(deleted message)". */
+  deletedAt?: string | null;
   /** Id of the message this one replies to, if any. */
   replyToId?: string | null;
   /** Per-emoji reaction buckets, empty when unreacted. */

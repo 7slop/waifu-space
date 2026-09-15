@@ -23,7 +23,7 @@ vi.mock('../../src/lib/server/supabase', () => ({
 }));
 
 import { GET as conversationsGET, POST as conversationsPOST } from '../../src/routes/api/dm/conversations';
-import { GET as messagesGET, POST as messagesPOST } from '../../src/routes/api/dm/conversations/[id]/messages';
+import { GET as messagesGET, POST as messagesPOST, PATCH as messagesPATCH, DELETE as messagesDELETE } from '../../src/routes/api/dm/conversations/[id]/messages';
 import { POST as markReadPOST } from '../../src/routes/api/dm/conversations/[id]/read';
 import { GET as searchGET } from '../../src/routes/api/dm/search';
 import { GET as unreadGET } from '../../src/routes/api/dm/unread';
@@ -215,6 +215,39 @@ function buildFakeDmClient() {
         })),
         error: null
       };
+    },
+
+    update_dm_message: ({ p_user_id, p_message_id, p_content }: any) => {
+      const msg = db.messages.find(m => m.id === p_message_id);
+      if (!msg) return { data: null, error: { message: 'message not found' } };
+      if (msg.sender_id !== p_user_id) return { data: null, error: { message: 'only the sender can edit this message' } };
+      if (msg.message_type !== 'text') return { data: null, error: { message: 'only text messages can be edited' } };
+      msg.content = p_content;
+      msg.edited_at = nowIso();
+      return {
+        data: {
+          id: msg.id,
+          conversationId: msg.conversation_id,
+          senderId: msg.sender_id,
+          content: msg.content,
+          messageType: msg.message_type,
+          mediaUrl: msg.media_url,
+          createdAt: msg.created_at,
+          editedAt: msg.edited_at,
+          deletedAt: msg.deleted_at ?? null,
+          replyToId: null
+        },
+        error: null
+      };
+    },
+
+    delete_dm_message: ({ p_user_id, p_message_id }: any) => {
+      const msg = db.messages.find(m => m.id === p_message_id);
+      if (!msg) return { data: null, error: { message: 'message not found' } };
+      if (msg.sender_id !== p_user_id) return { data: null, error: { message: 'only the sender can delete this message' } };
+      msg.deleted_at = nowIso();
+      msg.content = '';
+      return { data: null, error: null };
     },
 
     count_dm_unread: ({ p_user_id }: any) => {
@@ -464,6 +497,57 @@ describe('DM API routes (Supabase-backed)', () => {
     addProfile(A, 'alice');
     const res = await searchGET(req('http://localhost/api/dm/search?q=a', { headers: { Authorization: `Bearer ${freshTicket(A, 'alice')}` } }));
     expect(res.status).toBe(400);
+  });
+
+  it('edits an owned text message in place via PATCH (no new message)', async () => {
+    const { A, conv } = seedWorld();
+    const target = mocks.state.db.messages.find(m => m.sender_id === A)!;
+    const before = mocks.state.db.messages.length;
+    const res = await messagesPATCH(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(A, 'alice')}` },
+        body: JSON.stringify({ messageId: target.id, content: 'edited text' })
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.message).toMatchObject({ id: target.id, content: 'edited text', editedAt: expect.any(String) });
+    expect(mocks.state.db.messages).toHaveLength(before);
+    expect(mocks.state.db.messages.find(m => m.id === target.id)!.content).toBe('edited text');
+  });
+
+  it('rejects editing a message owned by someone else (403)', async () => {
+    const { A, B, conv } = seedWorld();
+    const target = mocks.state.db.messages.find(m => m.sender_id === A)!;
+    const res = await messagesPATCH(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(B, 'bob_test')}` },
+        body: JSON.stringify({ messageId: target.id, content: 'nope' })
+      })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('soft-deletes an owned message via DELETE (row survives, body wiped)', async () => {
+    const { A, conv } = seedWorld();
+    const target = mocks.state.db.messages.find(m => m.sender_id === A)!;
+    const before = mocks.state.db.messages.length;
+    const res = await messagesDELETE(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(A, 'alice')}` },
+        body: JSON.stringify({ messageId: target.id })
+      })
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).success).toBe(true);
+    expect(mocks.state.db.messages).toHaveLength(before);
+    const row = mocks.state.db.messages.find(m => m.id === target.id)!;
+    expect(row.deleted_at).toBeTruthy();
+    expect(row.content).toBe('');
   });
 
   it('returns 503 when Supabase is not configured', async () => {

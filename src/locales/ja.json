@@ -1001,6 +1001,7 @@
     "edited": "編集済み",
     "saveEdit": "保存",
     "confirmDelete": "このメッセージを削除しますか？元に戻せません。",
+    "deletedMessage": "(削除済みのメッセージ)",
     "replyingToYou": "自分への返信",
     "replyingTo": "@{name} への返信",
     "gifTooltip": "GIFを送信",

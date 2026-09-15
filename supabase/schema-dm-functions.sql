@@ -67,11 +67,12 @@ BEGIN
         'id', m.id,
         'conversationId', m.conversation_id,
         'senderId', m.sender_id,
-        'content', m.content,
+        'content', CASE WHEN m.deleted_at IS NOT NULL THEN '' ELSE m.content END,
         'messageType', m.message_type,
-        'mediaUrl', m.media_url,
+        'mediaUrl', CASE WHEN m.deleted_at IS NOT NULL THEN NULL ELSE m.media_url END,
         'createdAt', m.created_at,
         'editedAt', m.edited_at,
+        'deletedAt', m.deleted_at,
         'replyToId', m.reply_to_id
       ) AS last_msg
       FROM public.messages m
@@ -293,6 +294,10 @@ BEGIN
     RAISE EXCEPTION 'only text messages can be edited';
   END IF;
 
+  IF v_msg.deleted_at IS NOT NULL THEN
+    RAISE EXCEPTION 'cannot edit a deleted message';
+  END IF;
+
   UPDATE public.messages
      SET content = p_content, edited_at = now()
    WHERE id = p_message_id
@@ -307,12 +312,15 @@ BEGIN
     'mediaUrl', v_msg.media_url,
     'createdAt', v_msg.created_at,
     'editedAt', v_msg.edited_at,
+    'deletedAt', v_msg.deleted_at,
     'replyToId', v_msg.reply_to_id
   );
 END;
 $$;
 
--- Delete a message: only the sender may permanently delete their own.
+-- Delete a message: only the sender may delete their own. The row is
+-- soft-deleted (deleted_at set, body/media wiped) so replies to it survive
+-- and render as "(deleted message)".
 CREATE OR REPLACE FUNCTION public.delete_dm_message(
   p_user_id uuid,
   p_message_id uuid
@@ -338,7 +346,15 @@ BEGIN
     RAISE EXCEPTION 'only the sender can delete this message';
   END IF;
 
-  DELETE FROM public.messages WHERE id = p_message_id;
+  IF v_msg.deleted_at IS NOT NULL THEN
+    RETURN;
+  END IF;
+
+  UPDATE public.messages
+     SET deleted_at = now(), content = '', media_url = NULL, edited_at = NULL
+   WHERE id = p_message_id;
+
+  DELETE FROM public.message_reactions WHERE message_id = p_message_id;
 END;
 $$;
 
@@ -393,11 +409,12 @@ BEGIN
       'id', m.id,
       'conversationId', m.conversation_id,
       'senderId', m.sender_id,
-      'content', m.content,
+      'content', CASE WHEN m.deleted_at IS NOT NULL THEN '' ELSE m.content END,
       'messageType', m.message_type,
-      'mediaUrl', m.media_url,
+      'mediaUrl', CASE WHEN m.deleted_at IS NOT NULL THEN NULL ELSE m.media_url END,
       'createdAt', m.created_at,
       'editedAt', m.edited_at,
+      'deletedAt', m.deleted_at,
       'replyToId', m.reply_to_id,
       'reactions', (
         SELECT COALESCE(jsonb_agg(jsonb_build_object(

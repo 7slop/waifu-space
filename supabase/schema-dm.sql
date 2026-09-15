@@ -32,8 +32,12 @@ CREATE TABLE IF NOT EXISTS public.messages (
   media_url TEXT,
   created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   edited_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
   reply_to_id UUID REFERENCES public.messages(id) ON DELETE SET NULL
 );
+
+-- Soft-delete marker for pre-existing databases (idempotent).
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 -- Widen the constraint on pre-existing databases (idempotent).
 ALTER TABLE public.messages DROP CONSTRAINT IF EXISTS messages_message_type_check;
