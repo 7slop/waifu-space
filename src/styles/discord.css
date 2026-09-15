@@ -1100,6 +1100,7 @@
 .dm-call-dock {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
   padding: 16px 20px 18px;
   background: var(--surface-2, #313244);
@@ -1108,12 +1109,14 @@
   min-height: 88px;
 }
 
-.dm-call-bar {
+.dm-call-main {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 20px;
+  min-height: 0;
+  width: 100%;
 }
 
 .dm-call-info {
@@ -1187,7 +1190,7 @@
 }
 
 .dm-call-avatar-badge.deafened {
-  background: #f0b232;
+  background: #f23f43;
 }
 
 .dm-call-avatar-badge svg {
@@ -1295,8 +1298,8 @@
 }
 
 .dm-call-action.deafen.active {
-  background: var(--accent-green, #a6e3a1);
-  color: #11111b;
+  background: #f23f43;
+  color: #fff;
 }
 
 .dm-call-action.ctrl.active {
@@ -1313,16 +1316,19 @@
   gap: 10px;
   flex-shrink: 0;
   padding: 6px;
+  align-self: center;
+  margin-top: auto;
 }
 
 /* Bottom drag-to-resize handle for the call dock */
 .dm-call-resize-handle {
-  display: block;
-  height: 10px;
-  margin: -18px -20px 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 12px;
   cursor: ns-resize;
   touch-action: none;
-  position: relative;
 }
 
 .dm-call-resize-handle::after {
@@ -1349,6 +1355,10 @@
 
 .dm-call-dock.dm-call-active.resized {
   overflow: hidden;
+}
+
+.dm-call-dock.dm-call-active {
+  position: relative;
 }
 
 .dm-call-incoming .dm-call-info {

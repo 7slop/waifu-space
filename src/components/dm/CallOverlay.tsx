@@ -21,7 +21,6 @@ import {
   PhPhoneCall,
   PhPhoneDisconnect,
   PhPhoneIncoming,
-  PhSpeakerX,
   PhVideoCamera,
   PhVideoCameraFill,
   PhVideoCameraSlash,
@@ -54,10 +53,27 @@ function AvatarBadge(props: { show: boolean; kind: 'muted' | 'deafened' }) {
       </Show>
       <Show when={props.show && props.kind === 'deafened'}>
         <span class="dm-call-avatar-badge deafened" data-testid="dm-call-deafened-badge" aria-hidden="true">
-          <PhSpeakerX />
+          <HeadphonesSlash />
         </span>
       </Show>
     </>
+  );
+}
+
+/** Crossed headphones icon (Discord-style "deafened" glyph). */
+function HeadphonesSlash(props: { class?: string }) {
+  return (
+    <svg
+      class={props.class}
+      viewBox="0 0 256 256"
+      fill="currentColor"
+      width="22"
+      height="22"
+      aria-hidden="true"
+    >
+      <path d="M201.89 54.66A103.43 103.43 0 0 0 128.79 24H128A104 104 0 0 0 24 128v56a24 24 0 0 0 24 24h16a24 24 0 0 0 24-24v-40a24 24 0 0 0-24-24H40.36A88 88 0 0 1 128 40h.67a87.71 87.71 0 0 1 87 80H192a24 24 0 0 0-24 24v40a24 24 0 0 0 24 24h16a24 24 0 0 0 24-24v-56a103.4 103.4 0 0 0-30.11-73.34M64 136a8 8 0 0 1 8 8v40a8 8 0 0 1-8 8H48a8 8 0 0 1-8-8v-48Zm152 48a8 8 0 0 1-8 8h-16a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h24Z" />
+      <path d="M205.66 194.34a8 8 0 0 1-11.32 11.32L128 139.31l-66.34 66.35a8 8 0 0 1-11.32-11.32L116.69 128 50.34 61.66a8 8 0 0 1 11.32-11.32L128 116.69l66.34-66.35a8 8 0 0 1 11.32 11.32L139.31 128Z" />
+    </svg>
   );
 }
 
@@ -139,6 +155,10 @@ function ActiveCallBar() {
   const call = () => dmState.call!;
   const ringing = () => call().callState === 'ringing';
   const connected = () => call().callState === 'connected';
+  // Outgoing calls stay in a "calling…" state until the callee actually
+  // answers (WebRTC connected); 'active' merely reflects the server-side
+  // call row and must not read as "in call" while the peer hasn't joined.
+  const calling = () => call().callState === 'ringing' || (call().direction === 'outgoing' && call().callState !== 'connected');
   // Camera/screen toggles are allowed while ringing too (Discord-style
   // "start preparing"): the local preview fills the stage before answering.
   const videoActive = () => !call().videoOff && (connected() || ringing());
@@ -187,7 +207,7 @@ function ActiveCallBar() {
       data-testid="dm-active-call"
       style={dockH() ? { height: `${dockH()}px` } : undefined}
     >
-      <div class="dm-call-bar">
+      <div class="dm-call-main">
         <div class={`dm-call-avatars${videoActive() ? ' squared' : ''}`} data-testid="dm-call-avatars">
           <div class="dm-call-avatar-slot mine">
             <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
@@ -205,50 +225,10 @@ function ActiveCallBar() {
         <div class="dm-call-info">
           <span class="dm-call-name">{call().remoteName || peer().name}</span>
           <span class="dm-call-sub">
-            {ringing()
+            {calling()
               ? t(call().direction === 'incoming' ? 'dm.incomingCall' : 'dm.outgoingCall', { name: call().remoteName || peer().name })
               : call().screenSharing ? t('dm.sharingScreenLabel') : t('dm.inCallLabel')}
           </span>
-        </div>
-
-        <div class="dm-call-controls">
-          <button
-            class={`dm-call-action ctrl${call().muted ? ' active' : ''}`}
-            data-testid="dm-call-mute"
-            title={call().muted ? t('dm.unmutedTooltip') : t('dm.mutedTooltip')}
-            onClick={toggleMute}
-          >
-            {call().muted ? <PhMicrophoneSlash /> : <PhMicrophone />}
-          </button>
-          <button
-            class={`dm-call-action ctrl deafen${call().deafened ? ' active' : ''}`}
-            data-testid="dm-call-deafen"
-            title={call().deafened ? t('dm.undeafenTooltip') : t('dm.deafenTooltip')}
-            onClick={toggleDeafen}
-          >
-            <PhHeadphones />
-          </button>
-          <button
-            class={`dm-call-action ctrl${call().videoOff && !call().screenSharing ? ' active' : ''}`}
-            data-testid="dm-call-video-toggle"
-            title={call().videoOff ? t('dm.startVideo') : t('dm.stopVideo')}
-            onClick={() => void cameraButtonPressed()}
-          >
-            {call().screenSharing
-              ? <PhVideoCameraFill />
-              : call().videoOff ? <PhVideoCameraSlash /> : <PhVideoCamera />}
-          </button>
-          <button
-            class={`dm-call-action ctrl${call().screenSharing ? ' active' : ''}`}
-            data-testid="dm-call-screen-toggle"
-            title={call().screenSharing ? t('dm.stopScreenShareTooltip') : t('dm.startScreenShareTooltip')}
-            onClick={() => void toggleScreenShare()}
-          >
-            <PhMonitorArrowUp />
-          </button>
-          <button class="dm-call-action hangup" data-testid="dm-call-hangup" title={t('dm.hangUp')} onClick={() => void hangUpCall()}>
-            <PhPhoneDisconnect />
-          </button>
         </div>
       </div>
 
@@ -264,6 +244,46 @@ function ActiveCallBar() {
           </div>
         </div>
       </Show>
+
+      <div class="dm-call-controls">
+        <button
+          class={`dm-call-action ctrl${call().muted ? ' active' : ''}`}
+          data-testid="dm-call-mute"
+          title={call().muted ? t('dm.unmutedTooltip') : t('dm.mutedTooltip')}
+          onClick={toggleMute}
+        >
+          {call().muted ? <PhMicrophoneSlash /> : <PhMicrophone />}
+        </button>
+        <button
+          class={`dm-call-action ctrl deafen${call().deafened ? ' active' : ''}`}
+          data-testid="dm-call-deafen"
+          title={call().deafened ? t('dm.undeafenTooltip') : t('dm.deafenTooltip')}
+          onClick={toggleDeafen}
+        >
+          {call().deafened ? <HeadphonesSlash /> : <PhHeadphones />}
+        </button>
+        <button
+          class={`dm-call-action ctrl${call().videoOff && !call().screenSharing ? ' active' : ''}`}
+          data-testid="dm-call-video-toggle"
+          title={call().videoOff ? t('dm.startVideo') : t('dm.stopVideo')}
+          onClick={() => void cameraButtonPressed()}
+        >
+          {call().screenSharing
+            ? <PhVideoCameraFill />
+            : call().videoOff ? <PhVideoCameraSlash /> : <PhVideoCamera />}
+        </button>
+        <button
+          class={`dm-call-action ctrl${call().screenSharing ? ' active' : ''}`}
+          data-testid="dm-call-screen-toggle"
+          title={call().screenSharing ? t('dm.stopScreenShareTooltip') : t('dm.startScreenShareTooltip')}
+          onClick={() => void toggleScreenShare()}
+        >
+          <PhMonitorArrowUp />
+        </button>
+        <button class="dm-call-action hangup" data-testid="dm-call-hangup" title={t('dm.hangUp')} onClick={() => void hangUpCall()}>
+          <PhPhoneDisconnect />
+        </button>
+      </div>
 
       <span
         class="dm-call-resize-handle"
