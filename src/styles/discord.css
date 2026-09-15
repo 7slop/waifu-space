@@ -769,6 +769,12 @@
   padding: 7px 0;
 }
 
+.dm-input-textarea:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-radius: 0;
+}
+
 .dm-input-textarea::placeholder {
   color: var(--text-muted, #7f849c);
 }
