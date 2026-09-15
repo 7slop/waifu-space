@@ -158,7 +158,7 @@ function ActiveCallBar() {
   // Outgoing calls stay in a "calling…" state until the callee actually
   // answers (WebRTC connected); 'active' merely reflects the server-side
   // call row and must not read as "in call" while the peer hasn't joined.
-  const calling = () => call().callState === 'ringing' || (call().direction === 'outgoing' && call().callState !== 'connected');
+  const calling = () => call().callState === 'ringing';
   // Camera/screen toggles are allowed while ringing too (Discord-style
   // "start preparing"): the local preview fills the stage before answering.
   const videoActive = () => !call().videoOff && (connected() || ringing());

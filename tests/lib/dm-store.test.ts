@@ -421,6 +421,26 @@ async function boot() {
     expect(rtInst.sendCallCancel).toHaveBeenCalledWith('u-bob', expect.objectContaining({ call: expect.objectContaining({ id: 'call-2' }) }));
   });
 
+  it('an echoed-back offer does not flip an outgoing ringing call to connected', async () => {
+    const rtInst = await boot();
+    await selectConversation('c1');
+    await startCall('voice');
+    expect(dmState.call?.callState).toBe('ringing');
+    // Supabase realtime echoes a broadcast back to the sender: the caller
+    // receives its own 'offer' on the conversation channel. That must NOT be
+    // treated as a renegotiation (which would call acceptOffer and set state
+    // to 'connected' before the callee has answered).
+    rt.handlers.onCallSignal({
+      kind: 'call-signal',
+      callId: 'call-2',
+      conversationId: 'c1',
+      type: 'offer',
+      sdp: { type: 'offer', sdp: 'offer-sdp' }
+    });
+    expect(dmState.call?.callState).toBe('ringing');
+    expect(rtInst.sendCallSignal).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'answer', callId: 'call-2' }));
+  });
+
   it('declines and cleans up an incoming call', async () => {
     const rtInst = await boot();
     const call = {

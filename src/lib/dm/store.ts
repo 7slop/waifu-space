@@ -322,7 +322,9 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
       return;
     }
     // A renegotiation offer mid-call (e.g. the remote side added a track).
-    if (call && signal.callId === call.call.id && signal.sdp) {
+    // Only accept once connected — a ringing outgoing call may receive its
+    // own echo-back broadcast, which must not flip the state to 'connected'.
+    if (call && signal.callId === call.call.id && signal.sdp && call.callState === 'connected') {
       const remoteId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
       const answer = await manager.acceptOffer(call.call.id, remoteId, signal.sdp);
       if (answer) sendSignal('answer', call.call.id, call.call.conversationId, { sdp: answer });

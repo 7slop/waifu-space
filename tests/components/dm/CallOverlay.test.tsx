@@ -166,10 +166,51 @@ describe('CallOverlay', () => {
     const { container } = render(() => <CallOverlay />);
     expect(container.querySelector('[data-testid="dm-active-call"]')).toBeInTheDocument();
     expect(container.textContent).toContain('Calling');
+    expect(container.textContent).not.toContain('In call');
     fireEvent.click(container.querySelector('[data-testid="dm-call-hangup"]')!);
     await flush();
     expect(dmState.call).toBeNull();
     restore();
+  });
+
+  it('outgoing call that joined an existing active call reads as In call, not Calling', async () => {
+    seedConv();
+    setDmState('call', {
+      call: callSession({ id: 'call-3', callerId: 'u-me', calleeId: 'u-bob', status: 'active' }),
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'active',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+    const { container } = render(() => <CallOverlay />);
+    expect(container.textContent).toContain('In call');
+    expect(container.textContent).not.toContain('Calling');
+  });
+
+  it('outgoing call keeps Calling… until the peer actually answers', async () => {
+    seedConv();
+    const call = callSession({ id: 'call-4', callerId: 'u-me', calleeId: 'u-bob', status: 'ringing' });
+    setDmState('call', {
+      call,
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'ringing',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+    const { container } = render(() => <CallOverlay />);
+    expect(container.textContent).toContain('Calling');
+    expect(container.textContent).not.toContain('In call');
+    // The peer answers: manager state flips to 'connected' -> label updates.
+    setDmState('call', 'callState', 'connected');
+    await flush();
+    expect(container.textContent).toContain('In call');
+    expect(container.textContent).not.toContain('Calling');
   });
 
   it('mute toggles the call state and badges the avatar', async () => {
