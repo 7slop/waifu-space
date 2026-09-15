@@ -9,14 +9,16 @@ import { EmojiGlyph } from './DmEmojiText';
  * GIF picker it inserts the chosen emoji (via `onSelect`) instead of sending
  * a message; it closes on outside click.
  */
-export function EmojiPicker(props: { onSelect: (emoji: string) => void }) {
+export function EmojiPicker(props: { onSelect: (emoji: string) => void; onRequestClose?: () => void }) {
   const [cat, setCat] = createSignal<string>(EMOJI_CATEGORIES[0].id);
 
   const active = () => EMOJI_CATEGORIES.find((c) => c.id === cat()) ?? EMOJI_CATEGORIES[0];
 
   const closeOnClickAway = (e: PointerEvent) => {
     const el = e.target as HTMLElement | null;
-    if (!el || (!el.closest('.dm-emoji-picker') && !el.closest('.dm-emoji-btn'))) setEmojiOpen(false);
+    if (el && (el.closest('.dm-emoji-picker') || el.closest('.dm-emoji-btn') || el.closest('.dm-reaction-add') || el.closest('.dm-reaction-add-anchor'))) return;
+    props.onRequestClose?.();
+    setEmojiOpen(false);
   };
 
   onMount(() => document.addEventListener('pointerdown', closeOnClickAway));

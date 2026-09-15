@@ -3,9 +3,10 @@ import { isOwnMessage, mediaSourceOf, gifKeyOfUrl, formatMessageTime, MediaKind 
 import { gifToggleFavoriteByUrl, isGifFavorited, toggleReaction } from '../../lib/dm/store';
 import { QUICK_REACTIONS } from '../../lib/dm/emoji';
 import { t } from '../../lib/i18n';
-import { PhHeart, PhHeartFill, PhPhoneCall, PhPhoneDisconnect, PhPhoneIncoming } from '../icons';
+import { PhHeart, PhHeartFill, PhPhoneCall, PhPhoneDisconnect, PhPhoneIncoming, PhPlus, PhSmiley } from '../icons';
 import { DmAvatar } from './DmAvatar';
 import { DmEmojiText, EmojiGlyph } from './DmEmojiText';
+import { EmojiPicker } from './EmojiPicker';
 import type { DmMessage } from '../../lib/dm/types';
 
 /** Parses a system payload stored in `content` ({"kind":"call-started","callType":"voice"}). */
@@ -46,11 +47,15 @@ export function DmMessageGroup(props: {
   const favId = (): string | null => mediaUrl() ? gifKeyOfUrl(mediaUrl()!) : null;
 
   const [addOpen, setAddOpen] = createSignal(false);
+  const [pickerOpen, setPickerOpen] = createSignal(false);
 
   const closeAddOnClickAway = (e: PointerEvent) => {
     if (!addOpen()) return;
     const el = e.target as HTMLElement | null;
-    if (!el || (!el.closest('.dm-reaction-menu') && !el.closest('.dm-reaction-add'))) setAddOpen(false);
+    if (!el || !el.closest('.dm-reaction-add-anchor')) {
+      setAddOpen(false);
+      setPickerOpen(false);
+    }
   };
 
   onMount(() => document.addEventListener('pointerdown', closeAddOnClickAway));
@@ -149,8 +154,7 @@ export function DmMessageGroup(props: {
                 </div>
               </Show>
             </div>
-            <Show when={(props.message.reactions?.length ?? 0) > 0}>
-              <div class="dm-reactions-row" data-testid="dm-reactions-row">
+            <div class="dm-reactions-row" data-testid="dm-reactions-row">
                 <For each={props.message.reactions ?? []}>
                   {(reaction) => {
                     const mine = () => (props.myUserId ? reaction.userIds.includes(props.myUserId) : false);
@@ -166,29 +170,50 @@ export function DmMessageGroup(props: {
                     );
                   }}
                 </For>
-              </div>
-            </Show>
-            <div class="dm-reaction-add-wrap">
-              <button
-                class={`dm-reaction-add${addOpen() ? ' active' : ''}`}
-                data-testid="dm-reaction-add"
-                aria-label="Add reaction"
-                onClick={() => setAddOpen(!addOpen())}
-              >
-                +
-              </button>
-              <Show when={addOpen()}>
-                <div class="dm-reaction-menu" data-testid="dm-reaction-menu">
-                  <For each={QUICK_REACTIONS}>
-                    {(emoji) => (
-                      <button class="dm-reaction-menu-item" aria-label={emoji} data-testid={`dm-reaction-menu-${emoji}`} onClick={() => react(emoji)}>
-                        <EmojiGlyph emoji={emoji} />
+                <div class="dm-reaction-add-anchor" data-testid="dm-reaction-add-anchor">
+                  <button
+                    class={`dm-reaction-add${addOpen() ? ' active' : ''}`}
+                    data-testid="dm-reaction-add"
+                    aria-label="Add reaction"
+                    onClick={() => {
+                      setAddOpen(!addOpen());
+                      setPickerOpen(false);
+                    }}
+                  >
+                    <PhPlus />
+                  </button>
+                  <Show when={addOpen()}>
+                    <div class="dm-reaction-quick" data-testid="dm-reaction-quick">
+                      <For each={QUICK_REACTIONS}>
+                        {(emoji) => (
+                          <button class="dm-reaction-menu-item" aria-label={emoji} data-testid={`dm-reaction-menu-${emoji}`} onClick={() => react(emoji)}>
+                            <EmojiGlyph emoji={emoji} />
+                          </button>
+                        )}
+                      </For>
+                      <button
+                        class="dm-reaction-quick-more"
+                        data-testid="dm-reaction-quick-more"
+                        aria-label="More emoji"
+                        title={t('dm.emojiTooltip')}
+                        onClick={() => setPickerOpen(true)}
+                      >
+                        <PhSmiley />
                       </button>
-                    )}
-                  </For>
+                    </div>
+                  </Show>
+                  <Show when={pickerOpen()}>
+                    <EmojiPicker
+                      onSelect={(emoji) => {
+                        react(emoji);
+                        setAddOpen(false);
+                        setPickerOpen(false);
+                      }}
+                      onRequestClose={() => setPickerOpen(false)}
+                    />
+                  </Show>
                 </div>
-              </Show>
-            </div>
+              </div>
           </div>
         </>
       }>

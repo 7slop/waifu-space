@@ -183,13 +183,47 @@ describe('DmMessageGroup', () => {
       <DmMessageGroup message={message} showAvatar senderName="Bob" myUserId="u-me" />
     ));
     fireEvent.click(container.querySelector('[data-testid="dm-reaction-add"]')!);
-    expect(container.querySelector('[data-testid="dm-reaction-menu"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-reaction-quick"]')).toBeInTheDocument();
     const button = Array.from(container.querySelectorAll('[data-testid^="dm-reaction-menu-"]'))
       .find((el) => el.getAttribute('aria-label') === '❤️') as HTMLElement;
     fireEvent.click(button);
     await flush();
     expect(posted).toEqual({ messageId: 'm1', emoji: '❤️' });
     expect(dmState.messages.c1?.[0]?.reactions?.[0]).toMatchObject({ emoji: '❤️', count: 1 });
+    restore();
+  });
+
+  it('expands the quick-reaction menu into the full emoji picker', async () => {
+    setDmState('activeConversationId', 'c1');
+    const message = msg({});
+    setDmState('messages', 'c1', [message]);
+    let posted: any = null;
+    const restore = stubFetch({
+      '/api/dm/reactions': (url, init) => {
+        posted = JSON.parse(String(init.body));
+        return {
+          body: {
+            success: true,
+            messageId: 'm1',
+            emoji: '😀',
+            action: 'add',
+            reactions: [{ emoji: '😀', count: 1, userIds: ['u-me'] }]
+          }
+        };
+      }
+    });
+    const { container } = render(() => (
+      <DmMessageGroup message={message} showAvatar senderName="Bob" myUserId="u-me" />
+    ));
+    fireEvent.click(container.querySelector('[data-testid="dm-reaction-add"]')!);
+    fireEvent.click(container.querySelector('[data-testid="dm-reaction-quick-more"]')!);
+    expect(container.querySelector('[data-testid="dm-emoji-picker"]')).toBeInTheDocument();
+    const item = container.querySelector('[aria-label="😀"]');
+    expect(item).not.toBeNull();
+    fireEvent.click(item!);
+    await flush();
+    expect(posted).toEqual({ messageId: 'm1', emoji: '😀' });
+    expect(container.querySelector('[data-testid="dm-emoji-picker"]')).not.toBeInTheDocument();
     restore();
   });
 

@@ -1587,11 +1587,10 @@
   line-height: 1;
 }
 
-.dm-reaction-add-wrap {
-  position: absolute;
-  right: 8px;
-  bottom: 2px;
-  z-index: 30;
+.dm-reaction-add-anchor {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
 }
 
 .dm-reaction-add {
@@ -1605,10 +1604,13 @@
   background: var(--surface-2, #313244);
   color: var(--text-muted, #7f849c);
   cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
   opacity: 0;
   transition: opacity 0.12s ease;
+}
+
+.dm-reaction-add svg {
+  width: 14px;
+  height: 14px;
 }
 
 .dm-msg:hover .dm-reaction-add,
@@ -1622,9 +1624,9 @@
   border-color: var(--primary-accent, #f5c2e7);
 }
 
-.dm-reaction-menu {
+.dm-reaction-quick {
   position: absolute;
-  right: 0;
+  left: 0;
   bottom: calc(100% + 6px);
   display: flex;
   gap: 2px;
@@ -1634,6 +1636,29 @@
   border-radius: var(--radius-lg, 8px);
   z-index: 40;
   box-shadow: var(--card-shadow, 0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+.dm-reaction-quick-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  color: var(--text-muted, #7f849c);
+}
+
+.dm-reaction-quick-more:hover {
+  background: var(--surface-1, #181825);
+  color: var(--primary-accent, #f5c2e7);
+}
+
+.dm-reaction-quick-more svg {
+  width: 18px;
+  height: 18px;
 }
 
 .dm-reaction-menu-item {
