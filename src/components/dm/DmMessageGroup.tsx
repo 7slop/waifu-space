@@ -1,6 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { isOwnMessage, mediaSourceOf, gifKeyOfUrl, formatMessageTime, MediaKind } from '../../lib/dm/api';
 import { dmState, gifToggleFavoriteByUrl, isGifFavorited, toggleReaction, setReplyTarget, editMessage, deleteMessage } from '../../lib/dm/store';
+import { scrollDmThreadToBottomIfNear } from './DmMessageList';
 import { isSingleEmoji } from '../../lib/dm/emoji';
 import { t } from '../../lib/i18n';
 import { PhArrowBendUpLeft, PhHeart, PhHeartFill, PhPencilSimple, PhPhoneCall, PhPhoneDisconnect, PhPhoneIncoming, PhPlus, PhTrash } from '../icons';
@@ -213,7 +214,7 @@ export function DmMessageGroup(props: {
                     fallback={<DmEmojiText text={props.message.content} />}
                   >
                     <div class="dm-msg-media-wrap">
-                      <Show when={mediaKind() === 'video'} fallback={<img class="dm-msg-media" src={mediaUrl()!} alt="" loading="lazy" />}>
+                      <Show when={mediaKind() === 'video'} fallback={<img class="dm-msg-media" src={mediaUrl()!} alt="" loading="lazy" onLoad={scrollDmThreadToBottomIfNear} />}>
                         <video class="dm-msg-media" controls preload="metadata" src={mediaUrl()!} />
                       </Show>
                       <Show when={favId()}>

@@ -27,11 +27,38 @@ export function scrollDmToBottom(el: HTMLDivElement) {
   el.scrollTop = el.scrollHeight;
 }
 
-/** Scrolls the mounted timeline (if any) to the newest message. */
+function isNearBottom(el: HTMLDivElement): boolean {
+  return el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_SNAP_MARGIN;
+}
+
+/**
+ * Scrolls the mounted timeline (if any) to the newest message. Runs a double
+ * requestAnimationFrame so media that loads after the message row is inserted
+ * (GIFs/images change the row height) can settle before the final position is
+ * computed — this lands at the true bottom instead of "almost at the bottom".
+ */
 export function scrollDmThreadToBottom() {
-  if (mountedScrollEl) {
-    mountedScrollEl.scrollTop = Math.max(0, mountedScrollEl.scrollHeight - mountedScrollEl.clientHeight);
-  }
+  const el = mountedScrollEl;
+  if (!el) return;
+  const tick = () => {
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+  };
+  tick();
+  requestAnimationFrame(tick);
+  requestAnimationFrame(() => requestAnimationFrame(tick));
+}
+
+/**
+ * Re-scrolls to the bottom only when the reader is already near it (used by
+ * media load events so a freshly sent GIF snaps closed instead of leaving a
+ * gap at the bottom of the timeline).
+ */
+export function scrollDmThreadToBottomIfNear() {
+  const el = mountedScrollEl;
+  if (!el || !isNearBottom(el)) return;
+  requestAnimationFrame(() => {
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+  });
 }
 
 /**
@@ -69,15 +96,20 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
     const count = list.length;
     const firstId = count ? list[0].id : null;
     const prepended = lastFirstId !== null && firstId !== null && firstId !== lastFirstId;
-    if (count > lastMessageCount && el && count > 0) {
-      if (shouldSnapToBottom) {
-        shouldSnapToBottom = false;
-        scrollDmThreadToBottom();
-      } else if (!prepended) {
-        const newestIsMine = isOwnMessage(list[count - 1], state.user?.id);
-        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_SNAP_MARGIN;
-        if (newestIsMine || nearBottom) scrollDmThreadToBottom();
-      }
+
+    if (!el || count === 0) {
+      lastMessageCount = count;
+      lastFirstId = firstId;
+      return;
+    }
+
+    if (shouldSnapToBottom) {
+      shouldSnapToBottom = false;
+      scrollDmThreadToBottom();
+    } else if (count > lastMessageCount && !prepended) {
+      const newestIsMine = isOwnMessage(list[count - 1], state.user?.id);
+      const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_SNAP_MARGIN;
+      if (newestIsMine || nearBottom) scrollDmThreadToBottom();
     }
     lastMessageCount = count;
     lastFirstId = firstId;
