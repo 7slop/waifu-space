@@ -162,4 +162,98 @@ describe('DmInputBar', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-reply-preview-cancel"]')!);
     expect(container.querySelector('[data-testid="dm-reply-preview"]')).not.toBeInTheDocument();
   });
+
+  it('shows a :name: autocomplete dropdown while typing a shortcode prefix', () => {
+    seedConv();
+    const { container } = render(() => <DmInputBar />);
+    const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
+    fireEvent.input(textarea, { target: { value: 'go :sun' } });
+    const ac = container.querySelector('[data-testid="dm-emoji-autocomplete"]');
+    expect(ac).toBeInTheDocument();
+    expect(ac!.textContent).toContain(':sunflower:');
+    expect(ac!.textContent).toContain(':sunglasses:');
+  });
+
+  it('hides the autocomplete when the text has no shortcode token', () => {
+    seedConv();
+    const { container } = render(() => <DmInputBar />);
+    const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
+    fireEvent.input(textarea, { target: { value: 'no shortcode here' } });
+    expect(container.querySelector('[data-testid="dm-emoji-autocomplete"]')).not.toBeInTheDocument();
+  });
+
+  it('clicking an autocomplete item inserts the :name: shortcode', () => {
+    seedConv();
+    const { container } = render(() => <DmInputBar />);
+    const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
+    fireEvent.input(textarea, { target: { value: ':glasses' } });
+    const item = container.querySelector('[data-testid="dm-emoji-ac-1"]') as HTMLElement;
+    expect(item).toBeInTheDocument();
+    expect(item.textContent).toContain(':sunglasses:');
+    fireEvent.click(item);
+    expect(textarea.value).toBe(':sunglasses:');
+    expect(container.querySelector('[data-testid="dm-emoji-autocomplete"]')).not.toBeInTheDocument();
+  });
+
+  it('Enter accepts the highlighted suggestion instead of sending', async () => {
+    seedConv();
+    let posted: any = null;
+    const restore = stubFetch({
+      '/api/dm/conversations/c1/messages': (url, init) => {
+        if (init.method === 'POST') {
+          posted = JSON.parse(String(init.body));
+          return { body: { success: true }, status: 201 };
+        }
+        return { body: { success: true, messages: [] } };
+      }
+    });
+    const { container } = render(() => <DmInputBar />);
+    const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
+    fireEvent.input(textarea, { target: { value: ':' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    await flush();
+    expect(posted).toBeNull();
+    expect(textarea.value).toBe(':sunglasses:');
+    expect(container.querySelector('[data-testid="dm-emoji-autocomplete"]')).not.toBeInTheDocument();
+    restore();
+  });
+
+  it('Escape closes the autocomplete dropdown', () => {
+    seedConv();
+    const { container } = render(() => <DmInputBar />);
+    const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
+    fireEvent.input(textarea, { target: { value: ':sun' } });
+    expect(container.querySelector('[data-testid="dm-emoji-autocomplete"]')).toBeInTheDocument();
+    fireEvent.keyDown(textarea, { key: 'Escape' });
+    expect(container.querySelector('[data-testid="dm-emoji-autocomplete"]')).not.toBeInTheDocument();
+    expect(textarea.value).toBe(':sun');
+  });
+
+  it('sending converts known :name: shortcodes into emoji', async () => {
+    seedConv();
+    let posted: any = null;
+    const restore = stubFetch({
+      '/api/dm/conversations/c1/messages': (url, init) => {
+        if (init.method === 'POST') {
+          posted = JSON.parse(String(init.body));
+          return {
+            body: {
+              success: true,
+              message: { id: 'm-new', conversationId: 'c1', senderId: 'u-me', content: posted.content, messageType: posted.messageType, mediaUrl: posted.mediaUrl, createdAt: '2025-01-03T00:00:00.000Z' }
+            },
+            status: 201
+          };
+        }
+        return { body: { success: true, messages: [] } };
+      }
+    });
+    const { container } = render(() => <DmInputBar />);
+    const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
+    fireEvent.input(textarea, { target: { value: 'chill :sunglasses: here' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    await flush();
+    expect(posted).toEqual({ content: 'chill 😎 here', messageType: 'text', mediaUrl: null, replyToId: null });
+    expect(dmState.messages.c1?.[0]?.content).toBe('chill 😎 here');
+    restore();
+  });
 });
