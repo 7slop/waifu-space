@@ -178,7 +178,7 @@ export function LootboxModal() {
             <span class="opening-spinner"><PhMagicWand /> {t('gacha.unlocking')}</span>
           ) : (
             <span>
-              {selectedChest() === 'standard' ? t('gacha.openSilver') : t('gacha.openRoyal')}
+              <PhCoins /> {selectedChest() === 'standard' ? t('gacha.openSilver') : t('gacha.openRoyal')}
             </span>
           )}
         </button>

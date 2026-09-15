@@ -4,22 +4,22 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 215, 0, 0.15);
-  border: 1px solid rgba(255, 215, 0, 0.45);
+  background: var(--accent-soft);
+  border: 1px solid var(--primary-accent);
   padding: 5px 12px;
-  border-radius: 20px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 700;
-  color: #ffe066;
+  color: var(--primary-accent);
   text-decoration: none;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .header-coin-pill:hover {
-  background: rgba(255, 215, 0, 0.25);
+  background: var(--surface-2);
   transform: translateY(-1px);
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  box-shadow: 0 2px 10px var(--primary-glow);
 }
 
 .rpg-hub-container {
@@ -207,21 +207,6 @@
   opacity: 0.75;
 }
 
-.gamemode-badge {
-  background: #38ef7d;
-  color: #000;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 6px;
-  text-transform: uppercase;
-}
-
-.gamemode-badge.soon {
-  background: rgba(255, 255, 255, 0.2);
-  color: var(--text-secondary);
-}
-
 .future-games-card {
   background: var(--surface-1);
   border: 1px dashed var(--border-color);
@@ -339,7 +324,7 @@
 
 .hp-fill {
   height: 100%;
-  background: linear-gradient(90deg, #ff4081, #e91e63);
+  background: var(--primary-accent);
   transition: width 0.3s ease;
 }
 
@@ -358,16 +343,15 @@
 }
 
 .btn-sakura-nova {
-  background: linear-gradient(135deg, #ff4081, #ff80ab);
+  background: var(--primary-accent);
   border: none;
-  color: #fff;
+  color: var(--accent-contrast);
   font-weight: 700;
   font-size: 12px;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 0 12px rgba(255, 64, 129, 0.4);
 }
 
 .btn-sakura-nova:disabled {
@@ -377,19 +361,35 @@
 }
 
 .btn-start-wave, .btn-retry {
-  background: linear-gradient(135deg, #4caf50, #81c784);
+  background: var(--success);
   border: none;
-  color: #fff;
+  color: var(--accent-contrast);
   font-weight: 700;
   font-size: 13px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .btn-retry {
-  background: linear-gradient(135deg, #f44336, #e57373);
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-primary {
+  background: var(--primary-accent);
+  border: none;
+  color: var(--accent-contrast);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
 }
 
 .canvas-container {
@@ -486,7 +486,7 @@
   margin: 14px 0;
   font-size: 15px;
   font-weight: 700;
-  color: #ffe082;
+  color: var(--primary-accent);
 }
 
 /* TOWER BUILDING DECK */
@@ -630,12 +630,12 @@
 }
 
 .btn-upgrade {
-  background: linear-gradient(135deg, #ffb300, #ff8f00);
+  background: var(--warning);
   border: none;
-  color: #000;
+  color: var(--accent-contrast);
   font-weight: 700;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
@@ -687,10 +687,10 @@
 }
 
 .lootbox-coin-display {
-  background: rgba(255, 215, 0, 0.1);
-  border: 1px solid rgba(255, 215, 0, 0.3);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-color);
   padding: 8px 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -703,7 +703,7 @@
 
 .coin-val {
   font-size: 18px;
-  color: #ffe066;
+  color: var(--primary-accent);
 }
 
 .chest-options-grid {
@@ -753,8 +753,8 @@
 }
 
 .royal-badge {
-  background: linear-gradient(135deg, #ffd700, #ff8f00);
-  color: #000;
+  background: linear-gradient(135deg, var(--primary-accent), var(--accent-mauve));
+  color: var(--accent-contrast);
 }
 
 .chest-icon {
@@ -778,27 +778,27 @@
 
 .chest-cost {
   font-size: 14px;
-  color: #ffe066;
+  color: var(--primary-accent);
 }
 
 .btn-open-chest {
-  background: linear-gradient(135deg, #ff69b4, #9c27b0);
+  background: var(--primary-accent);
   border: none;
-  color: #fff;
+  color: var(--accent-contrast);
   font-size: 16px;
   font-weight: 700;
   padding: 14px 32px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   margin: 0 auto;
   display: block;
-  box-shadow: 0 4px 20px rgba(255, 105, 180, 0.4);
+  box-shadow: var(--card-shadow);
   transition: all 0.2s ease;
 }
 
 .btn-open-chest:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(255, 105, 180, 0.6);
+  box-shadow: var(--card-shadow);
 }
 
 .btn-open-chest:disabled {
@@ -894,12 +894,12 @@
 }
 
 .btn-equip-revealed {
-  background: linear-gradient(135deg, #4caf50, #81c784);
+  background: var(--success);
   border: none;
-  color: #fff;
+  color: var(--accent-contrast);
   font-weight: 700;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
@@ -1095,10 +1095,10 @@
 .tag-coin {
   font-size: 11px;
   font-weight: 600;
-  background: rgba(255, 215, 0, 0.15);
-  color: #ffe066;
+  background: var(--accent-soft);
+  color: var(--primary-accent);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .tag-cosmetic {
@@ -1111,12 +1111,12 @@
 }
 
 .btn-claim {
-  background: linear-gradient(135deg, #ff4081, #ff80ab);
+  background: var(--primary-accent);
   border: none;
-  color: #fff;
+  color: var(--accent-contrast);
   font-weight: 700;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   animation: pulse 1.5s infinite;
 }
@@ -1334,12 +1334,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 215, 0, 0.12);
-  border: 1px solid rgba(255, 215, 0, 0.35);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-color);
   padding: 8px 16px;
-  border-radius: 20px;
+  border-radius: var(--radius-md);
   font-size: 13px;
-  color: #ffe066;
+  color: var(--primary-accent);
 }
 
 /* SHOWCASE SECTION */
@@ -1592,9 +1592,9 @@
 }
 
 .btn-toggle-showcase.active {
-  background: rgba(255, 215, 0, 0.2);
-  border-color: #ffd700;
-  color: #ffe066;
+  background: var(--accent-soft);
+  border-color: var(--primary-accent);
+  color: var(--primary-accent);
 }
 
 .empty-inventory-notice {
@@ -1667,11 +1667,13 @@
 }
 
 .btn-stay {
-  background: linear-gradient(135deg, #4caf50, #81c784);
+  background: var(--success);
+  color: var(--accent-contrast);
 }
 
 .btn-leave {
-  background: linear-gradient(135deg, #f44336, #e57373);
+  background: var(--danger);
+  color: #fff;
 }
 
 /* RESPONSIVE */
