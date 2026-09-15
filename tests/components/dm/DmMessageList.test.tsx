@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import { DmMessageList } from '../../../src/components/dm/DmMessageList';
 import { dmState, setDmState } from '../../../src/lib/dm/store';
-import { resetForDmTests } from '../../dm-helpers';
+import { resetForDmTests, flush } from '../../dm-helpers';
 import type { DmMessage } from '../../../src/lib/dm/types';
 
 const mk = (id: string, senderId: string, createdAt: string, content = 'hi'): DmMessage => ({
@@ -86,5 +86,87 @@ describe('DmMessageList', () => {
     setDmState('hasOlder', 'c1', true);
     const { container } = render(() => <DmMessageList />);
     expect(container.querySelector('[data-testid="dm-load-older"]')).toBeInTheDocument();
+  });
+});
+
+describe('DmMessageList auto-scroll (issue B)', () => {
+  beforeEach(() => {
+    cleanup();
+    resetForDmTests();
+  });
+
+  const defineGeometry = (el: HTMLElement, scrollHeight: number, clientHeight = 200) => {
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, value: scrollHeight });
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: clientHeight });
+  };
+
+  it('snaps to the bottom when a conversation opens with messages', async () => {
+    const { container } = render(() => <DmMessageList />);
+    const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
+    defineGeometry(list, 700);
+    setDmState('activeConversationId', 'c1');
+    setDmState('messages', { ...dmState.messages, c1: [mk('m1', 'u-bob', '2025-01-01T10:00:00.000Z')] });
+    await flush();
+    expect(list.scrollTop).toBe(500);
+  });
+
+  it('stays pinned to the bottom as messages arrive while the reader is at the bottom', async () => {
+    seed([mk('m1', 'u-bob', '2025-01-01T10:00:00.000Z')]);
+    const { container } = render(() => <DmMessageList />);
+    const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
+    defineGeometry(list, 700);
+    list.scrollTop = 500;
+    defineGeometry(list, 800);
+    setDmState('messages', {
+      ...dmState.messages,
+      c1: [...dmState.messages.c1!, mk('m2', 'u-bob', '2025-01-01T10:01:00.000Z')]
+    });
+    await flush();
+    expect(list.scrollTop).toBe(600);
+  });
+
+  it('does not yank the viewport when a new message lands while scrolled into history', async () => {
+    seed([mk('m1', 'u-bob', '2025-01-01T10:00:00.000Z'), mk('m2', 'u-bob', '2025-01-01T10:01:00.000Z')]);
+    const { container } = render(() => <DmMessageList />);
+    const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
+    defineGeometry(list, 1000);
+    list.scrollTop = 100;
+    defineGeometry(list, 1100);
+    setDmState('messages', {
+      ...dmState.messages,
+      c1: [...dmState.messages.c1!, mk('m3', 'u-bob', '2025-01-01T10:02:00.000Z')]
+    });
+    await flush();
+    expect(list.scrollTop).toBe(100);
+  });
+
+  it('scrolls to your own sent message even when scrolled into history', async () => {
+    seed([mk('m1', 'u-bob', '2025-01-01T10:00:00.000Z'), mk('m2', 'u-bob', '2025-01-01T10:01:00.000Z')]);
+    const { container } = render(() => <DmMessageList />);
+    const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
+    defineGeometry(list, 1000);
+    list.scrollTop = 0;
+    defineGeometry(list, 1100);
+    setDmState('messages', {
+      ...dmState.messages,
+      c1: [...dmState.messages.c1!, mk('m3', 'u-me', '2025-01-01T10:02:00.000Z')]
+    });
+    await flush();
+    expect(list.scrollTop).toBe(900);
+  });
+
+  it('does not scroll when older history is prepended (load-more)', async () => {
+    seed([mk('m1', 'u-bob', '2025-01-01T10:00:00.000Z'), mk('m2', 'u-bob', '2025-01-01T10:01:00.000Z')]);
+    const { container } = render(() => <DmMessageList />);
+    const list = container.querySelector('[data-testid="dm-messages"]') as HTMLDivElement;
+    defineGeometry(list, 1000);
+    list.scrollTop = 800;
+    defineGeometry(list, 1200);
+    setDmState('messages', {
+      ...dmState.messages,
+      c1: [mk('m0', 'u-bob', '2024-12-31T23:00:00.000Z'), ...dmState.messages.c1!]
+    });
+    await flush();
+    expect(list.scrollTop).toBe(800);
   });
 });

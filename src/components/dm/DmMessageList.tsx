@@ -1,4 +1,4 @@
-import { createMemo, For, Show } from 'solid-js';
+import { createEffect, createMemo, For, Show } from 'solid-js';
 import { state } from '../../lib/store';
 import { dmState, loadOlder } from '../../lib/dm/store';
 import { formatDayDivider, isOwnMessage } from '../../lib/dm/api';
@@ -16,9 +16,22 @@ interface Row {
 
 const GROUPING_MS = 5 * 60 * 1000;
 
+/** Distance (px) from the bottom under which new messages still snap to the latest. */
+const SCROLL_SNAP_MARGIN = 120;
+
+/** The currently mounted message timeline, driven by scrollDmThreadToBottom(). */
+let mountedScrollEl: HTMLDivElement | null = null;
+
 /** Scrolls a conversation's message view to the newest message. */
 export function scrollDmToBottom(el: HTMLDivElement) {
   el.scrollTop = el.scrollHeight;
+}
+
+/** Scrolls the mounted timeline (if any) to the newest message. */
+export function scrollDmThreadToBottom() {
+  if (mountedScrollEl) {
+    mountedScrollEl.scrollTop = Math.max(0, mountedScrollEl.scrollHeight - mountedScrollEl.clientHeight);
+  }
 }
 
 /**
@@ -30,6 +43,45 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
   const convId = () => dmState.activeConversationId;
   const messages = () => dmState.messages[convId() ?? ''] ?? [];
   const otherUser = () => dmState.conversations.find((c) => c.id === convId())?.otherUser;
+
+  // --- Auto-scroll (issue B) ---
+  let lastConvId: string | null = null;
+  let lastMessageCount = 0;
+  let lastFirstId: string | null = null;
+  let shouldSnapToBottom = false;
+
+  // Opening a conversation always snaps to the newest message.
+  createEffect(() => {
+    const id = convId();
+    if (id !== lastConvId) {
+      lastConvId = id;
+      lastMessageCount = 0;
+      lastFirstId = null;
+      shouldSnapToBottom = true;
+    }
+  });
+
+  // New messages snap when the newest one is ours, or when the reader is near
+  // the bottom. Prepending older history (load-more) never yanks the viewport.
+  createEffect(() => {
+    const el = mountedScrollEl;
+    const list = messages();
+    const count = list.length;
+    const firstId = count ? list[0].id : null;
+    const prepended = lastFirstId !== null && firstId !== null && firstId !== lastFirstId;
+    if (count > lastMessageCount && el && count > 0) {
+      if (shouldSnapToBottom) {
+        shouldSnapToBottom = false;
+        scrollDmThreadToBottom();
+      } else if (!prepended) {
+        const newestIsMine = isOwnMessage(list[count - 1], state.user?.id);
+        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_SNAP_MARGIN;
+        if (newestIsMine || nearBottom) scrollDmThreadToBottom();
+      }
+    }
+    lastMessageCount = count;
+    lastFirstId = firstId;
+  });
 
   const rows = createMemo<Row[]>(() => {
     const list = messages();
@@ -62,7 +114,7 @@ export function DmMessageList(props?: { onAuthorClick?: (senderId: string, el: H
     isOwnMessage(msg, state.user?.id) ? state.user?.avatarUrl : otherUser()?.avatarUrl;
 
   return (
-    <div class="dm-messages" data-testid="dm-messages">
+    <div class="dm-messages" data-testid="dm-messages" ref={(el) => (mountedScrollEl = el)}>
       <Show when={messages().length === 0}>
         <div class="dm-no-messages">{t('dm.noMessages')}</div>
       </Show>
