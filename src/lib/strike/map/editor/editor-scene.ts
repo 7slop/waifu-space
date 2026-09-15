@@ -716,13 +716,23 @@ export class StrikeMapEditorController {
     if (!this.snapToGroundEnabled) return point.clone();
     const p = point.clone();
     const excludeId = excludeRoot ? this.resolveIdOf(excludeRoot) : null;
+    const lightIds = new Set(this.layout.lights.map((l) => l.id));
     try {
       const ray = new Ray(new Vector3(p.x, p.y + 400, p.z), new Vector3(0, -1, 0), 800);
       const pick = this.scene.pickWithRay(ray, (m) => {
+        // Babylon skips the isPickable check whenever a predicate is supplied,
+        // so explicitly drop non-pickable scene dressing (sky dome, clouds,
+        // hills, Mount Fuji, editor grid) — otherwise the snap ray hits the
+        // sky box hundreds of metres above the actual ground.
+        if (!m.isPickable) return false;
+        const meta = m.metadata as { editorId?: string; spawnIndex?: number } | undefined;
+        // Skip editor-only pickable helpers (spawn disks/arrows, light markers)
+        // so objects rest on real geometry, not on gizmo representations.
+        if (typeof meta?.spawnIndex === 'number') return false;
+        if (typeof meta?.editorId === 'string' && lightIds.has(meta.editorId)) return false;
         // Don't snap an object onto its own meshes (root + component children).
         if (excludeRoot && m === excludeRoot) return false;
         if (excludeId) {
-          const meta = m.metadata as { editorId?: string } | undefined;
           if (meta && meta.editorId === excludeId) return false;
         }
         return true;
@@ -1244,6 +1254,10 @@ export class StrikeMapEditorController {
         this.canvas.clientWidth / 2,
         this.canvas.clientHeight / 2,
         (m) => {
+          // Same as snapToGroundPoint: predicates disable Babylon's built-in
+          // isPickable filtering, so exclude non-pickable dressing (sky dome,
+          // clouds, hills, editor grid) from the center-screen projection.
+          if (!m.isPickable) return false;
           const meta = m.metadata as { editorId?: string; spawnIndex?: number } | undefined;
           return !meta;
         }
