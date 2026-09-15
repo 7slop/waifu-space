@@ -42,7 +42,7 @@ describe('DmProfilePopover', () => {
     restore();
   });
 
-  it('closes when the scrim or close button is clicked', () => {
+  it('closes on escape, the close button, or an outside pointer down', () => {
     let closed = false;
     const { container } = render(() => (
       <DmProfilePopover userId="u-bob" anchor={() => rect(120, 200)} onClose={() => { closed = true; }} />
@@ -51,8 +51,12 @@ describe('DmProfilePopover', () => {
     expect(closed).toBe(true);
     closed = false;
     render(() => <DmProfilePopover userId="u-bob" anchor={() => rect(120, 200)} onClose={() => { closed = true; }} />, { container });
-    fireEvent.click(container.querySelector('[data-testid="dm-profile-scrim"]')!);
+    fireEvent.pointerDown(document.body);
     expect(closed).toBe(true);
+    closed = false;
+    render(() => <DmProfilePopover userId="u-bob" anchor={() => rect(120, 200)} onClose={() => { closed = true; }} />, { container });
+    fireEvent.pointerDown(container.querySelector('[data-testid="dm-profile-popover"]')!);
+    expect(closed).toBe(false);
   });
 
   it('flips above the anchor when there is little space below', async () => {

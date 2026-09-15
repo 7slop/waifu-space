@@ -1314,13 +1314,6 @@
 
 /* Profile popover ---------------------------------------------------------- */
 
-.dm-popover-scrim {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  z-index: 70;
-}
-
 .dm-dismiss-overlay {
   position: fixed;
   inset: 0;

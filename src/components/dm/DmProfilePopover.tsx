@@ -56,23 +56,27 @@ export function DmProfilePopover(props: { userId: string; anchor: () => DOMRect 
     if (e.key === 'Escape') props.onClose();
   };
 
+  const onPointerDown = (e: PointerEvent) => {
+    if (!(e.target as Element | null)?.closest('.dm-profile-popover')) props.onClose();
+  };
+
   onMount(() => {
     recompute();
     window.addEventListener('resize', recompute);
     window.addEventListener('scroll', recompute, true);
     document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
   });
 
   onCleanup(() => {
     window.removeEventListener('resize', recompute);
     window.removeEventListener('scroll', recompute, true);
     document.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('pointerdown', onPointerDown);
   });
 
   return (
-    <>
-      <div class="dm-popover-scrim" data-testid="dm-profile-scrim" onClick={props.onClose} />
-      <section
+    <section
         class="dm-profile-popover"
         data-testid="dm-profile-popover"
         role="dialog"
@@ -118,7 +122,6 @@ export function DmProfilePopover(props: { userId: string; anchor: () => DOMRect 
           </div>
         </Show>
       </section>
-    </>
   );
 }
 
