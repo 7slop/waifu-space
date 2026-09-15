@@ -3,6 +3,8 @@ import {
   Scene,
   ArcRotateCamera,
   Vector3,
+  Ray,
+  Plane,
   Color3,
   Color4,
   AbstractMesh,
@@ -112,7 +114,21 @@ export const COMPONENT_PARAM_SPECS: Record<
   parkBench: {},
   storeSign: {
     glyph: { type: 'choice', label: 'Sign text', default: '茶', choices: ['茶', '酒', '食', '花', '店', '石'] }
-  }
+  },
+  fountain: { tiers: { type: 'number', label: 'Tiers', default: 3 } },
+  flowerPot: { size: { type: 'number', label: 'Size', default: 1 } },
+  bambooWaterFeature: {},
+  rockGarden: { scale: { type: 'number', label: 'Scale', default: 1 } },
+  stonePath: { length: { type: 'number', label: 'Length', default: 5 } },
+  windChime: {},
+  stoneArch: { scale: { type: 'number', label: 'Scale', default: 1 } },
+  pagoda: { tiers: { type: 'number', label: 'Tiers', default: 3 } },
+  shrineTable: {},
+  bannerPole: {
+    color: { type: 'choice', label: 'Banner color', default: 'red', choices: ['red', 'white'] }
+  },
+  pathMarker: {},
+  ornamentalBridge: { span: { type: 'number', label: 'Span', default: 4 } }
 };
 
 /** Camera fly speed in meters/second (Shift triples it). */
@@ -150,6 +166,8 @@ export class StrikeMapEditorController {
   snapEnabled = true;
   translateSnap = 0.5;
   rotateSnap = Math.PI / 12; // 15°
+  /** When true, objects rest on the surface below them when moved/placed. */
+  snapToGroundEnabled = true;
 
   onChange?: () => void;
 
@@ -163,6 +181,16 @@ export class StrikeMapEditorController {
   private lockedSel: string | null = null;
 
   onGizmoMode: 'translate' | 'rotate' | 'scale' = 'translate';
+
+  /** Active shift+drag "move to cursor" gesture (null when idle). */
+  private dragMove: {
+    pointerId: number;
+    objectId: string;
+    offsetX: number;
+    offsetZ: number;
+    startHeight: number;
+    moved: boolean;
+  } | null = null;
 
   // History snapshots are serialized layouts captured *before* each mutation,
   // so undo() can cold-swap the working layout and rebuild the scene.
@@ -247,6 +275,12 @@ export class StrikeMapEditorController {
 
     this.applyGizmoMode(this.onGizmoMode);
     this.applySnap();
+
+    // Shift+drag object-to-cursor movement (only meaningful in translate mode).
+    this.canvas.addEventListener('pointerdown', this.onPointerDown);
+    this.canvas.addEventListener('pointermove', this.onPointerMove);
+    this.canvas.addEventListener('pointerup', this.onPointerUp);
+    this.canvas.addEventListener('pointercancel', this.onPointerCancel);
 
     // Picking: select objects/lights/spawns, clear on empty left-click.
     this.scene.onPointerObservable.add((evt) => {
@@ -360,6 +394,162 @@ export class StrikeMapEditorController {
     this.camera.radius = 70;
     this.camera.target = new Vector3(0, 4, 0);
     this.onChange?.();
+  }
+
+  // ── Shift+drag object-to-cursor movement ────────────────────────────────
+
+  /** Pointer position relative to the canvas (matches Babylon's pick coords). */
+  private canvasPoint(e: PointerEvent): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  /** Intersects a picking ray with the horizontal plane at `height`. */
+  private rayPlaneHit(ray: Ray, height: number): Vector3 | null {
+    const dist = ray.intersectsPlane(new Plane(0, 1, 0, -height));
+    if (dist === null || dist === undefined || dist < 0) return null;
+    return ray.origin.add(ray.direction.scale(dist));
+  }
+
+  /** Picks an editable layout object at the given canvas coordinates. */
+  private pickEditableObjectAt(x: number, y: number): string | null {
+    const pick = this.scene.pick(
+      x,
+      y,
+      (m) => {
+        if (!m.isPickable) return false;
+        const meta = m.metadata as { editorId?: string } | undefined;
+        return !!meta && typeof meta.editorId === 'string';
+      },
+      false,
+      this.camera
+    );
+    if (!pick?.pickedMesh) return null;
+    const meta = pick.pickedMesh.metadata as { editorId?: string } | undefined;
+    return meta?.editorId ?? null;
+  }
+
+  /**
+   * Shift + left-drag on an editable object (translate mode) grabs the object
+   * and moves it to follow the cursor across the world, snapping to the
+   * ground or the top of other objects when snap-to-ground is enabled.
+   */
+  private onPointerDown = (e: PointerEvent) => {
+    if (this.dragMove) return;
+    if (e.button !== 0 || !e.shiftKey) return;
+    if (this.onGizmoMode !== 'translate') return;
+    if (this.gizmo.isDragging) return;
+
+    const { x, y } = this.canvasPoint(e);
+    const editorId = this.pickEditableObjectAt(x, y);
+    if (!editorId) return;
+    const obj = this.layout.objects.find((o) => o.id === editorId);
+    if (!obj || obj.locked) return;
+    const control = this.controlOf.get(editorId);
+    if (!control) return;
+
+    this.selectById(editorId);
+    const hit = this.rayPlaneHit(this.scene.createPickingRayInCameraSpace(x, y, this.camera), control.position.y);
+    if (!hit) return;
+
+    this.dragMove = {
+      pointerId: e.pointerId,
+      objectId: editorId,
+      offsetX: control.position.x - hit.x,
+      offsetZ: control.position.z - hit.z,
+      startHeight: control.position.y,
+      moved: false
+    };
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer may have already been released */
+    }
+  };
+
+  private onPointerMove = (e: PointerEvent) => {
+    if (!this.dragMove || e.pointerId !== this.dragMove.pointerId) return;
+    // If a gizmo axis drag grabbed the same pointer (shift held near an axis),
+    // let the gizmo win — it constrains movement along that axis.
+    if (this.gizmo.isDragging || this.gizmo.gizmos.positionGizmo?.isDragging) {
+      this.cancelDragMove();
+      return;
+    }
+
+    const dm = this.dragMove;
+    const control = this.controlOf.get(dm.objectId);
+    if (!control) {
+      this.cancelDragMove();
+      return;
+    }
+
+    const { x, y } = this.canvasPoint(e);
+    const hit = this.rayPlaneHit(this.scene.createPickingRayInCameraSpace(x, y, this.camera), dm.startHeight);
+    if (!hit) return;
+
+    let px = hit.x + dm.offsetX;
+    let pz = hit.z + dm.offsetZ;
+    if (this.snapEnabled) {
+      px = Math.round(px / this.translateSnap) * this.translateSnap;
+      pz = Math.round(pz / this.translateSnap) * this.translateSnap;
+    }
+
+    if (!dm.moved) this.recordHistory();
+    dm.moved = true;
+
+    control.position.x = px;
+    control.position.z = pz;
+    if (this.snapToGroundEnabled) {
+      control.position.y = this.snapToGroundPoint(new Vector3(px, dm.startHeight, pz), control).y;
+    } else {
+      control.position.y = dm.startHeight;
+    }
+
+    const obj = this.layout.objects.find((o) => o.id === dm.objectId);
+    if (obj) obj.position = [control.position.x, control.position.y, control.position.z];
+    this.dirty = true;
+  };
+
+  private onPointerUp = (e: PointerEvent) => {
+    if (!this.dragMove || e.pointerId !== this.dragMove.pointerId) return;
+    const dm = this.dragMove;
+    this.dragMove = null;
+    try {
+      if (this.canvas.hasPointerCapture(dm.pointerId)) this.canvas.releasePointerCapture(dm.pointerId);
+    } catch {
+      /* ignore */
+    }
+    if (!dm.moved) return;
+    const control = this.controlOf.get(dm.objectId);
+    if (!control) return;
+    const obj = this.layout.objects.find((o) => o.id === dm.objectId);
+    if (!obj) return;
+    obj.position = [control.position.x, control.position.y, control.position.z];
+    if (obj.kind === 'component') {
+      (obj as { scale: [number, number, number] }).scale = [
+        control.scaling.x,
+        control.scaling.y,
+        control.scaling.z
+      ];
+    }
+    this.dirty = true;
+    this.onChange?.();
+  };
+
+  private onPointerCancel = (e: PointerEvent) => {
+    if (!this.dragMove || e.pointerId !== this.dragMove.pointerId) return;
+    this.cancelDragMove();
+  };
+
+  private cancelDragMove(): void {
+    if (!this.dragMove) return;
+    const pointerId = this.dragMove.pointerId;
+    this.dragMove = null;
+    try {
+      if (this.canvas.hasPointerCapture(pointerId)) this.canvas.releasePointerCapture(pointerId);
+    } catch {
+      /* ignore */
+    }
   }
 
   // ── Scene assembly ───────────────────────────────────────────────────────
@@ -685,6 +875,48 @@ export class StrikeMapEditorController {
     this.applySnap();
   }
 
+  setSnapToGround(enabled: boolean): void {
+    this.snapToGroundEnabled = enabled;
+    this.onChange?.();
+  }
+
+  /**
+   * Raycasts straight down from a point and returns the surface below,
+   * so an object can be dropped onto the ground — or onto whatever object
+   * / platform happens to be underneath it.
+   */
+  private snapToGroundPoint(point: Vector3, excludeRoot?: AbstractMesh): Vector3 {
+    if (!this.snapToGroundEnabled) return point.clone();
+    const p = point.clone();
+    const excludeId = excludeRoot ? this.resolveIdOf(excludeRoot) : null;
+    const lightIds = new Set(this.layout.lights.map((l) => l.id));
+    try {
+      const ray = new Ray(new Vector3(p.x, p.y + 400, p.z), new Vector3(0, -1, 0), 800);
+      const pick = this.scene.pickWithRay(ray, (m) => {
+        // Babylon skips the isPickable check whenever a predicate is supplied,
+        // so explicitly drop non-pickable scene dressing (sky dome, clouds,
+        // hills, Mount Fuji, editor grid) — otherwise the snap ray hits the
+        // sky box hundreds of metres above the actual ground.
+        if (!m.isPickable) return false;
+        const meta = m.metadata as { editorId?: string; spawnIndex?: number } | undefined;
+        // Skip editor-only pickable helpers (spawn disks/arrows, light markers)
+        // so objects rest on real geometry, not on gizmo representations.
+        if (typeof meta?.spawnIndex === 'number') return false;
+        if (typeof meta?.editorId === 'string' && lightIds.has(meta.editorId)) return false;
+        // Don't snap an object onto its own meshes (root + component children).
+        if (excludeRoot && m === excludeRoot) return false;
+        if (excludeId) {
+          if (meta && meta.editorId === excludeId) return false;
+        }
+        return true;
+      });
+      if (pick?.pickedPoint) p.y = pick.pickedPoint.y;
+    } catch {
+      /* fall through — keep the current height */
+    }
+    return p;
+  }
+
   setTranslateSnap(step: number): void {
     this.translateSnap = step;
     if (this.snapEnabled) this.applySnap();
@@ -753,6 +985,14 @@ export class StrikeMapEditorController {
       control.rotation.z = Math.round(control.rotation.z / this.rotateSnap) * this.rotateSnap;
     }
 
+    if (this.snapToGroundEnabled) {
+      const snapped = this.snapToGroundPoint(control.position, control);
+      if (this.snapEnabled) {
+        snapped.y = Math.round(snapped.y / this.translateSnap) * this.translateSnap;
+      }
+      control.position.y = snapped.y;
+    }
+
     obj.position = [control.position.x, control.position.y, control.position.z];
     obj.rotation = [control.rotation.x, control.rotation.y, control.rotation.z];
     if (obj.kind === 'component') {
@@ -777,6 +1017,7 @@ export class StrikeMapEditorController {
   addBox(): void {
     this.recordHistory();
     const id = nextEditorId(this.layout);
+    const projected = this.snapToGroundPoint(this.projectOnGround());
     const box: MapBoxObject = {
       id,
       name: `Box_${id}`,
@@ -784,7 +1025,7 @@ export class StrikeMapEditorController {
       w: 2,
       h: 2,
       d: 2,
-      position: [0, 1, 0],
+      position: [projected.x, projected.y + 1, projected.z],
       rotation: [0, 0, 0],
       material: 'plaster',
       collidable: true
@@ -800,8 +1041,9 @@ export class StrikeMapEditorController {
     if (!def) return;
     this.recordHistory();
     const position: [number, number, number] = [0, 0, 0];
-    const projected = this.projectOnGround();
+    const projected = this.snapToGroundPoint(this.projectOnGround());
     position[0] = projected.x;
+    position[1] = projected.y;
     position[2] = projected.z;
     const obj = createComponentObject(componentId, def.label, position);
     this.layout.objects.push(obj);
@@ -1185,6 +1427,10 @@ export class StrikeMapEditorController {
         this.canvas.clientWidth / 2,
         this.canvas.clientHeight / 2,
         (m) => {
+          // Same as snapToGroundPoint: predicates disable Babylon's built-in
+          // isPickable filtering, so exclude non-pickable dressing (sky dome,
+          // clouds, hills, editor grid) from the center-screen projection.
+          if (!m.isPickable) return false;
           const meta = m.metadata as { editorId?: string; spawnIndex?: number } | undefined;
           return !meta;
         }
@@ -1236,6 +1482,10 @@ export class StrikeMapEditorController {
     this.engine.stopRenderLoop();
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp);
+    this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
     this.gizmo.dispose();
     this.canvas.style.cursor = 'default';
     this.canvas.removeEventListener('contextmenu', this.onContextMenu);

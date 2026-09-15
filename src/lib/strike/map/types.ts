@@ -54,6 +54,10 @@ export interface MapMaterials {
   bamboo: StandardMaterial;
   neonPink: StandardMaterial;
   neonCyan: StandardMaterial;
+  water: StandardMaterial;
+  ceramic: StandardMaterial;
+  moss: StandardMaterial;
+  metal: StandardMaterial;
 }
 
 export interface PointLightOptions {
