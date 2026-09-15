@@ -56,7 +56,13 @@ export function DmChatPanel() {
           </button>
 
           <div class="dm-chat-actions">
-            <button class="dm-call-btn" data-testid="dm-call-voice" title={t('dm.callVoice')} onClick={() => void startCall('voice')}>
+            <button
+              class="dm-call-btn"
+              data-testid="dm-call-voice"
+              title={t('dm.callVoice')}
+              disabled={dmState.call !== null || dmState.incomingCall !== null}
+              onClick={() => void startCall('voice')}
+            >
               <PhPhoneCall />
             </button>
           </div>
