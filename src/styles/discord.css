@@ -1602,8 +1602,7 @@
   transition: opacity 0.12s ease;
 }
 
-.dm-msg:hover .dm-msg-fav-btn,
-.dm-msg-fav-btn.favorited {
+.dm-msg:hover .dm-msg-fav-btn {
   opacity: 1;
 }
 
