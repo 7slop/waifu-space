@@ -1,4 +1,4 @@
-import { dmState, setOwnPresence, heartbeatPresence } from './store';
+import { dmState, setOwnPresenceAuto, heartbeatPresence, isAutoPresence } from './store';
 import type { PresenceStatus } from './types';
 
 const IDLE_MS = 5 * 60 * 1000;
@@ -24,6 +24,7 @@ function getVisibility(): boolean {
  *  - heartbeat every 45 seconds while the page is visible, so the server
  *    can treat stale presence rows as offline.
  *
+ * The auto monitor only drives the machine while the user is online; idle,
  * DND and invisible statuses are never touched by the auto monitor.
  */
 export function startPresenceAutoDetect(opts?: { idleMs?: number; heartbeatMs?: number; evalMs?: number }): PresenceAutoDetectHandle {
@@ -45,16 +46,19 @@ export function startPresenceAutoDetect(opts?: { idleMs?: number; heartbeatMs?: 
 
   const isAutoManaged = (): boolean => {
     const s = dmState.myPresence?.status;
-    return s === 'online' || s === 'idle';
+    // Only drive statuses the auto monitor itself produced, plus a plain
+    // "online" the user chose. A manually-set idle/dnd/invisible is never
+    // touched (Poke never bumps a manual idle back to online).
+    return s === 'online' || (s === 'idle' && isAutoPresence());
   };
 
   const flush = async () => {
     if (stopped || flushing) return;
     if (!visible) {
       const s = dmState.myPresence?.status;
-      if (s && s !== 'offline' && s !== 'invisible') {
+      if (s === 'online' || (s === 'idle' && isAutoPresence())) {
         flushing = true;
-        await setOwnPresence('offline', dmState.myPresence?.customStatus ?? null);
+        await setOwnPresenceAuto('offline', dmState.myPresence?.customStatus ?? null);
         flushing = false;
       }
       return;
@@ -63,7 +67,7 @@ export function startPresenceAutoDetect(opts?: { idleMs?: number; heartbeatMs?: 
     const target: PresenceStatus = Date.now() - lastActivity >= idleMs ? 'idle' : 'online';
     if (target !== dmState.myPresence?.status) {
       flushing = true;
-      await setOwnPresence(target, dmState.myPresence?.customStatus ?? null);
+      await setOwnPresenceAuto(target, dmState.myPresence?.customStatus ?? null);
       flushing = false;
     }
   };

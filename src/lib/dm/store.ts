@@ -119,6 +119,8 @@ interface DmRuntime {
   pendingAccept: PendingIncomingCall | null;
   mutedBeforeDeafen: boolean;
   lastTypingEmit: number;
+  /** Whether the last presence write came from the auto monitor. */
+  presenceOrigin: 'auto' | 'manual';
 }
 
 const runtime: DmRuntime = {
@@ -127,7 +129,8 @@ const runtime: DmRuntime = {
   call: null,
   pendingAccept: null,
   mutedBeforeDeafen: false,
-  lastTypingEmit: 0
+  lastTypingEmit: 0,
+  presenceOrigin: 'manual'
 };
 
 const INITIAL: DmStoreState = {
@@ -598,6 +601,7 @@ export function emitTyping(): void {
 export async function setOwnPresence(status: PresenceStatus, customStatus?: string | null): Promise<void> {
   const auth = currentAuth();
   if (!auth) return;
+  runtime.presenceOrigin = 'manual';
   try {
     const presence = await setMyPresenceRequest(auth.token, status, customStatus);
     setDmState('myPresence', presence);
@@ -612,6 +616,37 @@ export async function setOwnPresence(status: PresenceStatus, customStatus?: stri
   } catch {
     setDmState('error', 'Could not update status');
   }
+}
+
+/**
+ * Marks an automatic presence update (online->idle / online->offline) coming
+ * from the presence auto-monitor so the store knows the current status was not
+ * chosen by the user. Writes follow the same path as `setOwnPresence` but the
+ * `presenceOrigin` stays 'auto'.
+ */
+export async function setOwnPresenceAuto(status: PresenceStatus, customStatus?: string | null): Promise<void> {
+  const auth = currentAuth();
+  if (!auth) return;
+  runtime.presenceOrigin = 'auto';
+  try {
+    const presence = await setMyPresenceRequest(auth.token, status, customStatus);
+    setDmState('myPresence', presence);
+    void runtime.realtime?.trackPresence({
+      userId: auth.id,
+      username: auth.username,
+      avatar: auth.avatarUrl,
+      status: visibleFromStored(status),
+      customStatus: customStatus ?? undefined,
+      at: Date.now()
+    });
+  } catch {
+    setDmState('error', 'Could not update status');
+  }
+}
+
+/** Whether the last presence write was automatic (drives the auto monitor's gating). */
+export function isAutoPresence(): boolean {
+  return runtime.presenceOrigin === 'auto';
 }
 
 /** Refreshes the last-seen timestamp on the server without changing the stored status. */
