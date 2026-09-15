@@ -1,9 +1,9 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { isOwnMessage, mediaSourceOf, gifKeyOfUrl, formatMessageTime, MediaKind } from '../../lib/dm/api';
 import { dmState, gifToggleFavoriteByUrl, isGifFavorited, toggleReaction, setReplyTarget, editMessage, deleteMessage } from '../../lib/dm/store';
-import { QUICK_REACTIONS, isSingleEmoji } from '../../lib/dm/emoji';
+import { isSingleEmoji } from '../../lib/dm/emoji';
 import { t } from '../../lib/i18n';
-import { PhArrowBendUpLeft, PhHeart, PhHeartFill, PhPencilSimple, PhPhoneCall, PhPhoneDisconnect, PhPhoneIncoming, PhPlus, PhSmiley, PhTrash } from '../icons';
+import { PhArrowBendUpLeft, PhHeart, PhHeartFill, PhPencilSimple, PhPhoneCall, PhPhoneDisconnect, PhPhoneIncoming, PhPlus, PhTrash } from '../icons';
 import { DmAvatar } from './DmAvatar';
 import { DmEmojiText, EmojiGlyph } from './DmEmojiText';
 import { EmojiPicker } from './EmojiPicker';
@@ -55,7 +55,6 @@ export function DmMessageGroup(props: {
   const mediaUrl = (): string | null => media()?.url ?? null;
   const favId = (): string | null => mediaUrl() ? gifKeyOfUrl(mediaUrl()!) : null;
 
-  const [addOpen, setAddOpen] = createSignal(false);
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [menu, setMenu] = createSignal<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = createSignal(false);
@@ -63,10 +62,7 @@ export function DmMessageGroup(props: {
 
   const closePopups = (e: PointerEvent) => {
     const el = e.target as HTMLElement | null;
-    if (!el || !el.closest('.dm-reaction-add-anchor')) {
-      setAddOpen(false);
-      setPickerOpen(false);
-    }
+    if (!el || !el.closest('.dm-reaction-add-anchor')) setPickerOpen(false);
     if (!el || !el.closest('.dm-msg-menu')) setMenu(null);
   };
 
@@ -115,7 +111,6 @@ export function DmMessageGroup(props: {
 
   const react = (emoji: string) => {
     void toggleReaction(props.message.id, emoji);
-    setAddOpen(false);
   };
 
   const sys = () => (props.message.messageType === 'system' ? parseDmSystemContent(props.message.content) : null);
@@ -283,41 +278,17 @@ export function DmMessageGroup(props: {
                 </For>
                 <div class="dm-reaction-add-anchor" data-testid="dm-reaction-add-anchor">
                   <button
-                    class={`dm-reaction-add${addOpen() ? ' active' : ''}`}
+                    class={`dm-reaction-add${pickerOpen() ? ' active' : ''}`}
                     data-testid="dm-reaction-add"
                     aria-label="Add reaction"
-                    onClick={() => {
-                      setAddOpen(!addOpen());
-                      setPickerOpen(false);
-                    }}
+                    onClick={() => setPickerOpen(!pickerOpen())}
                   >
                     <PhPlus />
                   </button>
-                  <Show when={addOpen()}>
-                    <div class="dm-reaction-quick" data-testid="dm-reaction-quick">
-                      <For each={QUICK_REACTIONS}>
-                        {(emoji) => (
-                          <button class="dm-reaction-menu-item" aria-label={emoji} data-testid={`dm-reaction-menu-${emoji}`} onClick={() => react(emoji)}>
-                            <EmojiGlyph emoji={emoji} />
-                          </button>
-                        )}
-                      </For>
-                      <button
-                        class="dm-reaction-quick-more"
-                        data-testid="dm-reaction-quick-more"
-                        aria-label="More emoji"
-                        title={t('dm.emojiTooltip')}
-                        onClick={() => setPickerOpen(true)}
-                      >
-                        <PhSmiley />
-                      </button>
-                    </div>
-                  </Show>
-<Show when={pickerOpen()}>
+                  <Show when={pickerOpen()}>
                     <EmojiPicker
                       onSelect={(emoji) => {
                         react(emoji);
-                        setAddOpen(false);
                         setPickerOpen(false);
                       }}
                       onRequestClose={() => setPickerOpen(false)}
