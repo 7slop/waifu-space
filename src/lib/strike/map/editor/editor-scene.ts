@@ -4,6 +4,7 @@ import {
   ArcRotateCamera,
   Vector3,
   Ray,
+  Plane,
   Color3,
   Color4,
   AbstractMesh,
@@ -181,6 +182,16 @@ export class StrikeMapEditorController {
 
   onGizmoMode: 'translate' | 'rotate' | 'scale' = 'translate';
 
+  /** Active shift+drag "move to cursor" gesture (null when idle). */
+  private dragMove: {
+    pointerId: number;
+    objectId: string;
+    offsetX: number;
+    offsetZ: number;
+    startHeight: number;
+    moved: boolean;
+  } | null = null;
+
   // History snapshots are serialized layouts captured *before* each mutation,
   // so undo() can cold-swap the working layout and rebuild the scene.
   private history: string[] = [];
@@ -264,6 +275,12 @@ export class StrikeMapEditorController {
 
     this.applyGizmoMode(this.onGizmoMode);
     this.applySnap();
+
+    // Shift+drag object-to-cursor movement (only meaningful in translate mode).
+    this.canvas.addEventListener('pointerdown', this.onPointerDown);
+    this.canvas.addEventListener('pointermove', this.onPointerMove);
+    this.canvas.addEventListener('pointerup', this.onPointerUp);
+    this.canvas.addEventListener('pointercancel', this.onPointerCancel);
 
     // Picking: select objects/lights/spawns, clear on empty left-click.
     this.scene.onPointerObservable.add((evt) => {
@@ -377,6 +394,162 @@ export class StrikeMapEditorController {
     this.camera.radius = 70;
     this.camera.target = new Vector3(0, 4, 0);
     this.onChange?.();
+  }
+
+  // ── Shift+drag object-to-cursor movement ────────────────────────────────
+
+  /** Pointer position relative to the canvas (matches Babylon's pick coords). */
+  private canvasPoint(e: PointerEvent): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  /** Intersects a picking ray with the horizontal plane at `height`. */
+  private rayPlaneHit(ray: Ray, height: number): Vector3 | null {
+    const dist = ray.intersectsPlane(new Plane(0, 1, 0, -height));
+    if (dist === null || dist === undefined || dist < 0) return null;
+    return ray.origin.add(ray.direction.scale(dist));
+  }
+
+  /** Picks an editable layout object at the given canvas coordinates. */
+  private pickEditableObjectAt(x: number, y: number): string | null {
+    const pick = this.scene.pick(
+      x,
+      y,
+      (m) => {
+        if (!m.isPickable) return false;
+        const meta = m.metadata as { editorId?: string } | undefined;
+        return !!meta && typeof meta.editorId === 'string';
+      },
+      false,
+      this.camera
+    );
+    if (!pick?.pickedMesh) return null;
+    const meta = pick.pickedMesh.metadata as { editorId?: string } | undefined;
+    return meta?.editorId ?? null;
+  }
+
+  /**
+   * Shift + left-drag on an editable object (translate mode) grabs the object
+   * and moves it to follow the cursor across the world, snapping to the
+   * ground or the top of other objects when snap-to-ground is enabled.
+   */
+  private onPointerDown = (e: PointerEvent) => {
+    if (this.dragMove) return;
+    if (e.button !== 0 || !e.shiftKey) return;
+    if (this.onGizmoMode !== 'translate') return;
+    if (this.gizmo.isDragging) return;
+
+    const { x, y } = this.canvasPoint(e);
+    const editorId = this.pickEditableObjectAt(x, y);
+    if (!editorId) return;
+    const obj = this.layout.objects.find((o) => o.id === editorId);
+    if (!obj || obj.locked) return;
+    const control = this.controlOf.get(editorId);
+    if (!control) return;
+
+    this.selectById(editorId);
+    const hit = this.rayPlaneHit(this.scene.createPickingRayInCameraSpace(x, y, this.camera), control.position.y);
+    if (!hit) return;
+
+    this.dragMove = {
+      pointerId: e.pointerId,
+      objectId: editorId,
+      offsetX: control.position.x - hit.x,
+      offsetZ: control.position.z - hit.z,
+      startHeight: control.position.y,
+      moved: false
+    };
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer may have already been released */
+    }
+  };
+
+  private onPointerMove = (e: PointerEvent) => {
+    if (!this.dragMove || e.pointerId !== this.dragMove.pointerId) return;
+    // If a gizmo axis drag grabbed the same pointer (shift held near an axis),
+    // let the gizmo win — it constrains movement along that axis.
+    if (this.gizmo.isDragging || this.gizmo.gizmos.positionGizmo?.isDragging) {
+      this.cancelDragMove();
+      return;
+    }
+
+    const dm = this.dragMove;
+    const control = this.controlOf.get(dm.objectId);
+    if (!control) {
+      this.cancelDragMove();
+      return;
+    }
+
+    const { x, y } = this.canvasPoint(e);
+    const hit = this.rayPlaneHit(this.scene.createPickingRayInCameraSpace(x, y, this.camera), dm.startHeight);
+    if (!hit) return;
+
+    let px = hit.x + dm.offsetX;
+    let pz = hit.z + dm.offsetZ;
+    if (this.snapEnabled) {
+      px = Math.round(px / this.translateSnap) * this.translateSnap;
+      pz = Math.round(pz / this.translateSnap) * this.translateSnap;
+    }
+
+    if (!dm.moved) this.recordHistory();
+    dm.moved = true;
+
+    control.position.x = px;
+    control.position.z = pz;
+    if (this.snapToGroundEnabled) {
+      control.position.y = this.snapToGroundPoint(new Vector3(px, dm.startHeight, pz), control).y;
+    } else {
+      control.position.y = dm.startHeight;
+    }
+
+    const obj = this.layout.objects.find((o) => o.id === dm.objectId);
+    if (obj) obj.position = [control.position.x, control.position.y, control.position.z];
+    this.dirty = true;
+  };
+
+  private onPointerUp = (e: PointerEvent) => {
+    if (!this.dragMove || e.pointerId !== this.dragMove.pointerId) return;
+    const dm = this.dragMove;
+    this.dragMove = null;
+    try {
+      if (this.canvas.hasPointerCapture(dm.pointerId)) this.canvas.releasePointerCapture(dm.pointerId);
+    } catch {
+      /* ignore */
+    }
+    if (!dm.moved) return;
+    const control = this.controlOf.get(dm.objectId);
+    if (!control) return;
+    const obj = this.layout.objects.find((o) => o.id === dm.objectId);
+    if (!obj) return;
+    obj.position = [control.position.x, control.position.y, control.position.z];
+    if (obj.kind === 'component') {
+      (obj as { scale: [number, number, number] }).scale = [
+        control.scaling.x,
+        control.scaling.y,
+        control.scaling.z
+      ];
+    }
+    this.dirty = true;
+    this.onChange?.();
+  };
+
+  private onPointerCancel = (e: PointerEvent) => {
+    if (!this.dragMove || e.pointerId !== this.dragMove.pointerId) return;
+    this.cancelDragMove();
+  };
+
+  private cancelDragMove(): void {
+    if (!this.dragMove) return;
+    const pointerId = this.dragMove.pointerId;
+    this.dragMove = null;
+    try {
+      if (this.canvas.hasPointerCapture(pointerId)) this.canvas.releasePointerCapture(pointerId);
+    } catch {
+      /* ignore */
+    }
   }
 
   // ── Scene assembly ───────────────────────────────────────────────────────
@@ -1309,6 +1482,10 @@ export class StrikeMapEditorController {
     this.engine.stopRenderLoop();
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp);
+    this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
     this.gizmo.dispose();
     this.canvas.style.cursor = 'default';
     this.canvas.removeEventListener('contextmenu', this.onContextMenu);
