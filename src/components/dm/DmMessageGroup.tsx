@@ -277,27 +277,27 @@ export function DmMessageGroup(props: {
                     );
                   }}
                 </For>
-                <div class="dm-reaction-add-anchor" data-testid="dm-reaction-add-anchor">
-                  <button
-                    class={`dm-reaction-add${pickerOpen() ? ' active' : ''}`}
-                    data-testid="dm-reaction-add"
-                    aria-label="Add reaction"
-                    onClick={() => setPickerOpen(!pickerOpen())}
-                  >
-                    <PhPlus />
-                  </button>
-                  <Show when={pickerOpen()}>
-                    <EmojiPicker
-                      onSelect={(emoji) => {
-                        react(emoji);
-                        setPickerOpen(false);
-                      }}
-                      onRequestClose={() => setPickerOpen(false)}
-                    />
-                  </Show>
-                </div>
-            </div>
-              </Show>
+              </div>
+              <div class="dm-reaction-add-anchor" data-testid="dm-reaction-add-anchor">
+                <button
+                  class={`dm-reaction-add${pickerOpen() ? ' active' : ''}`}
+                  data-testid="dm-reaction-add"
+                  aria-label="Add reaction"
+                  onClick={() => setPickerOpen(!pickerOpen())}
+                >
+                  <PhPlus />
+                </button>
+                <Show when={pickerOpen()}>
+                  <EmojiPicker
+                    onSelect={(emoji) => {
+                      react(emoji);
+                      setPickerOpen(false);
+                    }}
+                    onRequestClose={() => setPickerOpen(false)}
+                  />
+                </Show>
+              </div>
+            </Show>
           </div>
         </>
       }>

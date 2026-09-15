@@ -36,14 +36,17 @@ function isNearBottom(el: HTMLDivElement): boolean {
  * requestAnimationFrame so media that loads after the message row is inserted
  * (GIFs/images change the row height) can settle before the final position is
  * computed — this lands at the true bottom instead of "almost at the bottom".
+ * Deferred frames only re-snap while the reader is still near the bottom so a
+ * deliberate scroll up into history is never yanked back down.
  */
 export function scrollDmThreadToBottom() {
   const el = mountedScrollEl;
   if (!el) return;
+  el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
   const tick = () => {
-    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    if (!mountedScrollEl || !isNearBottom(mountedScrollEl)) return;
+    mountedScrollEl.scrollTop = Math.max(0, mountedScrollEl.scrollHeight - mountedScrollEl.clientHeight);
   };
-  tick();
   requestAnimationFrame(tick);
   requestAnimationFrame(() => requestAnimationFrame(tick));
 }

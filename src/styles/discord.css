@@ -1661,9 +1661,20 @@
 }
 
 .dm-reaction-add-anchor {
-  position: relative;
-  display: inline-flex;
-  flex-shrink: 0;
+  position: absolute;
+  top: -10px;
+  right: 8px;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.dm-reaction-add-anchor > * {
+  pointer-events: auto;
 }
 
 .dm-reaction-add {
@@ -1677,8 +1688,6 @@
   background: var(--surface-2, #313244);
   color: var(--text-muted, #7f849c);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease;
 }
 
 .dm-reaction-add svg {
@@ -1686,8 +1695,14 @@
   height: 14px;
 }
 
-.dm-msg:hover .dm-reaction-add,
+.dm-reaction-add:hover,
 .dm-reaction-add.active {
+  color: var(--primary-accent, #f5c2e7);
+  border-color: var(--primary-accent, #f5c2e7);
+}
+
+.dm-msg:hover .dm-reaction-add-anchor,
+.dm-reaction-add-anchor.active {
   opacity: 1;
 }
 
