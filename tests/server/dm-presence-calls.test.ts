@@ -25,6 +25,7 @@ vi.mock('../../src/lib/server/supabase', () => ({
 import { GET as presenceGET, POST as presencePOST } from '../../src/routes/api/dm/presence';
 import { GET as presenceBatchGET } from '../../src/routes/api/dm/presence/batch';
 import { POST as callsPOST } from '../../src/routes/api/dm/calls';
+import { GET as pendingCallGET } from '../../src/routes/api/dm/calls/pending';
 import { POST as callStatusPOST } from '../../src/routes/api/dm/calls/[id]/status';
 import { GET as userProfileGET } from '../../src/routes/api/dm/users/[id]/profile';
 import { createSessionToken } from '../../src/lib/server/auth';
@@ -88,6 +89,25 @@ function buildFakeClient() {
       if (!members.includes(p_user_id) || !members.includes(p_callee_id)) {
         return { data: null, error: { message: 'both users must be part of the conversation' } };
       }
+      // Mirrors the live RPC: a ringing/active call in the same conversation
+      // involving either side is returned as a `joined` join instead of a new call.
+      const existing = db.call_sessions.find(
+        c =>
+          c.conversation_id === p_conversation_id &&
+          (c.status === 'ringing' || c.status === 'active') &&
+          (c.caller_id === p_user_id || c.callee_id === p_user_id || c.callee_id === p_callee_id)
+      );
+      if (existing) {
+        return {
+          data: {
+            id: existing.id, conversationId: existing.conversation_id, callerId: existing.caller_id,
+            calleeId: existing.callee_id, callType: existing.call_type, status: existing.status,
+            startedAt: existing.started_at, answeredAt: existing.answered_at, endedAt: existing.ended_at,
+            createdAt: existing.created_at, joined: true
+          },
+          error: null
+        };
+      }
       const call = {
         id: nextId('call'), conversation_id: p_conversation_id, caller_id: p_user_id, callee_id: p_callee_id,
         call_type: p_call_type, status: 'ringing', started_at: nowIso(), answered_at: null, ended_at: null, created_at: nowIso()
@@ -97,6 +117,25 @@ function buildFakeClient() {
         data: {
           id: call.id, conversationId: call.conversation_id, callerId: call.caller_id, calleeId: call.callee_id,
           callType: call.call_type, status: call.status, startedAt: call.started_at, answeredAt: null, endedAt: null, createdAt: call.created_at
+        },
+        error: null
+      };
+    },
+    get_pending_call_for_user: ({ p_user_id }: any) => {
+      const pending = db.call_sessions
+        .filter(c =>
+          (c.status === 'ringing' || c.status === 'active') &&
+          (c.caller_id === p_user_id || c.callee_id === p_user_id)
+        )
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
+        .pop();
+      if (!pending) return { data: null, error: null };
+      return {
+        data: {
+          id: pending.id, conversationId: pending.conversation_id, callerId: pending.caller_id,
+          calleeId: pending.callee_id, callType: pending.call_type, status: pending.status,
+          startedAt: pending.started_at, answeredAt: pending.answered_at, endedAt: pending.ended_at,
+          createdAt: pending.created_at
         },
         error: null
       };
@@ -300,6 +339,61 @@ describe('DM call routes', () => {
       })
     );
     expect(res.status).toBe(403);
+  });
+
+  it('returns joined=true with the existing call when the callee is already in a call', async () => {
+    const first = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    );
+    const firstBody = await first.json();
+    expect(firstBody.joined).toBe(false);
+    const originalId = firstBody.call.id;
+
+    // B is still ringing A; a fresh create from B's side into the same
+    // conversation should join it instead of inserting a duplicate lane.
+    const second = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(B, 'bob')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: A, callType: 'voice' })
+      })
+    );
+    expect(second.status).toBe(201);
+    const body = await second.json();
+    expect(body.joined).toBe(true);
+    expect(body.call).toMatchObject({ id: originalId, status: 'ringing' });
+  });
+
+  it('returns the newest pending call a user is a party to', async () => {
+    const created = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'video' })
+      })
+    );
+    const call = (await created.json()).call;
+
+    const pending = await pendingCallGET(
+      req('http://localhost/api/dm/calls/pending', { headers: { Authorization: `Bearer ${ticket(B, 'bob')}` } })
+    );
+    expect(pending.status).toBe(200);
+    const body = await pending.json();
+    expect(body.success).toBe(true);
+    expect(body.call).toMatchObject({ id: call.id, status: 'ringing', callerId: A, calleeId: B });
+  });
+
+  it('returns call:null from pending when the user has no live call', async () => {
+    const pending = await pendingCallGET(
+      req('http://localhost/api/dm/calls/pending', { headers: { Authorization: `Bearer ${ticket(A, 'alice')}` } })
+    );
+    const body = await pending.json();
+    expect(body.success).toBe(true);
+    expect(body.call).toBeNull();
   });
 });
 

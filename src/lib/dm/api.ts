@@ -338,18 +338,32 @@ export async function fetchPresenceBatch(token: string, userIds: string[]): Prom
   return data.presence ?? {};
 }
 
+export interface CreateCallResult {
+  joined: boolean;
+  call: CallSession;
+}
+
 export async function createCallRequest(
   token: string,
   conversationId: string,
   calleeId: string,
   callType: CallType
-): Promise<CallSession> {
-  const data = await request<{ success: boolean; call: CallSession }>(
+): Promise<CreateCallResult> {
+  const data = await request<{ success: boolean; joined?: boolean; call: CallSession }>(
     '/api/dm/calls',
     { method: 'POST', body: JSON.stringify({ conversationId, calleeId, callType }) },
     token
   );
-  return data.call;
+  return { joined: !!data.joined, call: data.call };
+}
+
+export async function fetchPendingCall(token: string): Promise<CallSession | null> {
+  const data = await request<{ success: boolean; call: CallSession | null }>(
+    '/api/dm/calls/pending',
+    { method: 'GET' },
+    token
+  );
+  return data.call ?? null;
 }
 
 export interface CallStatusResult {

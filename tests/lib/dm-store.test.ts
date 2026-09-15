@@ -115,7 +115,8 @@ import {
   hangUpCall,
   toggleMute,
   toggleVideo,
-  toggleReaction
+  toggleReaction,
+  refreshPendingCall
 } from '../../src/lib/dm/store';
 
 const AUTH = { token: 't1', id: 'u-me', username: 'alice', avatarUrl: 'https://x/a.png' };
@@ -445,6 +446,125 @@ async function boot() {
     });
     expect(dmState.messages.c1?.some((m) => m.id === 'sys-x')).toBe(true);
     expect(notifySpy).not.toHaveBeenCalled();
+  });
+
+  it('startCall joins an already-busy call instead of ringing the callee again', async () => {
+    stubFetch({
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'offline' } })),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 }),
+      '/api/dm/calls': () =>
+        JSON_RESP(
+          {
+            success: true,
+            joined: true,
+            call: { id: 'call-existing', conversationId: 'c1', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice', status: 'active', startedAt: '', answeredAt: null, endedAt: null, createdAt: '' }
+          },
+          201
+        )
+    });
+    await initDm();
+    await selectConversation('c1');
+    const rtInst = rt.instances[0];
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    // Adopts the existing call in the active dock without a fresh ringing flow.
+    expect(dmState.call?.call.id).toBe('call-existing');
+    expect(dmState.call?.direction).toBe('outgoing');
+    expect(dmState.call?.callState).toBe('active');
+    // The already-busy callee must NOT be re-rung with the incoming-call
+    // broadcast, but a renegotiation offer is sent so media can link up.
+    expect(rtInst.sendIncomingCallOffer).not.toHaveBeenCalled();
+    expect(rtInst.sendCallSignal).toHaveBeenCalledWith(expect.objectContaining({ type: 'offer', callId: 'call-existing' }));
+  });
+
+  it('refreshPendingCall hydrates a missed incoming (ringing) call', async () => {
+    let polled = 0;
+    const pendingCall = {
+      id: 'call-pend-1', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'voice' as const,
+      status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+    };
+    stubFetch({
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'offline' } })),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 }),
+      '/api/dm/calls/pending': () => {
+        polled += 1;
+        return polled === 1 ? JSON_RESP({ success: true, call: null }) : JSON_RESP({ success: true, call: pendingCall });
+      }
+    });
+    await initDm();
+    // The boot-time poll found nothing yet.
+    expect(dmState.incomingCall).toBeNull();
+    await refreshPendingCall();
+    expect(dmState.incomingCall?.call.id).toBe('call-pend-1');
+    expect(dmState.incomingCall?.callerName).toBe('bob');
+  });
+
+  it('refreshPendingCall hydrates an active call after a refresh (rejoin affordance)', async () => {
+    const pendingCall = {
+      id: 'call-pend-2', conversationId: 'c1', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice' as const,
+      status: 'active' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+    };
+    stubFetch({
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'offline' } })),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 }),
+      '/api/dm/calls/pending': () => JSON_RESP({ success: true, call: pendingCall })
+    });
+    await initDm();
+    await refreshPendingCall();
+    expect(dmState.incomingCall?.call.id).toBe('call-pend-2');
+  });
+
+  it('refreshPendingCall never clobbers a call the user is already managing', async () => {
+    let polled = 0;
+    const pendingCall = {
+      id: 'call-pend-3', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'voice' as const,
+      status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+    };
+    stubFetch({
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'offline' } })),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 }),
+      '/api/dm/calls/pending': () => {
+        polled += 1;
+        return polled === 1 ? JSON_RESP({ success: true, call: null }) : JSON_RESP({ success: true, call: pendingCall });
+      }
+    });
+    await initDm();
+    await selectConversation('c1');
+    // An incoming offer already on screen is not replaced by the poll.
+    rt.handlers.onIncomingCall({ kind: 'call-offer', call: pendingCall, callerName: 'bob' });
+    expect(dmState.incomingCall?.call.id).toBe('call-pend-3');
+    await refreshPendingCall();
+    expect(dmState.incomingCall?.call.id).toBe('call-pend-3');
+  });
+
+  it('refreshPendingCall does not surface a ringing call where the user is the caller', async () => {
+    const pendingCall = {
+      id: 'call-pend-4', conversationId: 'c1', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice' as const,
+      status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+    };
+    stubFetch({
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'offline' } })),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 }),
+      '/api/dm/calls/pending': () => JSON_RESP({ success: true, call: pendingCall })
+    });
+    await initDm();
+    await refreshPendingCall();
+    expect(dmState.incomingCall).toBeNull();
   });
 });
 

@@ -22,6 +22,7 @@ import {
   createConversation,
   fetchMessages,
   fetchMyPresence,
+  fetchPendingCall,
   fetchPresenceBatch,
   fetchUnread,
   GifItem,
@@ -125,6 +126,7 @@ interface DmRuntime {
   lastTypingEmit: number;
   /** Whether the last presence write came from the auto monitor. */
   presenceOrigin: 'auto' | 'manual';
+  pendingPollTimer: ReturnType<typeof setInterval> | null;
 }
 
 const runtime: DmRuntime = {
@@ -134,8 +136,12 @@ const runtime: DmRuntime = {
   pendingAccept: null,
   mutedBeforeDeafen: false,
   lastTypingEmit: 0,
-  presenceOrigin: 'manual'
+  presenceOrigin: 'manual',
+  pendingPollTimer: null
 };
+
+/** How often the store re-polls the DB for a pending (ringing/active) call. */
+const PENDING_CALL_POLL_MS = 45_000;
 
 const INITIAL: DmStoreState = {
   ready: false,
@@ -472,6 +478,11 @@ export async function initDm(): Promise<boolean> {
     // Load saved GIF favorites so message hover hearts reflect them before
     // the picker has ever been opened.
     void gifLoadFavorites();
+
+    // Incoming/busy calls ride the lossy realtime channel; poll the DB so a
+    // missed call-offer broadcast or a refresh never hides a pending call.
+    void refreshPendingCall();
+    runtime.pendingPollTimer ??= setInterval(() => void refreshPendingCall(), PENDING_CALL_POLL_MS);
     return true;
   } catch (e) {
     setDmState({ connecting: false, error: e instanceof Error ? e.message : 'Failed to start DM' });
@@ -874,7 +885,14 @@ export async function startCall(type: CallType): Promise<boolean> {
   const otherId = conv?.otherUser?.id;
   if (!auth || !conv || !otherId) return false;
   try {
-    const call = await createCallRequest(auth.token, conv.id, otherId, type);
+    const result = await createCallRequest(auth.token, conv.id, otherId, type);
+    if (result.joined) {
+      // The server found an already-ringing or already-active call in this
+      // conversation involving us. Adopt it instead of starting a fresh
+      // ringing flow: do NOT ring the (already busy) callee a second time.
+      return joinExistingCall(result.call, conv, auth);
+    }
+    const call = result.call;
     const manager = makeCallManager();
     const ok = await manager.startLocal({ type, audio: true, video: type === 'video', screen: type === 'screen' });
     if (!ok) {
@@ -892,6 +910,56 @@ export async function startCall(type: CallType): Promise<boolean> {
   } catch {
     setDmState('error', 'Call could not be started');
     return false;
+  }
+}
+
+/**
+ * Adopts a call the server told us already exists (busy/ringing/active in the
+ * same conversation). The caller becomes the joining party: the remote side is
+ * already busy, so there is NO ringing and no new incoming-call broadcast.
+ * Instead the call manager is wired to the returned call id, the UI moves
+ * straight to the active dock, and a renegotiation offer is sent over the
+ * conversation's call-signal channel so the already-joined participant answers
+ * it (the existing accept/answer wiring) and the media links up.
+ */
+async function joinExistingCall(call: CallSession, conv: DmConversationSummary, auth: DmAuth): Promise<boolean> {
+  const manager = makeCallManager();
+  const ok = await manager.startLocal({ type: call.callType, audio: true, video: call.callType === 'video', screen: call.callType === 'screen' });
+  if (!ok) return false;
+  wireCallManager(call, manager);
+  setDmState('call', { call, direction: 'outgoing', remoteName: conv.otherUser.username, callState: 'active', muted: false, videoOff: call.callType !== 'video', screenSharing: false, deafened: false });
+  void runtime.realtime?.subscribeConversation(call.conversationId);
+  const offer = await manager.createOffer(call.id, call.calleeId === auth.id ? call.callerId : call.calleeId);
+  if (offer) sendSignal('offer', call.id, call.conversationId, { sdp: offer });
+  return true;
+}
+
+/**
+ * Recovery/fallback path for the lossy realtime call-offer channel: asks the
+ * DB for the newest ringing/active call the current user is a party to and
+ * hydrates the incoming-call state so a missed broadcast or a refresh never
+ * hides an in-progress call. Real-time remains the fast path; this poll never
+ * clobbers a call the user is already actively managing.
+ */
+export async function refreshPendingCall(): Promise<void> {
+  const auth = currentAuth();
+  if (!auth) return;
+  if (dmState.call || dmState.incomingCall) return;
+  try {
+    const call = await fetchPendingCall(auth.token);
+    if (!call || (call.status !== 'ringing' && call.status !== 'active')) return;
+    if (dmState.call || dmState.incomingCall) return;
+    // A still-ringing call where we are the caller is covered by our own
+    // outgoing panel; only surface the rejoin/incoming affordance otherwise.
+    if (call.status === 'ringing' && call.callerId === auth.id) return;
+    const conv = dmState.conversations.find(c => c.id === call.conversationId);
+    const callerName =
+      conv && call.callerId === conv.otherUser?.id
+        ? conv.otherUser.username
+        : call.callerId === auth.id ? auth.username : '';
+    setDmState('incomingCall', { call, callerName });
+  } catch {
+    // Poll failures are transient; the realtime channel remains the fast path.
   }
 }
 
@@ -1044,6 +1112,10 @@ export function toggleDeafen(): boolean {
 }
 
 export function resetDmStore(): void {
+  if (runtime.pendingPollTimer) {
+    clearInterval(runtime.pendingPollTimer);
+    runtime.pendingPollTimer = null;
+  }
   setDmState(JSON.parse(JSON.stringify(INITIAL)));
 }
 
@@ -1051,6 +1123,10 @@ export async function disconnectDm(): Promise<void> {
   runtime.call?.hangUp('ended');
   runtime.call = null;
   runtime.pendingAccept = null;
+  if (runtime.pendingPollTimer) {
+    clearInterval(runtime.pendingPollTimer);
+    runtime.pendingPollTimer = null;
+  }
   await runtime.realtime?.disconnect().catch(() => undefined);
   runtime.realtime = null;
   resetDmStore();

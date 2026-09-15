@@ -889,3 +889,87 @@ REVOKE ALL ON FUNCTION public.touch_user_presence(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.touch_user_presence(uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.dm_effective_status(text, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.dm_effective_status(text, timestamptz) TO anon, authenticated, service_role;
+CREATE OR REPLACE FUNCTION public.create_call_session(
+  p_user_id uuid,
+  p_conversation_id uuid,
+  p_callee_id uuid,
+  p_call_type text DEFAULT 'voice'
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_call public.call_sessions%ROWTYPE;
+  v_join  public.call_sessions%ROWTYPE;
+  v_joined boolean := false;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF p_user_id = p_callee_id THEN
+    RAISE EXCEPTION 'cannot call yourself';
+  END IF;
+
+  IF p_call_type NOT IN ('voice', 'video', 'screen') THEN
+    RAISE EXCEPTION 'invalid call type';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.conversation_participants
+    WHERE conversation_id = p_conversation_id AND user_id IN (p_user_id, p_callee_id)
+  ) THEN
+    RAISE EXCEPTION 'both users must be part of the conversation';
+  END IF;
+
+  -- Issue 4: if the callee is already ringing/active on a call in THIS
+  -- conversation (or the caller already has an ongoing call here), join that
+  -- existing session instead of starting a second ringing session.
+  SELECT * INTO v_join
+    FROM public.call_sessions
+   WHERE conversation_id = p_conversation_id
+     AND status IN ('ringing', 'active')
+     AND (caller_id IN (p_user_id, p_callee_id) OR callee_id IN (p_user_id, p_callee_id))
+   ORDER BY started_at ASC
+   LIMIT 1;
+
+  IF FOUND THEN
+    RETURN jsonb_build_object(
+      'joined', true,
+      'call', jsonb_build_object(
+        'id', v_join.id,
+        'conversationId', v_join.conversation_id,
+        'callerId', v_join.caller_id,
+        'calleeId', v_join.callee_id,
+        'callType', v_join.call_type,
+        'status', v_join.status,
+        'startedAt', v_join.started_at,
+        'answeredAt', v_join.answered_at,
+        'endedAt', v_join.ended_at,
+        'createdAt', v_join.created_at
+      )
+    );
+  END IF;
+
+  INSERT INTO public.call_sessions (conversation_id, caller_id, callee_id, call_type, status)
+  VALUES (p_conversation_id, p_user_id, p_callee_id, p_call_type, 'ringing')
+  RETURNING * INTO v_call;
+
+  RETURN jsonb_build_object(
+    'joined', false,
+    'call', jsonb_build_object(
+      'id', v_call.id,
+      'conversationId', v_call.conversation_id,
+      'callerId', v_call.caller_id,
+      'calleeId', v_call.callee_id,
+      'callType', v_call.call_type,
+      'status', v_call.status,
+      'startedAt', v_call.started_at,
+      'answeredAt', v_call.answered_at,
+      'endedAt', v_call.ended_at,
+      'createdAt', v_call.created_at
+    )
+  );
+END;
+$$;

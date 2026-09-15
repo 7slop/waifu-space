@@ -20,6 +20,7 @@ export type CallState =
   | 'acquiring'
   | 'ringing' // caller waiting for answer
   | 'connected'
+  | 'active' // adopted an already-ongoing call (join), media still being linked
   | 'ended'
   | 'failed';
 

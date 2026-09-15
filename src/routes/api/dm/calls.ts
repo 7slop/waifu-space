@@ -41,6 +41,7 @@ export async function POST(event: { request: Request }) {
   }
 
   const c = data as any;
+  const joined = !!c.joined;
   const call: CallSession = {
     id: c.id,
     conversationId: c.conversationId,
@@ -54,5 +55,5 @@ export async function POST(event: { request: Request }) {
     createdAt: c.createdAt
   };
 
-  return json({ success: true, call }, { status: 201 });
+  return json({ success: true, joined, call }, { status: 201 });
 }
