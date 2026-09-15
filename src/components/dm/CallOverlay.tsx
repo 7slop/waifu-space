@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import {
   acceptIncomingCall,
   callLocalStream,
@@ -14,6 +14,7 @@ import {
 } from '../../lib/dm/store';
 import { state } from '../../lib/store';
 import { t } from '../../lib/i18n';
+import { startIncomingRing, stopIncomingRing } from '../../lib/dm/ringtone';
 import {
   PhHeadphones,
   PhMicrophone,
@@ -100,6 +101,16 @@ function peerInfo() {
 export function CallOverlay() {
   const call = () => dmState.call;
   const incoming = () => dmState.incomingCall;
+
+  // Loop the ring tone for the whole time an incoming offer is pending (and no
+  // active call took over), stopping the moment it clears.
+  createEffect((showIncoming) => {
+    const next = !!incoming() && !call();
+    if (next && !showIncoming) startIncomingRing();
+    else if (!next) stopIncomingRing();
+    return next;
+  }, false);
+  onCleanup(() => stopIncomingRing());
 
   return (
     <>
