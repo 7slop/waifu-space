@@ -67,6 +67,14 @@ function buildFakeClient() {
       }
       return { data: map, error: null };
     },
+    get_own_presence: ({ p_user_id }: any) => {
+      const row = db.user_presence.find(p => p.user_id === p_user_id);
+      if (!row) return { data: null, error: null };
+      return {
+        data: { userId: p_user_id, status: row.status, customStatus: row.custom_status, lastSeenAt: row.last_seen_at },
+        error: null
+      };
+    },
     upsert_user_presence: ({ p_user_id, p_status, p_custom_status, p_last_seen }: any) => {
       const row = db.user_presence.find(p => p.user_id === p_user_id);
       const fresh = { user_id: p_user_id, status: p_status, custom_status: p_custom_status ?? null, last_seen_at: p_last_seen ?? nowIso() };
@@ -192,6 +200,13 @@ describe('DM presence AP', () => {
     const body = await res.json();
     expect(body.success).toBe(true);
     expect(body.presence.status).toBe('offline');
+  });
+
+  it('returns the raw stored status for the caller even when the last-seen stamp is stale', async () => {
+    mocks.state.db.user_presence.push({ user_id: A, status: 'dnd', custom_status: 'coding', last_seen_at: nowIso(-30 * 60 * 1000) });
+    const res = await presenceGET(req('http://localhost/api/dm/presence', { headers: { Authorization: `Bearer ${ticket(A, 'alice')}` } }));
+    const body = await res.json();
+    expect(body.presence).toMatchObject({ userId: A, status: 'dnd', customStatus: 'coding' });
   });
 
   it('batch-fetches presence for many users', async () => {

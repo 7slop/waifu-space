@@ -602,6 +602,37 @@ BEGIN
 END;
 $$;
 
+-- Fetch the caller's own raw stored presence. Unlike get_user_presence_batch
+-- this does NOT apply the staleness rule (last-seen older than 2 minutes reads
+-- as offline), so a manually selected status survives a refresh / server
+-- restart until the user changes it.
+CREATE OR REPLACE FUNCTION public.get_own_presence(p_user_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v jsonb;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  SELECT jsonb_build_object(
+    'userId', user_id,
+    'status', status,
+    'customStatus', custom_status,
+    'lastSeenAt', last_seen_at
+  )
+  INTO v
+  FROM public.user_presence
+  WHERE user_id = p_user_id;
+
+  RETURN v;
+END;
+$$;
+
 -- Create a ringing call session (server-authoritative record).
 CREATE OR REPLACE FUNCTION public.create_call_session(
   p_user_id uuid,
@@ -846,6 +877,8 @@ REVOKE ALL ON FUNCTION public.upsert_user_presence(uuid, text, text, timestamptz
 GRANT EXECUTE ON FUNCTION public.upsert_user_presence(uuid, text, text, timestamptz) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.get_user_presence_batch(uuid[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_user_presence_batch(uuid[]) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_own_presence(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_own_presence(uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.update_call_session(uuid, uuid, text) FROM PUBLIC;

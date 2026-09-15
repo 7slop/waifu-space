@@ -17,20 +17,19 @@ export async function GET(event: { request: Request }) {
   const ctx = resolveDmContext(event.request);
   if (ctx instanceof Response) return ctx;
 
-  const { data, error } = await ctx.supabase.rpc('get_user_presence_batch', {
-    p_user_ids: [ctx.session.userId]
+  const { data, error } = await ctx.supabase.rpc('get_own_presence', {
+    p_user_id: ctx.session.userId
   });
 
   if (error) {
     return json({ success: false, error: error.message }, { status: 500 });
   }
 
-  const mine = data && typeof data === 'object' ? (data as Record<string, any>)[ctx.session.userId] : null;
-  if (!mine) {
+  if (!data) {
     return json({ success: true, presence: { userId: ctx.session.userId, status: 'offline', customStatus: null, lastSeenAt: new Date().toISOString() } });
   }
 
-  return json({ success: true, presence: toPresence(mine) });
+  return json({ success: true, presence: toPresence(data) });
 }
 
 export async function POST(event: { request: Request }) {
