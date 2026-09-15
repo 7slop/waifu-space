@@ -415,6 +415,44 @@ describe('DM API routes (Supabase-backed)', () => {
     expect(mocks.state.db.messages.some(m => m.conversation_id !== conv.id)).toBe(false);
   });
 
+  it('delivers a message to an offline recipient, queuing it as unread (no silent loss)', async () => {
+    const { A, B, conv } = seedWorld();
+    // Recipient is explicitly offline in the stored presence table.
+    mocks.state.db.user_presence.push({ user_id: B, status: 'offline', custom_status: null, last_seen_at: nowIso() });
+
+    const bobToken = freshTicket(B, 'bob_test');
+    const before = await unreadGET(req('http://localhost/api/dm/unread', { headers: { Authorization: `Bearer ${bobToken}` } }));
+    expect((await before.json()).totalUnread).toBe(1); // seed message from alice
+
+    const res = await messagesPOST(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(A, 'alice')}` },
+        body: JSON.stringify({ content: 'ping while offline' })
+      })
+    );
+    expect(res.status).toBe(201);
+    expect((await res.json()).success).toBe(true);
+
+    // The row is persisted regardless of the recipient's presence.
+    expect(mocks.state.db.messages.some(m => m.content === 'ping while offline' && m.sender_id === A)).toBe(true);
+
+    // Unread is derived from messages after last_read_at, so the offline
+    // recipient's count increments automatically and duplicates nothing.
+    const after = await unreadGET(req('http://localhost/api/dm/unread', { headers: { Authorization: `Bearer ${bobToken}` } }));
+    expect((await after.json()).totalUnread).toBe(2);
+
+    const convsRes = await conversationsGET(req('http://localhost/api/dm/conversations', { headers: { Authorization: `Bearer ${bobToken}` } }));
+    const convs = (await convsRes.json()).conversations;
+    expect(convs).toHaveLength(1);
+    expect(convs[0].unreadCount).toBe(2);
+    expect(convs[0].lastMessage.content).toBe('ping while offline');
+
+    // The offline recipient can read it back once back online.
+    const msgsRes = await messagesGET(req(`http://localhost/api/dm/conversations/${conv.id}/messages`, { headers: { Authorization: `Bearer ${bobToken}` } }));
+    expect((await msgsRes.json()).messages.some(m => m.content === 'ping while offline')).toBe(true);
+  });
+
   it('allows GIF messages with a media URL', async () => {
     const { A, conv } = seedWorld();
     const res = await messagesPOST(

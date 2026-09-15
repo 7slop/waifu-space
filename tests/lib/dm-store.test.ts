@@ -242,6 +242,31 @@ it('sendGif posts a gif message', async () => {
     expect(msg?.messageType).toBe('gif');
     expect(dmState.messages.c1[0].mediaUrl).toBe('https://media.tenor.com/a.gif');
   });
+
+  it('sendText to an offline user is delivered locally without being gated or dropped', async () => {
+    stubFetch({
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': (url, init) =>
+        init.method === 'POST'
+          ? JSON_RESP({ success: true, message: { id: 'm-off', conversationId: 'c1', senderId: 'u-me', content: 'you there?', messageType: 'text', mediaUrl: null, createdAt: '2025-01-03T00:00:00.000Z' } }, 201)
+          : JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) =>
+        url.includes('/batch')
+          ? JSON_RESP({ success: true, presence: { 'u-bob': { userId: 'u-bob', status: 'offline', lastSeenAt: '2025-01-01T00:00:00.000Z' } } })
+          : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'online', lastSeenAt: '2025-01-01T00:00:00.000Z' } }),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 })
+    });
+    await initDm();
+    expect(dmState.presence['u-bob']?.status).toBe('offline');
+    await selectConversation('c1');
+    const msg = await sendText('you there?');
+    expect(msg?.content).toBe('you there?');
+    // No silent loss: the message lands in the local timeline and bumps the conversation.
+    expect(dmState.messages.c1?.some(m => m.id === 'm-off')).toBe(true);
+    expect(dmState.conversations.find(c => c.id === 'c1')?.lastMessage?.content).toBe('you there?');
+    expect(dmState.conversations.find(c => c.id === 'c1')?.unreadCount).toBe(0); // sender view; recipient unread is server-derived
+  });
 });
 
 describe('dm store presence + search', () => {
