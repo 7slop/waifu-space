@@ -425,6 +425,29 @@ async function boot() {
     expect(rtInst.sendCallCancel).toHaveBeenCalledWith('u-bob', expect.objectContaining({ call: expect.objectContaining({ id: 'call-2' }) }));
   });
 
+  it('canceled ringing calls apply a call-ended system message to the timeline', async () => {
+    const rtInst = await boot();
+    await selectConversation('c1');
+    await startCall('voice');
+    expect(dmState.call?.callState).toBe('ringing');
+    // The server now reports a canceled (still-ringing, never answered) call as
+    // "call-ended" so the timeline shows a system message instead of nothing.
+    stubFetch({
+      '/api/dm/calls/call-2/status': () => JSON_RESP({
+        success: true,
+        call: { id: 'call-2', conversationId: 'c1', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice', status: 'canceled', startedAt: '2025-01-02T00:00:00.000Z', answeredAt: null, endedAt: null, createdAt: '2025-01-02T00:00:00.000Z' },
+        systemMessage: { id: 'sys-cancel', conversationId: 'c1', senderId: 'u-me', content: '{"kind":"call-ended","callType":"voice"}', messageType: 'system', mediaUrl: 'call-ended:call-2', createdAt: '2025-01-02T00:00:02.000Z' }
+      })
+    });
+    await hangUpCall();
+    const msgs = dmState.messages.c1 ?? [];
+    const sys = msgs.find((m) => m.messageType === 'system');
+    expect(sys?.mediaUrl).toBe('call-ended:call-2');
+    expect(sys?.content).toBe('{"kind":"call-ended","callType":"voice"}');
+    // The broadcast still reaches the peer over the conversation channel.
+    expect(rtInst.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'c1', message: expect.objectContaining({ messageType: 'system', mediaUrl: 'call-ended:call-2' }) }));
+  });
+
   it('an echoed-back offer does not flip an outgoing ringing call to connected', async () => {
     const rtInst = await boot();
     await selectConversation('c1');

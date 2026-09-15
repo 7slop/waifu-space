@@ -729,6 +729,7 @@ BEGIN
   v_kind := CASE p_status
     WHEN 'active'   THEN 'call-started'
     WHEN 'ended'    THEN 'call-ended'
+    WHEN 'canceled' THEN 'call-ended'
     WHEN 'declined' THEN 'call-declined'
     WHEN 'missed'   THEN 'call-missed'
     WHEN 'busy'     THEN 'call-declined'
