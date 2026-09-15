@@ -1098,7 +1098,7 @@
   font-size: 14px;
 }
 
-/* Call dock (floating card: incoming/active calls stay visible on every page) */
+/* Call dock (top-docked, messages stay visible below) ---------------------- */
 
 .dm-call-dock {
   display: flex;
@@ -1107,15 +1107,8 @@
   gap: 10px;
   padding: 16px 20px 18px;
   background: var(--surface-2, #313244);
-  border: 1px solid var(--border-color, #313244);
-  border-radius: var(--radius-lg, 8px);
-  box-shadow: var(--card-shadow, 0 8px 24px rgba(0, 0, 0, 0.45));
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  z-index: 75;
-  width: min(560px, calc(100vw - 32px));
+  border-bottom: 1px solid var(--border-color, #313244);
+  z-index: 30;
   min-height: 88px;
 }
 
@@ -1368,7 +1361,7 @@
 }
 
 .dm-call-dock.dm-call-active {
-  /* stays position: fixed from the base dock so it floats above every page */
+  position: relative;
 }
 
 .dm-call-incoming .dm-call-info {

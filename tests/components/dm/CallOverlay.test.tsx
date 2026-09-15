@@ -132,17 +132,6 @@ describe('CallOverlay', () => {
     restore();
   });
 
-  it('rings even when no conversation is selected (global dock)', () => {
-    const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob' };
-    setDmState('incomingCall', offer);
-    setDmState('activeConversationId', null);
-    const { container } = render(() => <CallOverlay />);
-    expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
-    expect(container.textContent).toContain('Bob');
-    expect(container.querySelector('[data-testid="dm-call-accept"]')).toBeInTheDocument();
-    expect(container.querySelector('[data-testid="dm-call-decline"]')).toBeInTheDocument();
-  });
-
   it('accepts an incoming call and transitions to an active call', async () => {
     const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
     setDmState('incomingCall', offer);
