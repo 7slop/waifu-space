@@ -71,11 +71,12 @@ export function DmInputBar() {
   const acceptShortcode = (item: EmojiAutocompleteEntry) => {
     setText((prev) => {
       const match = prev.match(AC_TOKEN_RE);
-      if (!match) return `${prev}:${item.name}:`;
-      return `${prev.slice(0, prev.length - match[0].length)}:${item.name}:`;
+      if (!match) return `${prev}${item.emoji}`;
+      return `${prev.slice(0, prev.length - match[0].length)}${item.emoji}`;
     });
     setAcHighlighted(0);
     setAcDismissed(true);
+    setEmojiOpen(false);
     textareaRef()?.focus();
   };
 

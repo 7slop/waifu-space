@@ -182,7 +182,7 @@ describe('DmInputBar', () => {
     expect(container.querySelector('[data-testid="dm-emoji-autocomplete"]')).not.toBeInTheDocument();
   });
 
-  it('clicking an autocomplete item inserts the :name: shortcode', () => {
+  it('clicking an autocomplete item inserts the emoji inline', () => {
     seedConv();
     const { container } = render(() => <DmInputBar />);
     const textarea = container.querySelector('[data-testid="dm-input-textarea"]') as HTMLTextAreaElement;
@@ -191,11 +191,11 @@ describe('DmInputBar', () => {
     expect(item).toBeInTheDocument();
     expect(item.textContent).toContain(':sunglasses:');
     fireEvent.click(item);
-    expect(textarea.value).toBe(':sunglasses:');
+    expect(textarea.value).toBe('😎');
     expect(container.querySelector('[data-testid="dm-emoji-autocomplete"]')).not.toBeInTheDocument();
   });
 
-  it('Enter accepts the highlighted suggestion instead of sending', async () => {
+  it('Enter accepts the highlighted suggestion and inserts the emoji instead of sending', async () => {
     seedConv();
     let posted: any = null;
     const restore = stubFetch({
@@ -213,7 +213,7 @@ describe('DmInputBar', () => {
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     await flush();
     expect(posted).toBeNull();
-    expect(textarea.value).toBe(':sunglasses:');
+    expect(textarea.value).toBe('😎');
     expect(container.querySelector('[data-testid="dm-emoji-autocomplete"]')).not.toBeInTheDocument();
     restore();
   });
