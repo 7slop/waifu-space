@@ -32,7 +32,7 @@ import {
 } from './icons';
 import { t, SUPPORTED_LANGUAGES, setLanguage, SupportedLanguage, getPersonalityName, getCosmeticName, getMoodName } from '../lib/i18n';
 
-import { compressImage } from '../lib/image-compress';
+import { compressImage, compressWallpaper } from '../lib/image-compress';
 
 export function SettingsStudio() {
   const [activeTab, setActiveTab] = createSignal<
@@ -42,6 +42,7 @@ export function SettingsStudio() {
   const [editBio, setEditBio] = createSignal(state.user?.bio || '');
   const [editAvatarUrl, setEditAvatarUrl] = createSignal(state.user?.avatarUrl || '');
   const [uploadingAvatar, setUploadingAvatar] = createSignal(false);
+  const [uploadingWallpaper, setUploadingWallpaper] = createSignal(false);
 
   const [availableVoices, setAvailableVoices] = createSignal<SpeechSynthesisVoice[]>([]);
 
@@ -94,6 +95,43 @@ export function SettingsStudio() {
       setUploadingAvatar(false);
       input.value = '';
     }
+  };
+
+  const handleWallpaperFile = async (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    if (!file.type.startsWith('image/')) {
+      showToast(t('settings.wallpapers.uploadInvalid'));
+      input.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast(t('settings.wallpapers.uploadTooLarge'));
+      input.value = '';
+      return;
+    }
+    try {
+      setUploadingWallpaper(true);
+      const compressed = await compressWallpaper(file);
+      updateSettings({
+        wallpaperType: 'custom',
+        uploadedWallpaperUrl: compressed.dataUrl,
+        customWallpaperUrl: state.settings.customWallpaperUrl
+      });
+      saveState();
+      showToast(t('settings.wallpapers.uploadedToast'));
+    } catch {
+      showToast(t('settings.wallpapers.uploadFailed'));
+    } finally {
+      setUploadingWallpaper(false);
+      input.value = '';
+    }
+  };
+
+  const handleRemoveUploadedWallpaper = () => {
+    updateSettings({ uploadedWallpaperUrl: '', wallpaperType: 'stock' });
+    saveState();
   };
 
   const handleExportCalendar = () => {
@@ -758,6 +796,36 @@ export function SettingsStudio() {
                     saveState();
                   }}
                 />
+              </div>
+
+              <div class="setting-row" style={{ 'margin-top': '14px' }}>
+                <div>
+                  <strong>{t('settings.wallpapers.uploadTitle')}</strong>
+                  <p class="setting-desc">{t('settings.wallpapers.uploadDesc')}</p>
+                  {state.settings.uploadedWallpaperUrl ? (
+                    <div style={{ 'margin-top': '8px', display: 'flex', 'align-items': 'center', gap: '10px' }}>
+                      <img
+                        src={state.settings.uploadedWallpaperUrl}
+                        alt=""
+                        aria-hidden="true"
+                        style={{ width: '64px', height: '40px', 'object-fit': 'cover', 'border-radius': 'var(--radius-sm)' }}
+                      />
+                      <span style={{ 'font-size': '12px', color: 'var(--text-secondary)' }}>{t('settings.wallpapers.uploaded')}</span>
+                      <button type="button" class="gcal-btn gcal-btn-outline" onClick={handleRemoveUploadedWallpaper} style={{ 'margin-left': 'auto' }}>
+                        {t('settings.wallpapers.uploadRemove')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                <label class="gcal-btn gcal-btn-outline" style={{ cursor: 'pointer', 'flex-shrink': 0 }}>
+                  {uploadingWallpaper() ? t('settings.wallpapers.uploading') : t('settings.wallpapers.uploadButton')}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleWallpaperFile}
+                  />
+                </label>
               </div>
 
               <div class="setting-row">

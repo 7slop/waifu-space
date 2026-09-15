@@ -228,6 +228,7 @@ export interface AppState {
     wallpaperId: string;
     wallpaperType: 'stock' | 'custom';
     customWallpaperUrl: string;
+    uploadedWallpaperUrl: string;
     wallpaperBlur: number;
     wallpaperDim: number;
     sakuraParticles: boolean;
@@ -316,6 +317,7 @@ export const DEFAULT_STATE: AppState = {
     wallpaperId: 'sakura-shrine',
     wallpaperType: 'stock',
     customWallpaperUrl: '',
+    uploadedWallpaperUrl: '',
     wallpaperBlur: 2,
     wallpaperDim: 45,
     sakuraParticles: true,

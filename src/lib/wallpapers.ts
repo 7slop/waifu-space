@@ -71,5 +71,37 @@ export const STOCK_WALLPAPERS: Wallpaper[] = [
     url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=2000&q=80',
     thumb: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=400&q=80',
     fallback: 'linear-gradient(135deg, #241429 0%, #542247 45%, #9b3d58 75%, #e27d60 100%)'
+  },
+  {
+    id: 'lake-kawaguchi-sakura',
+    name: 'Sakura Lake Kawaguchi',
+    category: 'Spring Fuji',
+    url: 'https://images.unsplash.com/photo-1525635569544-610f9540664a?auto=format&fit=crop&w=2000&q=80',
+    thumb: 'https://images.unsplash.com/photo-1525635569544-610f9540664a?auto=format&fit=crop&w=400&q=80',
+    fallback: 'linear-gradient(135deg, #210b2d 0%, #702f52 45%, #e18a98 80%, #fde6ec 100%)'
+  },
+  {
+    id: 'tokyo-lantern-twilight',
+    name: 'Tokyo Lantern Twilight',
+    category: 'Neon Shibuya',
+    url: 'https://images.unsplash.com/photo-1758400757795-3edf61faef52?auto=format&fit=crop&w=2000&q=80',
+    thumb: 'https://images.unsplash.com/photo-1758400757795-3edf61faef52?auto=format&fit=crop&w=400&q=80',
+    fallback: 'linear-gradient(135deg, #120a1f 0%, #3b1e4f 40%, #d94a3d 80%, #ffb86b 100%)'
+  },
+  {
+    id: 'shibuya-neon-crossing',
+    name: 'Shibuya Neon Crossing',
+    category: 'Neon Tokyo',
+    url: 'https://images.unsplash.com/photo-1741684650296-19f452c8814f?auto=format&fit=crop&w=2000&q=80',
+    thumb: 'https://images.unsplash.com/photo-1741684650296-19f452c8814f?auto=format&fit=crop&w=400&q=80',
+    fallback: 'linear-gradient(135deg, #0b0620 0%, #3a1050 45%, #e0558e 80%, #5aa8ff 100%)'
+  },
+  {
+    id: 'fuji-cherry-bloom',
+    name: 'Fuji Cherry Bloom',
+    category: 'Spring Fuji',
+    url: 'https://images.unsplash.com/photo-1574077646797-4d41ad5d908a?auto=format&fit=crop&w=2000&q=80',
+    thumb: 'https://images.unsplash.com/photo-1574077646797-4d41ad5d908a?auto=format&fit=crop&w=400&q=80',
+    fallback: 'linear-gradient(135deg, #1f0d33 0%, #6b2d67 45%, #d985b8 80%, #ffe3f2 100%)'
   }
 ];

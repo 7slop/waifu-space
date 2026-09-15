@@ -4,11 +4,14 @@ import { STOCK_WALLPAPERS } from '../lib/wallpapers';
 
 export function WallpaperBackground() {
   const currentWallpaper = createMemo(() => {
-    if (state.settings.wallpaperType === 'custom' && state.settings.customWallpaperUrl) {
-      return {
-        url: state.settings.customWallpaperUrl,
-        fallback: 'linear-gradient(135deg, #1f1435 0%, #3e1b4b 50%, #d85c7a 100%)'
-      };
+    if (state.settings.wallpaperType === 'custom') {
+      const url = state.settings.customWallpaperUrl || state.settings.uploadedWallpaperUrl;
+      if (url) {
+        return {
+          url,
+          fallback: 'linear-gradient(135deg, #1f1435 0%, #3e1b4b 50%, #d85c7a 100%)'
+        };
+      }
     }
     const found = STOCK_WALLPAPERS.find(w => w.id === state.settings.wallpaperId) || STOCK_WALLPAPERS[0];
     return found;
