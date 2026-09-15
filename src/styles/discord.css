@@ -558,6 +558,7 @@
 
 .dm-msg {
   display: flex;
+  align-items: flex-start; /* avatar hugs the top of the first row even for media */
   gap: 12px;
   padding: 2px 0;
   color: var(--text-primary, #cdd6f4);

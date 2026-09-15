@@ -65,6 +65,22 @@ describe('DmMessageList', () => {
     expect(container.querySelectorAll('.dm-msg-cont').length).toBe(1);
   });
 
+  it('shows a single avatar for a run of media messages', () => {
+    const media = (id: string, createdAt: string): DmMessage => ({
+      ...mk(id, 'u-bob', createdAt),
+      messageType: 'gif',
+      mediaUrl: 'https://media.tenor.com/foo.gif'
+    });
+    seed([
+      media('m1', '2025-01-01T10:00:00.000Z'),
+      media('m2', '2025-01-01T10:01:00.000Z'),
+      media('m3', '2025-01-01T10:02:00.000Z')
+    ]);
+    const { container } = render(() => <DmMessageList />);
+    expect(container.querySelectorAll('[data-testid="dm-avatar"]').length).toBe(1);
+    expect(container.querySelectorAll('.dm-msg-cont').length).toBe(2);
+  });
+
   it('renders a load-older button while more history exists', () => {
     seed([mk('m1', 'u-bob', '2025-01-01T10:00:00.000Z')]);
     setDmState('hasOlder', 'c1', true);
