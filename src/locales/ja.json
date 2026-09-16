@@ -1074,6 +1074,7 @@
     "systemCallStartedVideo": "ビデオ通話を開始しました",
     "systemCallEnded": "通話が終了しました",
     "systemCallDeclined": "通話を拒否しました",
-    "systemCallMissed": "着信がありませんでした"
+    "systemCallMissed": "着信がありませんでした",
+    "userLeftVoiceChat": "{name}がボイスチャットを退出しました"
   }
 }

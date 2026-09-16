@@ -122,7 +122,8 @@ import {
   toggleVideo,
   toggleReaction,
   refreshPendingCall,
-  pollActiveCallStatus
+  pollActiveCallStatus,
+  handlePeerLeft
 } from '../../src/lib/dm/store';
 
 const AUTH = { token: 't1', id: 'u-me', username: 'alice', avatarUrl: 'https://x/a.png' };
@@ -618,18 +619,25 @@ async function boot() {
     expect(rtInst.sendCallCancel).toHaveBeenCalledWith('u-bob', expect.objectContaining({ call }));
   });
 
-  it('receiving hangup signal cleans up active call in real time', async () => {
-    await boot();
-    await selectConversation('c1');
-    await startCall('voice');
-    expect(dmState.call).not.toBeNull();
-    rt.handlers.onCallSignal({
-      kind: 'call-signal',
-      callId: 'call-2',
-      conversationId: 'c1',
-      type: 'hangup'
-    });
-    expect(dmState.call).toBeNull();
+  it('receiving hangup signal displays left the voice chat notice and cancels call after timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      await boot();
+      await selectConversation('c1');
+      await startCall('voice');
+      expect(dmState.call).not.toBeNull();
+      rt.handlers.onCallSignal({
+        kind: 'call-signal',
+        callId: 'call-2',
+        conversationId: 'c1',
+        type: 'hangup'
+      });
+      expect(dmState.call?.leftNotice).toContain('left the voice chat');
+      vi.advanceTimersByTime(3500);
+      expect(dmState.call).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('refreshPendingCall hydrates a missed incoming (ringing) call', async () => {
@@ -1072,5 +1080,84 @@ describe('dm store call status polling and callee acceptance sync', () => {
         targetUserId: 'u-bob'
       })
     );
+  });
+
+  it('handlePeerLeft sets leftNotice and automatically cancels call after timeout', () => {
+    vi.useFakeTimers();
+    try {
+      setDmState('call', {
+        call: {
+          id: 'call-leave-1',
+          conversationId: 'c1',
+          callerId: 'u-bob',
+          calleeId: 'u-me',
+          callType: 'voice',
+          status: 'active',
+          startedAt: '',
+          answeredAt: '',
+          endedAt: null,
+          createdAt: ''
+        },
+        direction: 'incoming',
+        remoteName: 'Bob',
+        callState: 'connected',
+        muted: false,
+        videoOff: true,
+        screenSharing: false,
+        deafened: false
+      });
+
+      handlePeerLeft('call-leave-1', 'Bob');
+
+      expect(dmState.call?.leftNotice).toContain('Bob');
+      expect(dmState.call?.leftNotice).toContain('left the voice chat');
+      expect(dmState.call).not.toBeNull();
+
+      // Advancing timer past 3.5s timeout cancels the call
+      vi.advanceTimersByTime(3500);
+      expect(dmState.call).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hangUpCall immediately cancels call and clears peer left timeout without waiting', async () => {
+    vi.useFakeTimers();
+    try {
+      setDmState('call', {
+        call: {
+          id: 'call-leave-2',
+          conversationId: 'c1',
+          callerId: 'u-bob',
+          calleeId: 'u-me',
+          callType: 'voice',
+          status: 'active',
+          startedAt: '',
+          answeredAt: '',
+          endedAt: null,
+          createdAt: ''
+        },
+        direction: 'incoming',
+        remoteName: 'Bob',
+        callState: 'connected',
+        muted: false,
+        videoOff: true,
+        screenSharing: false,
+        deafened: false
+      });
+
+      handlePeerLeft('call-leave-2', 'Bob');
+      expect(dmState.call?.leftNotice).toBeDefined();
+
+      // User manually hangs up
+      await hangUpCall();
+      expect(dmState.call).toBeNull();
+
+      // Ensure timer does not error after manual hang up
+      vi.advanceTimersByTime(3500);
+      expect(dmState.call).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

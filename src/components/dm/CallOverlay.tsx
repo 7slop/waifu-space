@@ -152,7 +152,7 @@ function IncomingCallBar() {
       </div>
       <div class="dm-call-info">
         <span class="dm-call-name">{incoming().callerName}</span>
-        <span class="dm-call-sub">{isVideo() ? t('dm.callVideoLabel') : t('dm.callVoiceLabel')}{' · '}{t('dm.callingLabel')}</span>
+        <span class="dm-call-sub">{incoming().leftNotice ?? `${isVideo() ? t('dm.callVideoLabel') : t('dm.callVoiceLabel')} · ${t('dm.callingLabel')}`}</span>
       </div>
       <div class="dm-call-actions">
         <button class="dm-call-action decline" data-testid="dm-call-decline" title={t('dm.decline')} onClick={() => void declineIncomingCall()}>
@@ -285,9 +285,11 @@ function ActiveCallBar() {
         <div class="dm-call-info">
           <span class="dm-call-name">{peer().name}</span>
           <span class="dm-call-sub">
-            {calling()
-              ? t(call().direction === 'incoming' ? 'dm.incomingCall' : 'dm.outgoingCall', { name: peer().name })
-              : call().screenSharing ? t('dm.sharingScreenLabel') : t('dm.inCallLabel')}
+            {call().leftNotice
+              ? call().leftNotice
+              : calling()
+                ? t(call().direction === 'incoming' ? 'dm.incomingCall' : 'dm.outgoingCall', { name: peer().name })
+                : call().screenSharing ? t('dm.sharingScreenLabel') : t('dm.inCallLabel')}
           </span>
         </div>
       </div>

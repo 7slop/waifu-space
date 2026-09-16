@@ -1074,6 +1074,7 @@
     "systemCallStartedVideo": "Video call started",
     "systemCallEnded": "Call ended",
     "systemCallDeclined": "Call declined",
-    "systemCallMissed": "Missed call"
+    "systemCallMissed": "Missed call",
+    "userLeftVoiceChat": "{name} left the voice chat"
   }
 }

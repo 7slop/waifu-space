@@ -49,6 +49,7 @@ import {
 } from './api';
 import { DmRealtime, RealtimePresencePayload } from './realtime';
 import { CallManager, CallState } from './call';
+import { t } from '../i18n';
 
 // ---------------------------------------------------------------------------
 // Client-side DM store
@@ -84,6 +85,7 @@ export interface DmCallUi {
   screenSharing: boolean;
   /** Discord-style "deafen": all audio muted (incoming + outgoing). */
   deafened: boolean;
+  leftNotice?: string | null;
 }
 
 export interface DmStoreState {
@@ -133,6 +135,7 @@ interface DmRuntime {
   presenceOrigin: 'auto' | 'manual';
   pendingPollTimer: ReturnType<typeof setInterval> | null;
   callStatusPollTimer: ReturnType<typeof setInterval> | null;
+  peerLeftTimeout: ReturnType<typeof setTimeout> | null;
 }
 
 const runtime: DmRuntime = {
@@ -144,7 +147,8 @@ const runtime: DmRuntime = {
   lastTypingEmit: 0,
   presenceOrigin: 'manual',
   pendingPollTimer: null,
-  callStatusPollTimer: null
+  callStatusPollTimer: null,
+  peerLeftTimeout: null
 };
 
 /** How often the store re-polls the DB for a pending (ringing/active) call. */
@@ -329,19 +333,62 @@ function flushPendingIce(conversationId: string, callId: string): void {
   }
 }
 
+export function handlePeerLeft(callId: string, remoteName?: string): void {
+  const call = dmState.call;
+  if (!call || call.call.id !== callId) return;
+  if (call.leftNotice) return;
+
+  stopCallStatusPolling();
+  const name = remoteName || call.remoteName || 'User';
+  setDmState('call', 'leftNotice', t('dm.userLeftVoiceChat', { name }));
+
+  if (runtime.peerLeftTimeout) {
+    clearTimeout(runtime.peerLeftTimeout);
+  }
+
+  runtime.peerLeftTimeout = setTimeout(() => {
+    runtime.peerLeftTimeout = null;
+    if (dmState.call?.call.id === callId) {
+      runtime.call?.hangUp('ended');
+      setDmState('call', null);
+      setDmState('incomingCall', null);
+      setLocalStreamSignal(null);
+      setRemoteStreamSignal(null);
+      runtime.call = null;
+    }
+  }, 3500);
+}
+
+export function handleIncomingCallDismiss(callId: string, callerName?: string): void {
+  if (dmState.incomingCall?.call.id !== callId) return;
+  if (dmState.incomingCall.leftNotice) return;
+
+  const name = callerName || dmState.incomingCall.callerName || 'User';
+  setDmState('incomingCall', (prev) => (prev ? { ...prev, leftNotice: t('dm.userLeftVoiceChat', { name }) } : null));
+
+  if (runtime.peerLeftTimeout) {
+    clearTimeout(runtime.peerLeftTimeout);
+  }
+
+  runtime.peerLeftTimeout = setTimeout(() => {
+    runtime.peerLeftTimeout = null;
+    if (dmState.incomingCall?.call.id === callId) {
+      setDmState('incomingCall', null);
+      runtime.pendingAccept = null;
+    }
+  }, 3500);
+}
+
 async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
   const manager = runtime.call;
   const call = dmState.call;
 
   if (signal.type === 'hangup' || signal.type === 'decline') {
     if (dmState.incomingCall?.call.id === signal.callId) {
-      setDmState('incomingCall', null);
-      runtime.pendingAccept = null;
+      handleIncomingCallDismiss(signal.callId, dmState.incomingCall.callerName);
     }
     if (call?.call.id === signal.callId) {
-      stopCallStatusPolling();
-      runtime.call?.hangUp(signal.type === 'decline' ? 'declined' : 'ended');
-      setDmState('call', null);
+      handlePeerLeft(signal.callId, call.remoteName);
     }
     return;
   }
@@ -416,12 +463,10 @@ function onIncomingCallOffer(broadcast: CallOfferBroadcast): void {
 
 function onIncomingCallCancel(broadcast: CallOfferBroadcast): void {
   if (dmState.incomingCall?.call.id === broadcast.call.id) {
-    setDmState('incomingCall', null);
-    runtime.pendingAccept = null;
+    handleIncomingCallDismiss(broadcast.call.id, broadcast.callerName);
   }
   if (dmState.call?.call.id === broadcast.call.id) {
-    runtime.call?.hangUp('ended');
-    setDmState('call', null);
+    handlePeerLeft(broadcast.call.id, broadcast.callerName);
   }
 }
 
@@ -500,6 +545,9 @@ function wireCallManager(call: CallSession, manager: CallManager): void {
   manager.deps.onRenegotiation = (offer, callId) => {
     if (callId !== call.id) return;
     sendSignal('offer', call.id, call.conversationId, { sdp: offer });
+  };
+  manager.deps.onPeerDisconnected = () => {
+    handlePeerLeft(call.id, dmState.call?.remoteName);
   };
 }
 
@@ -1094,13 +1142,17 @@ export async function pollActiveCallStatus(): Promise<void> {
       }
       setDmState('call', 'call', latest);
     } else if (['declined', 'busy', 'canceled', 'ended', 'missed'].includes(latest.status)) {
-      stopCallStatusPolling();
-      runtime.call?.hangUp(latest.status === 'declined' ? 'declined' : 'ended');
-      setDmState('call', null);
-      setDmState('incomingCall', null);
-      setLocalStreamSignal(null);
-      setRemoteStreamSignal(null);
-      runtime.call = null;
+      if (dmState.call?.callState === 'connected') {
+        handlePeerLeft(callId, current.remoteName);
+      } else {
+        stopCallStatusPolling();
+        runtime.call?.hangUp(latest.status === 'declined' ? 'declined' : 'ended');
+        setDmState('call', null);
+        setDmState('incomingCall', null);
+        setLocalStreamSignal(null);
+        setRemoteStreamSignal(null);
+        runtime.call = null;
+      }
     }
   } catch {
     // Poll failures are transient; will retry on next tick
@@ -1236,6 +1288,10 @@ export async function acceptIncomingCall(): Promise<boolean> {
 
 export async function declineIncomingCall(): Promise<void> {
   stopCallStatusPolling();
+  if (runtime.peerLeftTimeout) {
+    clearTimeout(runtime.peerLeftTimeout);
+    runtime.peerLeftTimeout = null;
+  }
   const auth = currentAuth();
   const offer = dmState.incomingCall;
   setDmState('incomingCall', null);
@@ -1249,6 +1305,10 @@ export async function declineIncomingCall(): Promise<void> {
 
 export async function hangUpCall(): Promise<void> {
   stopCallStatusPolling();
+  if (runtime.peerLeftTimeout) {
+    clearTimeout(runtime.peerLeftTimeout);
+    runtime.peerLeftTimeout = null;
+  }
   const auth = currentAuth();
   const call = dmState.call;
 
@@ -1373,6 +1433,10 @@ export function toggleDeafen(): boolean {
 
 export function resetDmStore(): void {
   stopCallStatusPolling();
+  if (runtime.peerLeftTimeout) {
+    clearTimeout(runtime.peerLeftTimeout);
+    runtime.peerLeftTimeout = null;
+  }
   setLocalStreamSignal(null);
   setRemoteStreamSignal(null);
   if (runtime.call) {
@@ -1389,6 +1453,10 @@ export function resetDmStore(): void {
 
 export async function disconnectDm(): Promise<void> {
   stopCallStatusPolling();
+  if (runtime.peerLeftTimeout) {
+    clearTimeout(runtime.peerLeftTimeout);
+    runtime.peerLeftTimeout = null;
+  }
   runtime.call?.hangUp('ended');
   runtime.call = null;
   runtime.pendingAccept = null;
@@ -1399,4 +1467,44 @@ export async function disconnectDm(): Promise<void> {
   await runtime.realtime?.disconnect().catch(() => undefined);
   runtime.realtime = null;
   resetDmStore();
+}
+
+if (typeof window !== 'undefined') {
+  const onPageUnload = () => {
+    const call = dmState.call;
+    const auth = currentAuth();
+    if (!call || !auth) return;
+    const callId = call.call.id;
+    const convId = call.call.conversationId;
+    const peerId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
+
+    void runtime.realtime?.sendCallSignal({
+      kind: 'call-signal',
+      callId,
+      conversationId: convId,
+      type: 'hangup',
+      targetUserId: peerId,
+      reason: 'left'
+    });
+    void runtime.realtime?.sendCallCancel(peerId, {
+      kind: 'call-offer',
+      call: call.call,
+      callerName: auth.username
+    });
+
+    try {
+      fetch(`/api/dm/calls/${callId}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${auth.token}`
+        },
+        body: JSON.stringify({ status: call.callState === 'ringing' ? 'canceled' : 'ended' }),
+        keepalive: true
+      });
+    } catch {}
+  };
+
+  window.addEventListener('beforeunload', onPageUnload);
+  window.addEventListener('pagehide', onPageUnload);
 }

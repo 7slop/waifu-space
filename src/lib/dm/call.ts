@@ -42,6 +42,8 @@ export interface CallManagerDeps {
   onIceCandidate?: (candidate: RTCIceCandidateInit, callId: string) => void;
   /** Emitted when a mid-call track change needs a fresh SDP offer. */
   onRenegotiation?: (offer: RTCSessionDescriptionInit, callId: string) => void;
+  /** Emitted when the remote peer disconnects or the WebRTC connection drops. */
+  onPeerDisconnected?: () => void;
 }
 
 export class CallManager {
@@ -91,6 +93,18 @@ export class CallManager {
     this.pc = createPeer();
     this.pc.onicecandidate = (ev) => {
       if (ev.candidate && this.callId) this.deps.onIceCandidate?.(ev.candidate.toJSON(), this.callId);
+    };
+    this.pc.onconnectionstatechange = () => {
+      const st = this.pc?.connectionState;
+      if (st === 'disconnected' || st === 'failed') {
+        this.deps.onPeerDisconnected?.();
+      }
+    };
+    this.pc.oniceconnectionstatechange = () => {
+      const st = this.pc?.iceConnectionState;
+      if (st === 'disconnected' || st === 'failed') {
+        this.deps.onPeerDisconnected?.();
+      }
     };
     this.pc.ontrack = (ev) => {
       const stream = ev.streams && ev.streams[0] ? ev.streams[0] : (this.remoteStream ?? new MediaStream());

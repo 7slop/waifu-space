@@ -133,6 +133,7 @@ export interface CallOfferBroadcast {
   callerName: string;
   callerAvatar?: string | null;
   offer?: RTCSessionDescriptionInit;
+  leftNotice?: string | null;
 }
 
 export interface CallSignalPayload {

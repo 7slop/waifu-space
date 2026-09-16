@@ -476,4 +476,23 @@ describe('CallOverlay', () => {
     // Now shows in call status
     expect(subText()).toContain('In call');
   });
+
+  it('displays peer left the voice chat notice in call subtitle when leftNotice is present', async () => {
+    seedConv();
+    setDmState('call', {
+      call: callSession({ id: 'call-notice-1', status: 'active' }),
+      direction: 'incoming',
+      remoteName: 'Bob',
+      callState: 'connected',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false,
+      leftNotice: 'Bob left the voice chat'
+    });
+
+    const { container } = render(() => <CallOverlay />);
+    const subText = container.querySelector('.dm-call-sub')?.textContent ?? '';
+    expect(subText).toContain('Bob left the voice chat');
+  });
 });
