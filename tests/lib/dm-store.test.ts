@@ -96,6 +96,9 @@ vi.mock('../../src/lib/dm/call', () => ({
     isScreenSharing(): boolean {
       return this.screenSharing;
     }
+    isConnected(): boolean {
+      return this.currentState === 'connected';
+    }
     hangUp(): void {
       this.currentState = 'ended';
       this.deps.onStateChange?.();
@@ -725,6 +728,67 @@ async function boot() {
     await initDm();
     await refreshPendingCall();
     expect(dmState.incomingCall).toBeNull();
+  });
+
+  it('callee accepting without prior offer sends offer to caller, and caller accepts it to connect', async () => {
+    const rtInst = await boot();
+    // 1. Caller starts the call
+    await selectConversation('c1');
+    await startCall('voice');
+    expect(dmState.call?.callState).toBe('ringing');
+
+    // 2. Caller receives callee's offer (e.g. if callee joined before caller's offer reached them)
+    await rt.handlers.onCallSignal({
+      kind: 'call-signal',
+      callId: 'call-2',
+      conversationId: 'c1',
+      type: 'offer',
+      senderId: 'u-bob',
+      targetUserId: 'u-me',
+      sdp: { type: 'offer', sdp: 'callee-offer-sdp' }
+    });
+
+    // Caller should accept callee's offer, transition to connected, and send answer back
+    expect(dmState.call?.callState).toBe('connected');
+    expect(rtInst.sendCallSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'answer',
+        callId: 'call-2',
+        targetUserId: 'u-bob',
+        senderId: 'u-me'
+      })
+    );
+  });
+
+  it('ignores signals targeted to another user or sent by self', async () => {
+    const rtInst = await boot();
+    await selectConversation('c1');
+    await startCall('voice');
+    expect(dmState.call?.callState).toBe('ringing');
+
+    // Signal sent by self (echo)
+    await rt.handlers.onCallSignal({
+      kind: 'call-signal',
+      callId: 'call-2',
+      conversationId: 'c1',
+      type: 'answer',
+      senderId: 'u-me',
+      targetUserId: 'u-bob',
+      sdp: { type: 'answer', sdp: 'my-own-answer' }
+    });
+    expect(dmState.call?.callState).toBe('ringing');
+
+    // Signal targeted to someone else
+    await rt.handlers.onCallSignal({
+      kind: 'call-signal',
+      callId: 'call-2',
+      conversationId: 'c1',
+      type: 'answer',
+      senderId: 'u-bob',
+      targetUserId: 'u-someone-else',
+      sdp: { type: 'answer', sdp: 'someone-elses-answer' }
+    });
+    expect(dmState.call?.callState).toBe('ringing');
   });
 });
 

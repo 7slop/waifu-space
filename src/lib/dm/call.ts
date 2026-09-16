@@ -260,12 +260,18 @@ export class CallManager {
     }
   }
 
-  /** Callee accepts an incoming offer and answers. */
   async acceptOffer(callId: string, peerId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit | null> {
     if (!this.pc) this.setPeer(peerId);
     this.callId = callId;
     this.peerId = peerId;
     try {
+      if (this.pc!.signalingState === 'have-local-offer') {
+        try {
+          await this.pc!.setLocalDescription({ type: 'rollback' } as any);
+        } catch {
+          // ignore rollback failure in non-supporting environments
+        }
+      }
       await this.pc!.setRemoteDescription(new RTCSessionDescription(offer));
       if (this.pc!.remoteDescription && this.pc!.remoteDescription.type !== 'offer') {
         // An existing negotiation is being updated; re-offer behaviour stays with the caller.
@@ -297,6 +303,14 @@ export class CallManager {
     if (this.state === 'ringing' || this.state === 'active') {
       this.setState('connected');
     }
+  }
+
+  isConnected(): boolean {
+    return this.state === 'connected';
+  }
+
+  getSignalingState(): RTCSignalingState | null {
+    return this.pc ? this.pc.signalingState : null;
   }
 
   async adoptAnswer(answer: RTCSessionDescriptionInit): Promise<void> {

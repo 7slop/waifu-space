@@ -136,6 +136,7 @@ interface DmRuntime {
   pendingPollTimer: ReturnType<typeof setInterval> | null;
   callStatusPollTimer: ReturnType<typeof setInterval> | null;
   peerLeftTimeout: ReturnType<typeof setTimeout> | null;
+  lastOffer: RTCSessionDescriptionInit | null;
 }
 
 const runtime: DmRuntime = {
@@ -148,7 +149,8 @@ const runtime: DmRuntime = {
   presenceOrigin: 'manual',
   pendingPollTimer: null,
   callStatusPollTimer: null,
-  peerLeftTimeout: null
+  peerLeftTimeout: null,
+  lastOffer: null
 };
 
 /** How often the store re-polls the DB for a pending (ringing/active) call. */
@@ -307,9 +309,10 @@ function onRealtimePresence(map: Record<string, RealtimePresencePayload>): void 
 }
 
 function sendSignal(type: CallSignalPayload['type'], callId: string, conversationId: string, extras: Partial<CallSignalPayload>, targetUserId?: string): void {
+  const auth = currentAuth();
   const current = dmState.call;
   const peerId = targetUserId ?? (current ? (current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId) : undefined);
-  void runtime.realtime?.sendCallSignal({ kind: 'call-signal', callId, conversationId, type, targetUserId: peerId, ...extras });
+  void runtime.realtime?.sendCallSignal({ kind: 'call-signal', callId, conversationId, type, targetUserId: peerId, senderId: auth?.id, ...extras });
 }
 
 const pendingInboundIce = new Map<string, RTCIceCandidateInit[]>();
@@ -380,6 +383,10 @@ export function handleIncomingCallDismiss(callId: string, callerName?: string): 
 }
 
 async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
+  const auth = currentAuth();
+  if (auth && signal.senderId && signal.senderId === auth.id) return;
+  if (auth && signal.targetUserId && signal.targetUserId !== auth.id) return;
+
   const manager = runtime.call;
   const call = dmState.call;
 
@@ -400,19 +407,26 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
       runtime.pendingAccept = null;
       if (manager) {
         const answer = await manager.acceptOffer(pending.call.id, pending.call.callerId, signal.sdp);
-        if (answer) sendSignal('answer', pending.call.id, pending.call.conversationId, { sdp: answer });
+        if (answer) sendSignal('answer', pending.call.id, pending.call.conversationId, { sdp: answer }, pending.call.callerId);
         drainInboundIce(pending.call.id, manager);
         flushPendingIce(pending.call.conversationId, pending.call.id);
       }
       return;
     }
-    // A renegotiation offer mid-call (only once connected — avoids echoing caller's own offer while ringing)
-    if (call && manager && signal.callId === call.call.id && signal.sdp && call.callState === 'connected') {
+    // An offer arrived for an in-progress or ringing call
+    if (call && manager && signal.callId === call.call.id && signal.sdp) {
       const remoteId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
+      if (call.direction === 'outgoing' && call.callState === 'ringing' && signal.senderId !== remoteId) {
+        return;
+      }
       const answer = await manager.acceptOffer(call.call.id, remoteId, signal.sdp);
       if (answer) sendSignal('answer', call.call.id, call.call.conversationId, { sdp: answer }, remoteId);
+      if (call.callState === 'ringing' || call.callState === 'active') {
+        setDmState('call', 'callState', 'connected');
+      }
       drainInboundIce(call.call.id, manager);
       flushPendingIce(call.call.conversationId, call.call.id);
+      return;
     }
     return;
   }
@@ -432,7 +446,7 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
       drainInboundIce(call.call.id, manager);
     }
     flushPendingIce(signal.conversationId, call.call.id);
-    if (call.callState === 'ringing') {
+    if (call.callState === 'ringing' || call.callState === 'active') {
       setDmState('call', 'callState', 'connected');
     }
   } else if (signal.type === 'ice' && signal.candidate) {
@@ -1057,7 +1071,8 @@ export async function startCall(type: CallType): Promise<boolean> {
     startCallStatusPolling();
     const offer = await manager.createOffer(call.id, otherId);
     if (offer) {
-      sendSignal('offer', call.id, conv.id, { sdp: offer });
+      runtime.lastOffer = offer;
+      sendSignal('offer', call.id, conv.id, { sdp: offer }, otherId);
       if (runtime.realtime) {
         await runtime.realtime.sendIncomingCallOffer({
           kind: 'call-offer',
@@ -1142,6 +1157,10 @@ export async function pollActiveCallStatus(): Promise<void> {
         runtime.call.markConnected();
         drainInboundIce(callId, runtime.call);
         flushPendingIce(current.call.conversationId, callId);
+        if (runtime.lastOffer && (typeof (runtime.call as any).isConnected === 'function' ? !(runtime.call as any).isConnected() : runtime.call.currentState !== 'connected')) {
+          const remoteId = current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId;
+          sendSignal('offer', callId, current.call.conversationId, { sdp: runtime.lastOffer }, remoteId);
+        }
       }
       setDmState('call', 'call', latest);
     } else if (['declined', 'busy', 'canceled', 'ended', 'missed'].includes(latest.status)) {
@@ -1256,7 +1275,7 @@ export async function acceptIncomingCall(): Promise<boolean> {
       direction: 'incoming',
       remoteName: callerName,
       remoteAvatar,
-      callState: 'ringing',
+      callState: 'connected',
       muted: false,
       videoOff: call.callType !== 'video',
       screenSharing: false,
