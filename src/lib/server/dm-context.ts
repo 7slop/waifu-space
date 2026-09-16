@@ -1,7 +1,7 @@
 import { json } from '@solidjs/router';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSessionTokenFromRequest, verifySessionToken, type UserSession } from './auth';
-import { getSupabaseServerClient, isSupabaseConfigured } from './supabase';
+import { getSupabaseServerClient, isSupabaseServiceRoleConfigured } from './supabase';
 
 export interface DmContext {
   session: UserSession;
@@ -18,7 +18,7 @@ export function badRequestResponse(error: string) {
 
 export function unavailableResponse() {
   return json(
-    { success: false, error: 'DM features require Supabase to be configured on the server' },
+    { success: false, error: 'DM features require SUPABASE_SERVICE_ROLE_KEY to be configured on the server. Please set the service-role key.' },
     { status: 503 }
   );
 }
@@ -31,7 +31,7 @@ export function resolveDmContext(request: Request): DmContext | Response {
   const token = getSessionTokenFromRequest(request);
   const session = verifySessionToken(token);
   if (!session) return unauthorizedResponse();
-  if (!isSupabaseConfigured()) return unavailableResponse();
+  if (!isSupabaseServiceRoleConfigured()) return unavailableResponse();
   return { session, supabase: getSupabaseServerClient()! };
 }
 

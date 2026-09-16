@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../src/lib/server/supabase', () => ({
   isSupabaseConfigured: () => mocks.state.configured,
+  isSupabaseServiceRoleConfigured: () => mocks.state.configured,
   getSupabaseServerClient: () => mocks.state.client
 }));
 

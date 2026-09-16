@@ -147,6 +147,7 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 - **Custom**, not Supabase Auth: HMAC-SHA256 signed `ws_<base64json>.<sig>` tokens, bcrypt passwords, `ws_session` cookie (7-day, SameSite=Lax).
 - Falls back to an **in-memory local user store** (not persisted across restarts, seeded demo user `AkariFan`/`waifu123`) when Supabase env vars are missing.
 - Server is authoritative for coins/bond/defense results. Calendar and time-budget data are E2E-encrypted client-side and stored as opaque blobs.
+- **DM/Presence/Call RPCs (`schema-dm-functions.sql`) are SECURITY DEFINER and EXECUTE-granted to `service_role` ONLY** (migration `restrict_dm_rpc_execute_to_service_role`). Their `auth.uid() IS NOT NULL` guards are a no-op for the anon role (`auth.uid()` is NULL), so any anon/authenticated grant would reopen full IDOR. DM routes therefore require `SUPABASE_SERVICE_ROLE_KEY`; `resolveDmContext` returns 503 when it is absent. Do not re-grant these RPCs to anon/authenticated.
 
 ### State & Persistence
 - One big reactive store in `src/lib/store.ts` (settings, waifu config, calendar events, RPG/economy state) persisted to `localStorage`.

@@ -4,6 +4,13 @@
 -- the database. Every function verifies that a caller presenting a
 -- real user JWT (auth.uid() != null) may only touch their own data;
 -- the server routes always pass the verified session user id.
+--
+-- SECURITY: EXECUTE is granted to service_role ONLY (see the grant block at
+-- the bottom). The historical anon/authenticated grants were revoked in
+-- migration restrict_dm_rpc_execute_to_service_role: auth.uid() is NULL for
+-- the anon role, so the per-function guards were a no-op and every DM RPC was
+-- reachable unauthenticated (full IDOR). Server routes run these RPCs with the
+-- service-role key; the browser client never calls them directly.
 -- ==========================================================
 
 -- Effective presence for a stored user_presence row. A row whose last-seen
@@ -970,44 +977,51 @@ BEGIN
 END;
 $$;
 
--- Grant EXECUTE to the roles in play.
+-- Grant EXECUTE to the server role in play. Note: anon/authenticated are
+-- intentionally NOT granted — these SECURITY DEFINER functions guard on
+-- auth.uid() which is always NULL for the anon role, so any anon grant would
+-- reopen full IDOR. The app server calls them with SUPABASE_SERVICE_ROLE_KEY.
 REVOKE ALL ON FUNCTION public.get_dm_conversations(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_dm_conversations(uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_dm_conversations(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.get_or_create_dm_conversation(uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_or_create_dm_conversation(uuid, uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_or_create_dm_conversation(uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text) TO service_role;
 REVOKE ALL ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text, uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.send_dm_message(uuid, uuid, text, text, text, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.update_dm_message(uuid, uuid, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.update_dm_message(uuid, uuid, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.update_dm_message(uuid, uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.delete_dm_message(uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.delete_dm_message(uuid, uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.delete_dm_message(uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.mark_dm_conversation_read(uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.get_dm_messages(uuid, uuid, timestamptz, int) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_dm_messages(uuid, uuid, timestamptz, int) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_dm_messages(uuid, uuid, timestamptz, int) TO service_role;
 
 REVOKE ALL ON FUNCTION public.toggle_message_reaction(uuid, uuid, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.toggle_message_reaction(uuid, uuid, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.toggle_message_reaction(uuid, uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.count_dm_unread(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.count_dm_unread(uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.count_dm_unread(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.upsert_user_presence(uuid, text, text, timestamptz) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.upsert_user_presence(uuid, text, text, timestamptz) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.upsert_user_presence(uuid, text, text, timestamptz) TO service_role;
 REVOKE ALL ON FUNCTION public.get_user_presence_batch(uuid[]) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_user_presence_batch(uuid[]) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_user_presence_batch(uuid[]) TO service_role;
 REVOKE ALL ON FUNCTION public.get_own_presence(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_own_presence(uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_own_presence(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.update_call_session(uuid, uuid, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.update_call_session(uuid, uuid, text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.update_call_session(uuid, uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.get_pending_call_for_user(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_pending_call_for_user(uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_pending_call_for_user(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.get_call_session(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_call_session(uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.get_user_profile_public(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_user_profile_public(uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_user_profile_public(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.touch_user_presence(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.touch_user_presence(uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.touch_user_presence(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.dm_effective_status(text, timestamptz) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.dm_effective_status(text, timestamptz) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.dm_effective_status(text, timestamptz) TO service_role;
 CREATE OR REPLACE FUNCTION public.create_call_session(
   p_user_id uuid,
   p_conversation_id uuid,
