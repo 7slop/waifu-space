@@ -134,6 +134,7 @@ export class CallManager {
 
   private renegotiate(): void {
     if (this.state !== 'connected' || !this.pc || this.renegotiating || !this.callId) return;
+    if (this.pc.signalingState !== 'stable') return;
     this.renegotiating = true;
     void (async () => {
       try {
@@ -147,8 +148,9 @@ export class CallManager {
         this.deps.onRenegotiation?.(desc, this.callId!);
       } catch {
         // renegotiation is best-effort
+      } finally {
+        this.renegotiating = false;
       }
-      this.renegotiating = false;
     })();
   }
 

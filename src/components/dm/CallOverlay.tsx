@@ -185,14 +185,15 @@ function ActiveCallBar() {
   // answers (WebRTC connected); 'active' merely reflects the server-side
   // call row and must not read as "in call" while the peer hasn't joined.
   const calling = () => call().callState === 'ringing';
+  const screen = createMemo<MediaStream | null>(() => (connected() ? callRemoteStream() : null));
+  const local = createMemo<MediaStream | null>(() => callLocalStream());
   const remoteHasVideo = () => {
     const s = screen();
     return !!s && s.getVideoTracks().some((t) => t.readyState !== 'ended');
   };
   const videoActive = () => (!call().videoOff || call().screenSharing || remoteHasVideo()) && (connected() || ringing());
+  const sharing = () => call().screenSharing;
   const showPip = () => connected() && (sharing() || !call().videoOff);
-  const screen = createMemo<MediaStream | null>(() => (connected() ? callRemoteStream() : null));
-  const local = createMemo<MediaStream | null>(() => callLocalStream());
   const conv = () => dmState.conversations.find((c) => c.id === call().call.conversationId);
   const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
   const peer = () => {
@@ -211,7 +212,6 @@ function ActiveCallBar() {
   // When the local user shares their screen the shared feed (local stream)
   // fills the big stage, so the remote camera becomes a square PiP. Before
   // the call is connected the stage always shows the local preview.
-  const sharing = () => call().screenSharing;
   const mainStream = () => (sharing() || !connected() ? local() : screen());
   const pipStream = () => (sharing() && connected() ? screen() : local());
 

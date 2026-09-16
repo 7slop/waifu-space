@@ -521,7 +521,7 @@ function makeCallManager(): CallManager {
   return manager;
 }
 
-const [localStreamSignal, setLocalStreamSignal] = createSignal<MediaStream | null>(null);
+const [localStreamSignal, setLocalStreamSignal] = createSignal<MediaStream | null>(null, { equals: false });
 const [remoteStreamSignal, setRemoteStreamSignal] = createSignal<MediaStream | null>(null, { equals: false });
 
 function wireCallManager(call: CallSession, manager: CallManager): void {
@@ -1396,6 +1396,9 @@ export function toggleVideo(): boolean {
   if (!manager) return false;
   manager.toggleVideo();
   setDmState('call', (prev) => (prev ? { ...prev, videoOff: manager.isVideoOff() } : prev));
+  if (manager.localMedia) {
+    setLocalStreamSignal(manager.localMedia);
+  }
   return manager.isVideoOff();
 }
 
@@ -1406,6 +1409,9 @@ export async function toggleScreenShare(): Promise<boolean> {
   const sharing = manager.isScreenSharing();
   const ok = sharing ? await manager.disableScreenShare() : await manager.enableScreenShare();
   setDmState('call', (prev) => (prev ? { ...prev, screenSharing: manager.isScreenSharing(), videoOff: manager.isVideoOff() } : prev));
+  if (manager.localMedia) {
+    setLocalStreamSignal(manager.localMedia);
+  }
   return ok;
 }
 
@@ -1415,6 +1421,9 @@ export async function enableCallCamera(): Promise<boolean> {
   if (!manager) return false;
   const ok = await manager.ensureCamera();
   setDmState('call', (prev) => (prev ? { ...prev, videoOff: manager.isVideoOff() } : prev));
+  if (manager.localMedia) {
+    setLocalStreamSignal(manager.localMedia);
+  }
   return ok;
 }
 
@@ -1431,6 +1440,9 @@ export async function cameraButtonPressed(): Promise<void> {
     await manager.ensureCamera();
   }
   setDmState('call', (prev) => (prev ? { ...prev, videoOff: manager.isVideoOff(), screenSharing: manager.isScreenSharing() } : prev));
+  if (manager.localMedia) {
+    setLocalStreamSignal(manager.localMedia);
+  }
 }
 
 /** Discord-style deafen: silences all audio and force-mutes the mic. */
