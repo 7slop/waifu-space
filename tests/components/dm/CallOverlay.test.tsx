@@ -1,0 +1,538 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, fireEvent, cleanup } from '@solidjs/testing-library';
+import { CallOverlay } from '../../../src/components/dm/CallOverlay';
+import { dmState, setDmState, startCall } from '../../../src/lib/dm/store';
+import { state, setState } from '../../../src/lib/store';
+import { resetForDmTests, stubFetch, flush } from '../../dm-helpers';
+import type { CallOfferBroadcast, CallSession } from '../../../src/lib/dm/types';
+
+let lastCallManager: any = null;
+
+vi.mock('../../../src/lib/dm/call', () => ({
+  CallManager: class {
+    deps: any = {};
+    currentState = 'ringing';
+    localMedia: MediaStream | null = null;
+    remoteMedia: MediaStream | null = null;
+    private muted = false;
+    private videoOff = true;
+    private screenSharing = false;
+    constructor(deps: any) {
+      this.deps = deps ?? {};
+      lastCallManager = this;
+    }
+    async startLocal(): Promise<boolean> {
+      return true;
+    }
+    async createOffer(): Promise<{ type: string; sdp: string }> {
+      return { type: 'offer', sdp: 'offer-sdp' };
+    }
+    async acceptOffer(): Promise<{ type: string; sdp: string }> {
+      this.currentState = 'connected';
+      this.deps.onStateChange?.();
+      return { type: 'answer', sdp: 'answer-sdp' };
+    }
+    async adoptAnswer(): Promise<void> {
+      this.currentState = 'connected';
+      this.deps.onStateChange?.();
+    }
+    async adoptIce(): Promise<void> {}
+    toggleMute(): boolean {
+      this.muted = true;
+      return true;
+    }
+    setRemoteAudioEnabled(): void {}
+    toggleVideo(): boolean {
+      this.videoOff = this.videoOff ? false : false;
+      return true;
+    }
+    isMuted(): boolean {
+      return this.muted;
+    }
+    isVideoOff(): boolean {
+      return this.videoOff;
+    }
+    async ensureCamera(): Promise<boolean> {
+      this.videoOff = false;
+      return true;
+    }
+    hasVideoTracks(): boolean {
+      return true;
+    }
+    async enableScreenShare(): Promise<boolean> {
+      this.videoOff = false;
+      this.screenSharing = true;
+      return true;
+    }
+    async disableScreenShare(): Promise<boolean> {
+      this.screenSharing = false;
+      return true;
+    }
+    isScreenSharing(): boolean {
+      return this.screenSharing;
+    }
+    hangUp(): void {
+      this.currentState = 'ended';
+    }
+  },
+  setAudioSdpSurgery: vi.fn(() => {})
+}));
+
+const callSession = (over: Partial<CallSession> = {}): CallSession => ({
+  id: 'call-1',
+  conversationId: 'c1',
+  callerId: 'u-bob',
+  calleeId: 'u-me',
+  callType: 'voice',
+  status: 'ringing',
+  startedAt: '2025-01-02T00:00:00.000Z',
+  answeredAt: null,
+  endedAt: null,
+  createdAt: '2025-01-02T00:00:00.000Z',
+  ...over
+});
+
+function seedConv() {
+  setDmState('conversations', [
+    {
+      id: 'c1',
+      type: 'dm',
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-02T00:00:00.000Z',
+      lastReadAt: null,
+      unreadCount: 0,
+      lastMessage: null,
+      otherUser: { id: 'u-bob', username: 'Bob', presenceStatus: 'online' }
+    }
+  ]);
+  setDmState('activeConversationId', 'c1');
+}
+
+describe('CallOverlay', () => {
+  beforeEach(() => {
+    cleanup();
+    resetForDmTests();
+  });
+
+  it('renders nothing when there is no call activity', () => {
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-active-call"]')).not.toBeInTheDocument();
+  });
+
+  it('shows the incoming banner and declines', async () => {
+    const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob' };
+    const restore = stubFetch({ '/api/dm/calls': () => ({ body: { success: true } }) });
+    setDmState('incomingCall', offer);
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
+    expect(container.textContent).toContain('Bob');
+    // both participant avatars + pulsing ring are rendered while ringing
+    expect(container.querySelectorAll('[data-testid="dm-avatar"]').length).toBe(2);
+    expect(container.querySelector('[data-testid="dm-call-avatars"].ringing')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-ring')).toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-decline"]')!);
+    await flush();
+    expect(dmState.incomingCall).toBeNull();
+    restore();
+  });
+
+  it('accepts an incoming call and transitions to an active call', async () => {
+    const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    expect(dmState.incomingCall).toBeNull();
+    expect(dmState.call?.direction).toBe('incoming');
+    expect(dmState.call?.callState).toBe('connected');
+    expect(container.querySelector('[data-testid="dm-active-call"]')).toBeInTheDocument();
+    // connected calls keep both avatars but drop the pulsing ring
+    expect(container.querySelectorAll('[data-testid="dm-avatar"]').length).toBe(2);
+    expect(container.querySelector('.dm-call-ring')).not.toBeInTheDocument();
+    restore();
+  });
+
+  it('startCall shows an outgoing ringing panel and hangup cancels it', async () => {
+    seedConv();
+    const restore = stubFetch({
+      '/api/dm/calls': () => ({
+        body: {
+          success: true,
+          call: callSession({ id: 'call-2', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice' })
+        },
+        status: 201
+      }),
+      '/api/dm/calls/call-2/status': () => ({ body: { success: true, call: callSession({ id: 'call-2', status: 'canceled' }) } })
+    });
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-active-call"]')).toBeInTheDocument();
+    expect(container.textContent).toContain('Calling');
+    expect(container.textContent).not.toContain('In call');
+    fireEvent.click(container.querySelector('[data-testid="dm-call-hangup"]')!);
+    await flush();
+    expect(dmState.call).toBeNull();
+    restore();
+  });
+
+  it('outgoing call that joined an existing active call reads as In call, not Calling', async () => {
+    seedConv();
+    setDmState('call', {
+      call: callSession({ id: 'call-3', callerId: 'u-me', calleeId: 'u-bob', status: 'active' }),
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'active',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+    const { container } = render(() => <CallOverlay />);
+    expect(container.textContent).toContain('In call');
+    expect(container.textContent).not.toContain('Calling');
+  });
+
+  it('outgoing call keeps Calling… until the peer actually answers', async () => {
+    seedConv();
+    const call = callSession({ id: 'call-4', callerId: 'u-me', calleeId: 'u-bob', status: 'ringing' });
+    setDmState('call', {
+      call,
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'ringing',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+    const { container } = render(() => <CallOverlay />);
+    expect(container.textContent).toContain('Calling');
+    expect(container.textContent).not.toContain('In call');
+    // The peer answers: manager state flips to 'connected' -> label updates.
+    setDmState('call', 'callState', 'connected');
+    await flush();
+    expect(container.textContent).toContain('In call');
+    expect(container.textContent).not.toContain('Calling');
+  });
+
+  it('mute toggles the call state and badges the avatar', async () => {
+    const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    expect(dmState.call?.muted).toBe(false);
+    expect(container.querySelector('[data-testid="dm-call-muted-badge"]')).not.toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-mute"]')!);
+    await flush();
+    expect(dmState.call?.muted).toBe(true);
+    expect(container.querySelector('[data-testid="dm-call-muted-badge"]')).toBeInTheDocument();
+    restore();
+  });
+
+  it('deafen toggles the headphones state and badge', async () => {
+    const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    expect(dmState.call?.deafened).toBe(false);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);
+    await flush();
+    expect(dmState.call?.deafened).toBe(true);
+    expect(dmState.call?.muted).toBe(true);
+    expect(container.querySelector('[data-testid="dm-call-deafened-badge"]')).toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);
+    await flush();
+    expect(dmState.call?.deafened).toBe(false);
+    expect(container.querySelector('[data-testid="dm-call-deafened-badge"]')).not.toBeInTheDocument();
+
+    restore();
+  });
+
+  it('deafened badge draws a single diagonal slash, not a crossed X', async () => {
+    const offer: CallOfferBroadcast = { kind: 'call-offer', call: callSession(), callerName: 'Bob', offer: { type: 'offer', sdp: 'offer' } };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);
+    await flush();
+    const badgeSvg = container.querySelector('[data-testid="dm-call-deafened-badge"] svg')!;
+    const paths = badgeSvg.querySelectorAll('path');
+    // Headphones body + one slash stroke only.
+    expect(paths.length).toBe(2);
+    // A single diagonal slash is one line command; a crossed X needs four.
+    const slashD = paths[1].getAttribute('d') ?? '';
+    expect(slashD.split('L').length - 1).toBe(1);
+    restore();
+  });
+
+  it('camera button acquires a video feed and shows the stage', async () => {
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession({ callType: 'voice' }),
+      callerName: 'Bob',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    expect(container.querySelector('.dm-call-remote-video')).not.toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-video-toggle"]')!);
+    await flush();
+    expect(dmState.call?.videoOff).toBe(false);
+    expect(container.querySelector('.dm-call-remote-video')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-pip-video')).toBeInTheDocument();
+    restore();
+  });
+
+  it('enables a camera preview while still ringing (before answering)', async () => {
+    seedConv();
+    const restore = stubFetch({
+      '/api/dm/calls': () => ({
+        body: { success: true, call: callSession({ id: 'call-3', callerId: 'u-me', calleeId: 'u-bob' }) },
+        status: 201
+      }),
+      '/api/dm/calls/call-3/status': () => ({ body: { success: true } })
+    });
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    const { container } = render(() => <CallOverlay />);
+    expect(dmState.call?.callState).toBe('ringing');
+    expect(container.querySelector('.dm-call-remote-video')).not.toBeInTheDocument();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-video-toggle"]')!);
+    await flush();
+    expect(dmState.call?.videoOff).toBe(false);
+    // pre-accept preview fills the stage and avatars turn into rounded squares
+    expect(container.querySelector('.dm-call-remote-video')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-avatars.squared')).toBeInTheDocument();
+    restore();
+  });
+
+  it('screen share toggles on and shows in the bar', async () => {
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession(),
+      callerName: 'Bob',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+    fireEvent.click(container.querySelector('[data-testid="dm-call-screen-toggle"]')!);
+    await flush();
+    expect(dmState.call?.screenSharing).toBe(true);
+    // While sharing, the big stage hosts the shared feed and the square
+    // camera PiP gets the .screen modifier; the dock reports the share.
+    expect(container.querySelector('.dm-call-pip-video.screen')).toBeInTheDocument();
+    expect(container.querySelector('.dm-call-dock.has-video')).toBeInTheDocument();
+    expect(container.textContent).toContain('Sharing');
+    fireEvent.click(container.querySelector('[data-testid="dm-call-screen-toggle"]')!);
+    await flush();
+    expect(dmState.call?.screenSharing).toBe(false);
+    restore();
+  });
+
+  it('displays peer avatar and name even when activeConversationId is not set (e.g. DM home)', async () => {
+    setDmState('activeConversationId', null);
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession(),
+      callerName: 'Charlie',
+      callerAvatar: 'https://example.com/charlie.png',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
+    expect(container.textContent).toContain('Charlie');
+    const avatarImg = container.querySelector('.dm-call-avatar.remote img');
+    expect(avatarImg?.getAttribute('src')).toBe('https://example.com/charlie.png');
+  });
+
+  it('renders dedicated low-latency audio element for remote stream and mutes when deafened', async () => {
+    seedConv();
+    const restore = stubFetch({
+      '/api/dm/calls': () => ({
+        body: {
+          success: true,
+          call: callSession({ id: 'call-4', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice' })
+        },
+        status: 201
+      }),
+      '/api/dm/calls/call-4/status': () => ({ body: { success: true } })
+    });
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    const { container } = render(() => <CallOverlay />);
+    const audioEl = container.querySelector<HTMLAudioElement>('audio[data-testid="dm-call-audio-player"]');
+    expect(audioEl).toBeInTheDocument();
+    expect(audioEl?.autoplay).toBe(true);
+    expect(audioEl?.muted).toBe(false);
+    expect(audioEl?.style.display).not.toBe('none');
+    expect(audioEl?.volume).toBe(1);
+
+    // Toggle deafen
+    fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);
+    await flush();
+    expect(dmState.call?.deafened).toBe(true);
+    expect(audioEl?.muted).toBe(true);
+
+    restore();
+  });
+
+  it('shows video stage when remote peer has video even if local camera is off, and hides empty PiP', async () => {
+    seedConv();
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession({ id: 'call-v1', callType: 'voice' }),
+      callerName: 'Bob',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-v1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+
+    expect(dmState.call?.callState).toBe('connected');
+    expect(dmState.call?.videoOff).toBe(true);
+
+    // Initially with no remote video and videoOff=true, video stage is not rendered
+    expect(container.querySelector('.dm-call-remote-video')).not.toBeInTheDocument();
+
+    // Remote peer sends a stream with a video track
+    const fakeRemoteTrack = { kind: 'video', readyState: 'live', enabled: true, stop: () => {} };
+    const fakeRemoteStream = {
+      getTracks: () => [fakeRemoteTrack],
+      getVideoTracks: () => [fakeRemoteTrack],
+      getAudioTracks: () => []
+    } as unknown as MediaStream;
+
+    lastCallManager?.deps.onRemoteStream?.(fakeRemoteStream);
+    await flush();
+
+    // Video stage is now visible for remote participant
+    expect(container.querySelector('.dm-call-remote-video')).toBeInTheDocument();
+    // But since local user has camera off (videoOff: true), PiP is NOT shown (no empty black box)
+    expect(container.querySelector('.dm-call-pip-video')).not.toBeInTheDocument();
+
+    restore();
+  });
+
+  it('renders incoming call bar even when no conversation is active in state (global overlay behavior)', async () => {
+    // No active conversation selected (user is on home page, calendar, minigames, etc.)
+    setDmState('activeConversationId', null);
+    setDmState('conversations', []);
+
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession({ id: 'call-global-1', conversationId: 'c-global', callerId: 'u-charlie', callType: 'voice' }),
+      callerName: 'Charlie',
+      callerAvatar: 'https://example.com/charlie.png',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
+    expect(container.textContent).toContain('Charlie');
+    expect(container.querySelector('[data-testid="dm-call-accept"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-call-decline"]')).toBeInTheDocument();
+  });
+
+  it('updates UI from calling to in-call when callState transitions from ringing to connected', async () => {
+    seedConv();
+    setDmState('call', {
+      call: callSession({ id: 'call-trans-1', status: 'ringing' }),
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'ringing',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+
+    const { container } = render(() => <CallOverlay />);
+    const subText = () => container.querySelector('.dm-call-sub')?.textContent ?? '';
+
+    // While ringing, shows calling text
+    expect(subText()).toContain('Calling Bob');
+
+    // Callee accepts: callState flips to connected
+    setDmState('call', 'callState', 'connected');
+    await flush();
+
+    // Now shows in call status
+    expect(subText()).toContain('In call');
+  });
+
+  it('displays peer left the voice chat notice in call subtitle when leftNotice is present', async () => {
+    seedConv();
+    setDmState('call', {
+      call: callSession({ id: 'call-notice-1', status: 'active' }),
+      direction: 'incoming',
+      remoteName: 'Bob',
+      callState: 'connected',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false,
+      leftNotice: 'Bob left the voice chat'
+    });
+
+    const { container } = render(() => <CallOverlay />);
+    const subText = container.querySelector('.dm-call-sub')?.textContent ?? '';
+    expect(subText).toContain('Bob left the voice chat');
+  });
+
+  it('safely handles null incomingCall without crashing on callerName property access', async () => {
+    seedConv();
+    setDmState('incomingCall', {
+      kind: 'call-offer',
+      call: callSession(),
+      callerName: 'Bob'
+    });
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
+
+    // Clear incomingCall synchronously
+    setDmState('incomingCall', null);
+    await flush();
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).not.toBeInTheDocument();
+  });
+
+  it('guards ActiveCallBar against rendering local user avatar as peer avatar', async () => {
+    seedConv();
+    setState('user', { id: 'u-me', username: 'Alice', avatarUrl: 'http://example.com/alice.png' } as any);
+    // Simulate corrupted state where remoteName mirrors the local user
+    setDmState('call', {
+      call: callSession({ id: 'call-safe-1', status: 'active' }),
+      direction: 'outgoing',
+      remoteName: 'Alice', // Same as local user
+      remoteAvatar: 'http://example.com/alice.png',
+      callState: 'connected',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+
+    const { container } = render(() => <CallOverlay />);
+    const peerNameEl = container.querySelector('.dm-call-name');
+    // It should fall back to the conversation otherUser ('Bob') rather than rendering 'Alice' twice
+    expect(peerNameEl?.textContent).toBe('Bob');
+  });
+});
