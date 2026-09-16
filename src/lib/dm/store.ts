@@ -424,6 +424,7 @@ export function handlePeerLeft(callId: string, remoteName?: string): void {
       runtime.call = null;
       runtime.signalCursor.delete(callId);
       pendingInboundIce.delete(callId);
+      startPendingCallPoll();
     }
   }, 3500);
 }
@@ -675,11 +676,24 @@ export async function initDm(): Promise<boolean> {
     // one; once surfaced, offers/answers/ICE are also pulled from the same DB
     // queue by the signal poll loop.
     void refreshPendingCall();
-    runtime.pendingPollTimer ??= setInterval(() => void refreshPendingCall(), PENDING_CALL_POLL_MS);
+    startPendingCallPoll();
     return true;
   } catch (e) {
     setDmState({ connecting: false, error: e instanceof Error ? e.message : 'Failed to start DM' });
     return false;
+  }
+}
+
+/** Starts the periodic pending-call poll; a no-op while one is already running. */
+export function startPendingCallPoll(): void {
+  runtime.pendingPollTimer ??= setInterval(() => void refreshPendingCall(), PENDING_CALL_POLL_MS);
+}
+
+/** Stops the periodic pending-call poll; safe to call repeatedly. */
+export function stopPendingCallPoll(): void {
+  if (runtime.pendingPollTimer) {
+    clearInterval(runtime.pendingPollTimer);
+    runtime.pendingPollTimer = null;
   }
 }
 
@@ -923,12 +937,20 @@ export function isAutoPresence(): boolean {
   return runtime.presenceOrigin === 'auto';
 }
 
-/** Refreshes the last-seen timestamp on the server without changing the stored status. */
+/**
+ * Refreshes the last-seen timestamp on the server. If the stored status has
+ * drifted to an auto-written 'offline' (e.g. a failed hide→show handoff) while
+ * the page is demonstrably alive, the heartbeat re-raises it to 'online' so the
+ * user is not left invisible to peers.
+ */
 export async function heartbeatPresence(): Promise<void> {
   const auth = currentAuth();
   if (!auth) return;
   try {
     await heartbeatPresenceRequest(auth.token);
+    if (dmState.myPresence?.status === 'offline' && runtime.presenceOrigin === 'auto') {
+      await setOwnPresenceAuto('online', dmState.myPresence.customStatus ?? null);
+    }
   } catch {
     // Heartbeat failures are transient and non-critical.
   }
@@ -1107,6 +1129,7 @@ export async function startCall(type: CallType): Promise<boolean> {
     if (runtime.realtime) {
       await runtime.realtime.subscribeConversation(conv.id);
     }
+    stopPendingCallPoll();
     startCallStatusPolling();
     startCallSignalPolling();
     const offer = await manager.createOffer(call.id, otherId);
@@ -1153,6 +1176,7 @@ async function joinExistingCall(call: CallSession, conv: DmConversationSummary, 
     deafened: false
   });
   void runtime.realtime?.subscribeConversation(call.conversationId);
+  stopPendingCallPoll();
   startCallStatusPolling();
   startCallSignalPolling();
   const offer = await manager.createOffer(call.id, call.calleeId === auth.id ? call.callerId : call.calleeId);
@@ -1206,6 +1230,7 @@ export async function pollActiveCallStatus(): Promise<void> {
         setLocalStreamSignal(null);
         setRemoteStreamSignal(null);
         runtime.call = null;
+        startPendingCallPoll();
       }
     }
   } catch {
@@ -1385,6 +1410,7 @@ export async function acceptIncomingCall(): Promise<boolean> {
   if (runtime.realtime) {
     await runtime.realtime.subscribeConversation(call.conversationId);
   }
+  stopPendingCallPoll();
   startCallStatusPolling();
   startCallSignalPolling();
   // Mark the call as answered on the server so both timelines get the
@@ -1461,6 +1487,7 @@ export async function hangUpCall(): Promise<void> {
   setLocalStreamSignal(null);
   setRemoteStreamSignal(null);
   runtime.call = null;
+  startPendingCallPoll();
 }
 
 export async function markCallBusyAndReject(): Promise<void> {
@@ -1573,16 +1600,14 @@ export function resetDmStore(): void {
   runtime.pendingAccept = null;
   inFlightConversationSyncs.forEach((sync) => sync.catch(() => undefined));
   inFlightConversationSyncs.clear();
-  if (runtime.pendingPollTimer) {
-    clearInterval(runtime.pendingPollTimer);
-    runtime.pendingPollTimer = null;
-  }
+  stopPendingCallPoll();
   setDmState(JSON.parse(JSON.stringify(INITIAL)));
 }
 
 export async function disconnectDm(): Promise<void> {
   stopCallStatusPolling();
   stopCallSignalPolling();
+  stopPendingCallPoll();
   if (runtime.peerLeftTimeout) {
     clearTimeout(runtime.peerLeftTimeout);
     runtime.peerLeftTimeout = null;
@@ -1590,9 +1615,11 @@ export async function disconnectDm(): Promise<void> {
   runtime.call?.hangUp('ended');
   runtime.call = null;
   runtime.pendingAccept = null;
-  if (runtime.pendingPollTimer) {
-    clearInterval(runtime.pendingPollTimer);
-    runtime.pendingPollTimer = null;
+  // Broadcast offline to peers before tearing down the realtime connection
+  // so they see the user go offline immediately rather than waiting for the
+  // server-side staleness threshold.
+  if (isAutoPresence()) {
+    await setOwnPresenceAuto('offline', dmState.myPresence?.customStatus ?? null).catch(() => undefined);
   }
   await runtime.realtime?.disconnect().catch(() => undefined);
   runtime.realtime = null;
