@@ -65,9 +65,7 @@
 .strike-lock-modal h2 {
   font-size: 2rem;
   margin: 0 0 12px;
-  background: linear-gradient(135deg, #ff7597, #a29bfe);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--primary-accent);
 }
 
 .strike-controls-grid {
@@ -863,14 +861,18 @@
 
 .btn-esc-resume {
   flex: 1;
-  background: linear-gradient(135deg, #00cec9, #0984e3);
-  color: #fff;
+  background: var(--primary-accent);
+  color: var(--accent-contrast);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 8px 16px;
   font-weight: 700;
   font-size: 0.9rem;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: var(--card-shadow);
   transition: transform 0.15s ease, filter 0.15s ease;
 }
 
@@ -908,10 +910,9 @@
 }
 
 .strike-esc-tab-btn.active {
-  background: rgba(0, 206, 201, 0.18);
-  border-color: #00cec9;
-  color: #00cec9;
-  box-shadow: 0 0 10px rgba(0, 206, 201, 0.2);
+  background: var(--accent-soft);
+  border-color: var(--primary-accent);
+  color: var(--primary-accent);
 }
 
 /* Preset Cards Grid */
@@ -1393,21 +1394,23 @@
 }
 
 .btn-loadout-confirm {
-  background: linear-gradient(135deg, #00cec9, #0984e3);
-  color: #fff;
+  background: var(--primary-accent);
+  color: var(--accent-contrast);
   border: none;
   padding: 8px 18px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-weight: 700;
   font-size: 0.86rem;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: var(--card-shadow);
   transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 206, 201, 0.3);
 }
 
 .btn-loadout-confirm:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 206, 201, 0.45);
 }
 
 @media (max-width: 768px) {

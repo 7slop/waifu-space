@@ -14,6 +14,22 @@ import {
 } from './props';
 import { createTorii } from './structures';
 import { createStoneLantern, createHangingLantern } from './lights';
+import {
+  createFountain,
+  createFlowerPot,
+  createBambooWaterFeature,
+  createRockGarden,
+  createStonePath,
+  createWindChime
+} from './decorations';
+import {
+  createStoneArch,
+  createPagoda,
+  createShrineTable,
+  createBannerPole,
+  createPathMarker,
+  createOrnamentalBridge
+} from './architecture';
 import type { MapComponentObject } from '../map-format';
 
 export type ComponentParams = Record<string, number | string | boolean>;
@@ -169,6 +185,90 @@ export const COMPONENTS: ComponentDef[] = [
     hint: 'Kanji shop banner between timber posts',
     defaults: { glyph: '茶' },
     build: (b, name, pos, p) => createStoreSign(b, name, pos, String(p.glyph ?? '茶'))
+  },
+  {
+    id: 'fountain',
+    label: 'Fountain',
+    hint: 'Multi-tiered circular stone fountain with water',
+    defaults: { tiers: 3 },
+    build: (b, name, pos, p) => createFountain(b, name, pos, num(p, 'tiers', 3))
+  },
+  {
+    id: 'flowerPot',
+    label: 'Flower Pot',
+    hint: 'Ceramic pot with flowering plant',
+    defaults: { size: 1 },
+    build: (b, name, pos, p) => createFlowerPot(b, name, pos, num(p, 'size', 1))
+  },
+  {
+    id: 'bambooWaterFeature',
+    label: 'Bamboo Water Feature',
+    hint: 'Shishi-odoshi deer scarer with stone basin',
+    defaults: {},
+    build: (b, name, pos) => createBambooWaterFeature(b, name, pos)
+  },
+  {
+    id: 'rockGarden',
+    label: 'Rock Garden',
+    hint: 'Raked sand garden with stone arrangement',
+    defaults: { scale: 1 },
+    build: (b, name, pos, p) => createRockGarden(b, name, pos, num(p, 'scale', 1))
+  },
+  {
+    id: 'stonePath',
+    label: 'Stone Path',
+    hint: 'Winding stepping stones across the ground',
+    defaults: { length: 5 },
+    build: (b, name, pos, p) => createStonePath(b, name, pos, num(p, 'length', 5))
+  },
+  {
+    id: 'windChime',
+    label: 'Wind Chime',
+    hint: 'Hanging furyū furin bell',
+    defaults: {},
+    build: (b, name, pos) => createWindChime(b, name, pos)
+  },
+  {
+    id: 'stoneArch',
+    label: 'Stone Arch',
+    hint: 'Mossy stone archway gate',
+    defaults: { scale: 1 },
+    build: (b, name, pos, p) => createStoneArch(b, name, pos, num(p, 'scale', 1))
+  },
+  {
+    id: 'pagoda',
+    label: 'Pagoda',
+    hint: 'Multi-tier stone pagoda lantern',
+    defaults: { tiers: 3 },
+    build: (b, name, pos, p) => createPagoda(b, name, pos, num(p, 'tiers', 3))
+  },
+  {
+    id: 'shrineTable',
+    label: 'Offering Table',
+    hint: 'Wooden table for shrine offerings',
+    defaults: {},
+    build: (b, name, pos) => createShrineTable(b, name, pos)
+  },
+  {
+    id: 'bannerPole',
+    label: 'Banner Pole',
+    hint: 'Tall pole with a war banner',
+    defaults: { color: 'red' },
+    build: (b, name, pos, p) => createBannerPole(b, name, pos, (p.color as 'red' | 'white') || 'red')
+  },
+  {
+    id: 'pathMarker',
+    label: 'Path Marker',
+    hint: 'Small red torii marker along paths',
+    defaults: {},
+    build: (b, name, pos) => createPathMarker(b, name, pos)
+  },
+  {
+    id: 'ornamentalBridge',
+    label: 'Ornamental Bridge',
+    hint: 'Arching footbridge over ponds or gardens',
+    defaults: { span: 4 },
+    build: (b, name, pos, p) => createOrnamentalBridge(b, name, pos, num(p, 'span', 4))
   }
 ];
 

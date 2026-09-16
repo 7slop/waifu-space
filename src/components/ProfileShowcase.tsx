@@ -611,7 +611,7 @@ export function ProfileShowcase() {
                         }>
                           {item => (
                             <div class="showcase-item-content">
-                              <span class="showcase-slot-icon">{item().icon}</span>
+                              <span class="showcase-slot-icon"><EmojiIcon glyph={item().icon} /></span>
                               <div class="showcase-item-info">
                                 <strong>{getCosmeticName(item().id, item().name)}</strong>
                                 <span class={`rarity-pill ${getRarityClass(item().rarity)}`}>{getRarityName(item().rarity)}</span>
@@ -703,7 +703,7 @@ export function ProfileShowcase() {
                   return (
                     <div class={`inventory-item-card ${getRarityClass(item.rarity)}`}>
                       <div class="card-top-row">
-                        <span class="item-icon-big">{item.icon}</span>
+                        <span class="item-icon-big"><EmojiIcon glyph={item.icon} /></span>
                         <span class={`rarity-tag ${getRarityClass(item.rarity)}`}>{getRarityName(item.rarity)}</span>
                       </div>
 

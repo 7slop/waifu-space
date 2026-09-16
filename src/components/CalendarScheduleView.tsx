@@ -4,7 +4,7 @@ import { toggleTask, isSameDay, getEventsForDate } from '../lib/store';
 import { t, getLocale, holidayTooltip, formatClock } from '../lib/i18n';
 import { countryFlagEmoji } from '../lib/countries';
 import { onActivateKey } from '../lib/accessibility';
-import { PhArrowsClockwise, PhMapPin, GlyphText } from './icons';
+import { PhArrowsClockwise, PhMapPin, PhCake, GlyphText } from './icons';
 
 const MAX_DAYS = 10;
 
@@ -106,7 +106,7 @@ export function CalendarScheduleView(props: {
                               }}
                             />
                           )}
-                          {ev.type === 'birthday' && <span class="schedule-ev-emoji">🎂</span>}
+                          {ev.type === 'birthday' && <span class="schedule-ev-icon schedule-ev-birthday"><PhCake /></span>}
                           {ev._holiday && <span class="pill-holiday-flag"><GlyphText text={ev._holiday.culture ? '🎉' : countryFlagEmoji(ev._holiday.countryCode)} /></span>}
                           {ev.recurrence && ev.recurrence !== 'none' && (
                             <span class="schedule-ev-icon" title={t('calendar.sidebar.repeats', { rule: ev.recurrence })}><PhArrowsClockwise /></span>

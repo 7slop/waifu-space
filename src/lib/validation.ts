@@ -123,6 +123,7 @@ export interface CleanSettings {
   wallpaperId?: string;
   wallpaperType?: 'stock' | 'custom';
   customWallpaperUrl?: string;
+  uploadedWallpaperUrl?: string;
   wallpaperBlur?: number;
   wallpaperDim?: number;
   sakuraParticles?: boolean;
@@ -167,6 +168,7 @@ export function sanitizeSettings(input: Record<string, unknown>, fallback: Clean
   if (has('wallpaperId')) out.wallpaperId = toStr(input.wallpaperId, fallback.wallpaperId ?? 'sakura-shrine');
   if (has('wallpaperType')) out.wallpaperType = input.wallpaperType === 'custom' ? 'custom' : 'stock';
   if (has('customWallpaperUrl')) out.customWallpaperUrl = toStr(input.customWallpaperUrl, fallback.customWallpaperUrl ?? '');
+  if (has('uploadedWallpaperUrl')) out.uploadedWallpaperUrl = toStr(input.uploadedWallpaperUrl, fallback.uploadedWallpaperUrl ?? '');
   if (has('wallpaperBlur')) out.wallpaperBlur = clampNumber(Number(input.wallpaperBlur), SETTINGS_BLUR_MIN, SETTINGS_BLUR_MAX);
   if (has('wallpaperDim')) out.wallpaperDim = clampNumber(Number(input.wallpaperDim), SETTINGS_DIM_MIN, SETTINGS_DIM_MAX);
   if (has('sakuraParticles')) out.sakuraParticles = toBool(input.sakuraParticles, fallback.sakuraParticles ?? true);
