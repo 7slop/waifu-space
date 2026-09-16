@@ -533,7 +533,7 @@ describe('CallManager', () => {
       pc.connectionState = 'disconnected';
       pc.onconnectionstatechange?.();
       expect(peerGone).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(15_000);
+      vi.advanceTimersByTime(30_000);
       expect(peerGone).toHaveBeenCalledTimes(1);
 
       // A hard failure fires immediately, without waiting for the grace window.
@@ -543,5 +543,100 @@ describe('CallManager', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('parks the peer-gone countdown while paused and re-arms a fresh grace window on resume', async () => {
+    vi.useFakeTimers();
+    try {
+      installMedia();
+      const peers = setupPeers(1);
+      const peerGone = vi.fn();
+      const manager = new CallManager({
+        getUserMedia: async () => streamObj(makeStream('audio')),
+        onPeerDisconnected: peerGone
+      });
+      await manager.startLocal({ type: 'voice', audio: true, video: false, screen: false });
+      await manager.createOffer('call-gp-1', 'peer-gp-1');
+      const pc = peers[0] as any;
+
+      // Transient drop while hidden: the countdown is parked and never expires.
+      manager.setPaused(true);
+      pc.iceConnectionState = 'disconnected';
+      pc.oniceconnectionstatechange?.();
+      vi.advanceTimersByTime(60_000);
+      expect(peerGone).not.toHaveBeenCalled();
+
+      // Transport recovers while still hidden -> nothing pending on resume.
+      pc.iceConnectionState = 'connected';
+      pc.oniceconnectionstatechange?.();
+      manager.setPaused(false);
+      vi.advanceTimersByTime(60_000);
+      expect(peerGone).not.toHaveBeenCalled();
+
+      // A hidden drop that does NOT recover re-arms a FRESH grace window (30s)
+      // only once the page is visible again.
+      pc.iceConnectionState = 'disconnected';
+      pc.oniceconnectionstatechange?.();
+      manager.setPaused(true);
+      vi.advanceTimersByTime(60_000);
+      expect(peerGone).not.toHaveBeenCalled();
+      manager.setPaused(false);
+      vi.advanceTimersByTime(29_000);
+      expect(peerGone).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(2_000);
+      expect(peerGone).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('defers a hard failure while paused to a fresh grace window on resume', async () => {
+    vi.useFakeTimers();
+    try {
+      installMedia();
+      const peers = setupPeers(1);
+      const peerGone = vi.fn();
+      const manager = new CallManager({
+        getUserMedia: async () => streamObj(makeStream('audio')),
+        onPeerDisconnected: peerGone
+      });
+      await manager.startLocal({ type: 'voice', audio: true, video: false, screen: false });
+      await manager.createOffer('call-gf-1', 'peer-gf-1');
+      const pc = peers[0] as any;
+
+      manager.setPaused(true);
+      // 'failed' while hidden is usually a backgrounding artifact: deferred.
+      pc.connectionState = 'failed';
+      pc.onconnectionstatechange?.();
+      vi.advanceTimersByTime(60_000);
+      expect(peerGone).not.toHaveBeenCalled();
+
+      // Back and still down (state preserved) -> peer-left surfaces.
+      manager.setPaused(false);
+      vi.advanceTimersByTime(30_000);
+      expect(peerGone).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('markConnected defers the connected transition until SDP signaling settles', async () => {
+    installMedia();
+    const peers = setupPeers(1);
+    const manager = new CallManager({
+      getUserMedia: async () => streamObj(makeStream('audio'))
+    });
+    await manager.startLocal({ type: 'voice', audio: true, video: false, screen: false });
+    await manager.createOffer('call-mc-1', 'peer-mc-1');
+
+    // Initial offer in flight (no answer adopted yet): the status-poll
+    // markConnected must NOT claim the call is joined ahead of the answer.
+    expect(peers[0].signalingState).toBe('have-local-offer');
+    manager.markConnected();
+    expect(manager.isConnected()).toBe(false);
+
+    // Once the answer is adopted signaling is stable -> markConnected connects.
+    await manager.adoptAnswer({ type: 'answer', sdp: 'answer-sdp' });
+    expect(manager.isConnected()).toBe(true);
   });
 });

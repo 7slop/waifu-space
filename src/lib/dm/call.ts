@@ -54,8 +54,10 @@ export class CallManager {
    * `disconnected` during a renegotiation (track swaps, screen share, camera
    * toggles) and usually recovers to `connected` within a second, so we only
    * surface a peer-left after this grace window instead of on the first blip.
+   * The window is generous (30s) so a brief background-tab switch — which can
+   * silently freeze a peer's keepalives — never reads as a hang-up.
    */
-  private static readonly PEER_GONE_GRACE_MS = 10_000;
+  private static readonly PEER_GONE_GRACE_MS = 30_000;
 
   deps: CallManagerDeps;
   private pc: RTCPeerConnection | null = null;
@@ -77,6 +79,13 @@ export class CallManager {
    *  already renegotiating); flushed once the call is connected and stable. */
   private needsRenegotiation = false;
   private peerGoneTimer: ReturnType<typeof setTimeout> | null = null;
+  private peerGoneScheduled = false;
+  /**
+   * While the page is hidden (background tab / window switch) the peer-gone
+   * countdown is parked so a transient ICE dip never expires into a false
+   * peer-left; it gets a fresh grace window on resize back to visible.
+   */
+  private paused = false;
 
   constructor(deps: CallManagerDeps = {}) {
     this.deps = deps;
@@ -106,16 +115,29 @@ export class CallManager {
       clearTimeout(this.peerGoneTimer);
       this.peerGoneTimer = null;
     }
+    this.peerGoneScheduled = false;
   }
 
-  /** Fires a peer-left only if the transport is still down after the grace window. */
+  /** Whether the WebRTC transport is currently down (needs a peer-gone check). */
+  private transportIsDown(): boolean {
+    const conn = this.pc?.connectionState ?? 'stable';
+    const ice = this.pc?.iceConnectionState ?? 'connected';
+    return conn === 'disconnected' || conn === 'failed' || ice === 'disconnected' || ice === 'failed';
+  }
+
+  /**
+   * Fires a peer-left only if the transport is still down after the grace
+   * window. While the page is hidden the countdown is suspended (`peerGoneScheduled`
+   * stays armed without a timer) so `setPaused(false)` can re-arm a fresh one.
+   */
   private schedulePeerGoneCheck(): void {
-    if (this.peerGoneTimer) return;
+    if (this.peerGoneScheduled) return;
+    this.peerGoneScheduled = true;
+    if (this.paused) return;
     this.peerGoneTimer = setTimeout(() => {
       this.peerGoneTimer = null;
-      const conn = this.pc?.connectionState ?? 'stable';
-      const ice = this.pc?.iceConnectionState ?? 'connected';
-      if (conn === 'disconnected' || conn === 'failed' || ice === 'disconnected' || ice === 'failed') {
+      this.peerGoneScheduled = false;
+      if (this.transportIsDown()) {
         this.deps.onPeerDisconnected?.();
       }
     }, CallManager.PEER_GONE_GRACE_MS);
@@ -123,8 +145,32 @@ export class CallManager {
 
   /** Fires a peer-left immediately (hard failure — no grace). */
   private notifyPeerGone(): void {
+    if (this.paused) {
+      // A hard failure while hidden is usually a backgrounding artifact; give
+      // the transport a fresh grace window once the page is visible again.
+      this.schedulePeerGoneCheck();
+      return;
+    }
     this.clearPeerGoneCheck();
     this.deps.onPeerDisconnected?.();
+  }
+
+  /**
+   * Suspends/resumes peer-gone detection when the page is hidden/visible. A
+   * backgrounded tab's timers are throttled and its ICE can blip, so the
+   * countdown is parked while hidden and re-armed with a fresh window on
+   * resume, but only if the transport is still down.
+   */
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+    if (paused) {
+      this.clearPeerGoneCheck();
+    } else if (this.peerGoneScheduled || this.transportIsDown()) {
+      // A suspended countdown leaves `peerGoneScheduled` armed without a timer;
+      // drop the flag so a fresh grace window is actually armed on resume.
+      this.peerGoneScheduled = false;
+      this.schedulePeerGoneCheck();
+    }
   }
 
   private setPeer(peerId: string): void {
@@ -380,8 +426,15 @@ export class CallManager {
   }
 
   markConnected(): void {
-    if (this.state === 'ringing' || this.state === 'active') {
+    // Only treat the call as joined once SDP negotiation has actually settled.
+    // Flipping to 'connected' while a description is still in flight (e.g. the
+    // status poll racing the peer's answer) makes the UI claim media is flowing
+    // before it can and can surface transient ICE dips as peer-lefts. The real
+    // 'connected' transition happens in adoptAnswer/acceptOffer once stable.
+    if ((this.state === 'ringing' || this.state === 'active') && this.pc && this.pc.signalingState === 'stable') {
       this.setState('connected');
+    }
+    if (this.pc && this.pc.signalingState === 'stable') {
       this.flushPendingRenegotiation();
     }
   }

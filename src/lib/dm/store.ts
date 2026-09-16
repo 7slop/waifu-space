@@ -381,19 +381,34 @@ function sendSignal(type: CallSignalPayload['type'], callId: string, _conversati
   // Optimistically mark our offer as the newest so an older peer offer that
   // races in before the enqueue response cannot be answered (crossed SDPs).
   if (type === 'offer') runtime.lastOfferSent.set(callId, new Date().toISOString());
-  void sendCallSignalRequest(auth.token, callId, type, { sdp: extras.sdp, candidate: extras.candidate, reason: extras.reason })
-    .then((signal) => {
-      // Replace the optimistic mark with the authoritative DB timestamp; if the
-      // row failed to persist, drop it so the peer's offer is still honored.
-      if (type === 'offer') {
-        if (signal?.createdAt) runtime.lastOfferSent.set(callId, signal.createdAt);
-        else runtime.lastOfferSent.delete(callId);
-      }
-      return signal;
-    })
-    .catch(() => {
-      if (type === 'offer') runtime.lastOfferSent.delete(callId);
-    });
+  let retried = false;
+  const attempt = (): void => {
+    void sendCallSignalRequest(auth.token, callId, type, { sdp: extras.sdp, candidate: extras.candidate, reason: extras.reason })
+      .then((signal) => {
+        // Replace the optimistic mark with the authoritative DB timestamp; if the
+        // row failed to persist, drop it so the peer's offer is still honored.
+        if (type === 'offer') {
+          if (signal?.createdAt) runtime.lastOfferSent.set(callId, signal.createdAt);
+          else runtime.lastOfferSent.delete(callId);
+        }
+        return signal;
+      })
+      .catch(() => {
+        if (type === 'offer') {
+          // A lost renegotiation offer silently hides a camera/screen share
+          // from the peer — retry once before giving up. The optimistic
+          // lastOfferSent mark stays armed across the retry so a peer offer
+          // arriving in between is not (wrongly) answered.
+          if (retried) {
+            runtime.lastOfferSent.delete(callId);
+          } else {
+            retried = true;
+            setTimeout(attempt, CALL_SIGNAL_POLL_MS);
+          }
+        }
+      });
+  };
+  attempt();
 }
 
 const pendingInboundIce = new Map<string, RTCIceCandidateInit[]>();
@@ -415,6 +430,32 @@ function flushPendingIce(conversationId: string, callId: string): void {
   for (const s of list) {
     if (s.candidate) sendSignal('ice', callId, conversationId, { candidate: s.candidate });
   }
+}
+
+/**
+ * Call sessions this client just tore down with a peer-left. Refreshing the
+ * pending-call poll right afterwards would surface the SAME session as an
+ * incoming ring (its status is still 'active' because neither party ended it)
+ * — which is what made users "get kicked out and instantly re-called" while
+ * the other peer stays in the call. Suppress re-ringing those sessions until
+ * they resolve or the TTL elapses; a fresh call session always has a new id
+ * and is never suppressed.
+ */
+const suppressedPeerLeftCalls = new Map<string, number>();
+
+function suppressPeerLeftCall(callId: string): void {
+  if (!callId || callId === 'undefined' || callId === 'null') return;
+  suppressedPeerLeftCalls.set(callId, Date.now() + 120_000);
+}
+
+function isPeerLeftSuppressed(callId: string): boolean {
+  const expires = suppressedPeerLeftCalls.get(callId);
+  if (expires === undefined) return false;
+  if (expires <= Date.now()) {
+    suppressedPeerLeftCalls.delete(callId);
+    return false;
+  }
+  return true;
 }
 
 export function handlePeerLeft(callId: string, remoteName?: string): void {
@@ -444,6 +485,8 @@ export function handlePeerLeft(callId: string, remoteName?: string): void {
       runtime.signalCursor.delete(callId);
       runtime.lastOfferSent.delete(callId);
       pendingInboundIce.delete(callId);
+      // Do not let the pending-call poll re-ring the very session we just left.
+      suppressPeerLeftCall(callId);
       startPendingCallPoll();
     }
   }, 3500);
@@ -1319,10 +1362,9 @@ export async function pollActiveCallStatus(): Promise<void> {
     if (!latest) return;
 
     if (latest.status === 'active') {
-      // Remote accepted the call
-      if (dmState.call.callState === 'ringing') {
-        setDmState('call', 'callState', 'connected');
-      }
+      // Remote accepted the call. The real 'connected' transition waits for the
+      // peer's answer to be adopted (markConnected only fires once SDP is
+      // stable), so the dock never claims media is flowing before it can.
       if (runtime.call) {
         runtime.call.markConnected();
         drainInboundIce(callId, runtime.call);
@@ -1463,6 +1505,11 @@ export async function refreshPendingCall(): Promise<void> {
     const call = await fetchPendingCall(auth.token);
     if (!call || (call.status !== 'ringing' && call.status !== 'active')) return;
     if (dmState.call || dmState.incomingCall) return;
+    // Skip a session this client already tore down with a peer-left: its status
+    // is still 'active' until a party updates it, and re-ringing the exact call
+    // we just dropped is what makes users "get kicked out and instantly called
+    // again" while the other peer stays in the call.
+    if (isPeerLeftSuppressed(call.id)) return;
     // A still-ringing call where we are the caller is covered by our own
     // outgoing panel; do not surface incoming call banner for calls we initiated.
     if (call.status === 'ringing' && call.callerId === auth.id) return;
@@ -1776,6 +1823,17 @@ if (typeof window !== 'undefined') {
     } catch {}
   };
 
+  // Only beacon end/cancel on a real unload (navigation, refresh, tab close).
+  // `pagehide` additionally fires when the page enters the back/forward cache
+  // or a mobile browser suspends the tab — neither destroys the call, so
+  // beaconing 'ended' there made "switching windows" look like a hang-up to
+  // the peer.
   window.addEventListener('beforeunload', onPageUnload);
-  window.addEventListener('pagehide', onPageUnload);
+
+  // A backgrounded tab's timers are throttled and its ICE can blip; park the
+  // peer-gone countdown while hidden so a window/app switch never reads as a
+  // disconnect, and re-arm it if the transport is still down on return.
+  document.addEventListener('visibilitychange', () => {
+    runtime.call?.setPaused(document.visibilityState === 'hidden');
+  });
 }

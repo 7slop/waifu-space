@@ -100,6 +100,7 @@ vi.mock('../../src/lib/dm/call', () => ({
       this.currentState = 'ended';
       this.deps.onStateChange?.();
     }
+    setPaused = vi.fn((_paused: boolean) => {});
   }
 }));
 
@@ -1042,7 +1043,7 @@ describe('dm store call status polling and callee acceptance sync', () => {
     return rt.instances[rt.instances.length - 1];
   }
 
-  it('detects when callee accepts call and transitions ringing state to connected', async () => {
+  it('keeps a caller ringing until SDP settles even when the callee accepts (no premature connected)', async () => {
     setDmState('activeConversationId', 'c1');
     setDmState('conversations', [makeConv('c1', 'u-bob')]);
 
@@ -1093,8 +1094,10 @@ describe('dm store call status polling and callee acceptance sync', () => {
     // Poller runs
     await pollActiveCallStatus();
 
-    // Call state should be transitioned to connected and call session updated
-    expect(dmState.call?.callState).toBe('connected');
+    // The answer has not been adopted yet (no settled SDP / no manager wired),
+    // so the dock must NOT claim media is flowing: the real 'connected'
+    // transition belongs to adoptAnswer once signaling goes stable.
+    expect(dmState.call?.callState).toBe('ringing');
     expect(dmState.call?.call.status).toBe('active');
   });
 
@@ -1591,6 +1594,106 @@ describe('dm store call status polling and callee acceptance sync', () => {
       // Ensure timer does not error after manual hang up
       vi.advanceTimersByTime(3500);
       expect(dmState.call).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not re-ring a session just torn down with a peer-left (same id, still server-active)', async () => {
+    vi.useFakeTimers();
+    try {
+      setDmState('call', {
+        call: {
+          id: 'call-leave-3',
+          conversationId: 'c1',
+          callerId: 'u-bob',
+          calleeId: 'u-me',
+          callType: 'voice',
+          status: 'active',
+          startedAt: '',
+          answeredAt: '',
+          endedAt: null,
+          createdAt: ''
+        },
+        direction: 'incoming',
+        remoteName: 'Bob',
+        callState: 'connected',
+        muted: false,
+        videoOff: true,
+        screenSharing: false,
+        deafened: false
+      });
+
+      // The pending-call poll would find the SAME session still 'active'
+      // (neither party ended it) right after this client tore it down.
+      stubFetch({
+        '/api/dm/calls/pending': () =>
+          JSON_RESP({
+            success: true,
+            call: {
+              id: 'call-leave-3',
+              conversationId: 'c1',
+              callerId: 'u-bob',
+              calleeId: 'u-me',
+              callType: 'voice',
+              status: 'active',
+              startedAt: '',
+              answeredAt: '',
+              endedAt: null,
+              createdAt: ''
+            }
+          })
+      });
+
+      handlePeerLeft('call-leave-3', 'Bob');
+      // Teardown timeout elapses -> the session gets marked as peer-left.
+      vi.advanceTimersByTime(3500);
+      expect(dmState.call).toBeNull();
+
+      await refreshPendingCall();
+      // No incoming ring for the very call we just dropped: the user was
+      // "kicked out" of a call, not being called by someone.
+      expect(dmState.incomingCall).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a fresh session id is never suppressed by a previous peer-left', async () => {
+    vi.useFakeTimers();
+    try {
+      setDmState('call', {
+        call: {
+          id: 'session-a', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me',
+          callType: 'voice', status: 'active', startedAt: '', answeredAt: '', endedAt: null, createdAt: ''
+        },
+        direction: 'incoming',
+        remoteName: 'Bob',
+        callState: 'connected',
+        muted: false,
+        videoOff: true,
+        screenSharing: false,
+        deafened: false
+      });
+
+      stubFetch({
+        '/api/dm/calls/pending': () =>
+          JSON_RESP({
+            success: true,
+            call: {
+              id: 'session-b', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me',
+              callType: 'voice', status: 'ringing', startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+            }
+          })
+      });
+
+      handlePeerLeft('session-a', 'Bob');
+      // Teardown suppresses only session-a; a brand-new call carries a new id.
+      vi.advanceTimersByTime(3500);
+      expect(dmState.call).toBeNull();
+
+      await refreshPendingCall();
+      expect(dmState.incomingCall?.call.id).toBe('session-b');
     } finally {
       vi.useRealTimers();
     }
