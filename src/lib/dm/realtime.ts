@@ -148,7 +148,13 @@ export class DmRealtime {
     presence.on('presence', { event: 'leave' }, (_ctx, presencePayload) => {
       const payload = presencePayload as RealtimePresencePayload | undefined;
       if (payload?.userId) {
-        void this.applyPresenceEntry(payload.userId, null);
+        // A user may still be live on another socket/tab sharing the presence
+        // key: only drop them once no tracked presence rows remain.
+        const state = (this.presenceChannel?.presenceState() as Record<string, Array<{ payload: RealtimePresencePayload }>>) ?? {};
+        const remaining = (state[payload.userId] ?? []).some((e) => e?.payload?.userId === payload.userId);
+        if (!remaining) {
+          void this.applyPresenceEntry(payload.userId, null);
+        }
       }
     });
     this.presenceChannel.subscribe(async (status) => {
@@ -216,12 +222,17 @@ export class DmRealtime {
           if (!settled) {
             settled = true;
             clearTimeout(timeoutId);
+            // Delete the entry so a failed settle (CHANNEL_ERROR / TIMED_OUT /
+            // CLOSED / the 1.5 s fallback) causes the next call to retry the
+            // subscribe rather than reuse a dead channel that silently drops
+            // broadcasts forever.
+            this.channelReadyPromises.delete(`dm-${conversationId}`);
             resolve(chan);
           }
         };
         const timeoutId = setTimeout(done, 1500); // 1.5s fallback to prevent blocking
         chan.subscribe((status) => {
-          if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             done();
           }
         });

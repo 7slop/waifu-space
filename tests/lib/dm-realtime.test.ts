@@ -3,15 +3,18 @@ import type { DmRealtimeHandlers } from '../../src/lib/dm/realtime';
 
 const fakeChannels = new Map<string, any>();
 
-function createFakeChannel(name: string) {
+function createFakeChannel(name: string, statuses?: string[]) {
   let subscribeCb: ((status: string) => void) | null = null;
   const broadcastHandlers: Array<{ event: string; cb: (p: any) => void }> = [];
   const presenceHandlers: Array<{ event: string; cb: (p: any) => void }> = [];
   const sentPayloads: Array<{ type: string; event: string; payload: any }> = [];
+  const statusQueue = statuses ? [...statuses] : [];
+  let presenceStateData: Record<string, Array<{ payload: any }>> = {};
 
   const chan = {
     name,
     state: 'closed',
+    _subscribeCount: 0,
     on: vi.fn((type: string, filter: any, callback: any) => {
       if (type === 'broadcast') {
         broadcastHandlers.push({ event: filter.event, cb: callback });
@@ -23,23 +26,34 @@ function createFakeChannel(name: string) {
     subscribe: vi.fn((cb?: (status: string) => void) => {
       subscribeCb = cb ?? null;
       chan.state = 'joining';
+      chan._subscribeCount += 1;
+      const status = statusQueue.shift() ?? 'SUBSCRIBED';
+      const delay = status === 'SUBSCRIBED' ? 5 : 1;
       setTimeout(() => {
-        chan.state = 'joined';
-        subscribeCb?.('SUBSCRIBED');
-      }, 5);
+        chan.state = status === 'SUBSCRIBED' ? 'joined' : 'timed_out';
+        subscribeCb?.(status);
+      }, delay);
       return chan;
     }),
     send: vi.fn(async (msg: { type: string; event: string; payload: any }) => {
       sentPayloads.push(msg);
       return 'ok';
     }),
-    presenceState: vi.fn(() => ({})),
+    presenceState: vi.fn(() => presenceStateData),
     track: vi.fn(async () => 'ok'),
     untrack: vi.fn(async () => 'ok'),
     _triggerBroadcast: (event: string, payload: any) => {
       for (const h of broadcastHandlers) {
         if (h.event === event) h.cb({ payload });
       }
+    },
+    _triggerPresence: (event: string, payload: any) => {
+      for (const h of presenceHandlers) {
+        if (h.event === event) h.cb({}, payload);
+      }
+    },
+    _setPresenceState: (data: Record<string, Array<{ payload: any }>>) => {
+      presenceStateData = data;
     },
     _sentPayloads: sentPayloads
   };
@@ -173,5 +187,50 @@ describe('DmRealtime metadata delivery and subscription synchronization', () => 
     expect(payload.messageId).toBe('m-1');
     expect(payload.userId).toBe('user-reactor');
     expect(payload.reactions).toBeUndefined();
+  });
+
+  it('retries a failed channel subscribe instead of reusing a dead channel', async () => {
+    // Pre-create a channel that fails on first subscribe then succeeds.
+    fakeChannels.set('dm-c-dead', createFakeChannel('dm-c-dead', ['TIMED_OUT', 'SUBSCRIBED']));
+    await rt.connect({ id: 'user-a', username: 'A' });
+
+    await rt.subscribeConversation('c-dead');
+    const chan = fakeChannels.get('dm-c-dead');
+    expect(chan.state).toBe('timed_out');
+    expect(chan._subscribeCount).toBe(1);
+
+    // Second call must NOT reuse the cached promise — it should re-subscribe.
+    await rt.subscribeConversation('c-dead');
+    expect(chan._subscribeCount).toBe(2);
+    expect(chan.state).toBe('joined');
+  });
+
+  it('leave only removes a user once no presence rows remain (multi-socket/tab)', async () => {
+    // Pre-create the presence channel with controllable state.
+    fakeChannels.set('waifu-space-dm-presence', createFakeChannel('waifu-space-dm-presence'));
+    await rt.connect({ id: 'user-1', username: 'U' });
+
+    const presenceChannel = fakeChannels.get('waifu-space-dm-presence')!;
+
+    // Bob has two live presence entries (two tabs sharing the presence key).
+    presenceChannel._setPresenceState({
+      'u-bob': [
+        { payload: { userId: 'u-bob', username: 'bob', status: 'online', at: 1 } },
+        { payload: { userId: 'u-bob', username: 'bob', status: 'online', at: 1 } }
+      ]
+    });
+    presenceChannel._triggerPresence('sync');
+    expect(rt.getPresence()['u-bob']).toBeDefined();
+
+    // One socket drops: bob still has another row so must remain online.
+    const callsBefore = (handlers.onPresenceChange as any).mock.calls.length;
+    presenceChannel._triggerPresence('leave', { userId: 'u-bob', username: 'bob', status: 'online', at: 1 });
+    expect(rt.getPresence()['u-bob']).toBeDefined();
+    expect((handlers.onPresenceChange as any).mock.calls.length).toBe(callsBefore);
+
+    // Bob's last socket drops: now he should disappear.
+    presenceChannel._setPresenceState({});
+    presenceChannel._triggerPresence('leave', { userId: 'u-bob', username: 'bob', status: 'online', at: 1 });
+    expect(rt.getPresence()['u-bob']).toBeUndefined();
   });
 });
