@@ -45,7 +45,7 @@ it('first click never explodes and enters play mode', () => {
     render(() => <WaifuSweeperGame />);
     fireEvent.click(screen.getByTestId('cell-0-0'));
     expect(screen.queryByTestId('ws-result')).not.toBeInTheDocument();
-    expect(screen.getByTestId('ws-face').textContent).toBe('🙂');
+    expect(screen.getByLabelText('face-playing')).not.toBeNull();
     // The guarded click exposes tiles but drops no mines from the counter.
     expect(screen.getByTestId('ws-mines')).toHaveTextContent('25');
     // Flood-fill must visibly reveal the clicked tile and its guarded neighbours.
@@ -66,7 +66,7 @@ it('first click never explodes and enters play mode', () => {
     fireEvent.click(screen.getByTestId('cell-2-0'));
 
     expect(screen.getByTestId('ws-result')).toBeInTheDocument();
-    expect(screen.getByTestId('ws-face').textContent).toBe('💀');
+    expect(screen.getByLabelText('face-lost')).not.toBeNull();
     expect(screen.queryByTestId('ws-reward')).not.toBeInTheDocument();
 
     // Restart clears the result and resets the mine counter.

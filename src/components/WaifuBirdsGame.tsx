@@ -18,7 +18,7 @@ import {
 } from '../lib/flappy-logic';
 import { minigameStats, recordBirdsGame, reloadMinigameStats } from '../lib/minigame-stats';
 import { MinigameLeaderboard } from './MinigameLeaderboard';
-import { PhBird, PhLightning, PhCoins, PhHeart } from './icons';
+import { PhBird, PhLightning, PhCoins, PhHeart, PhTrophy } from './icons';
 
 const MAX_FRAME_DT = 50;
 
@@ -182,7 +182,7 @@ export function WaifuBirdsGame() {
             <div class="wfb-overlay-sub">{t('birds.tapToStart')}</div>
             <Show when={stats().birds.highScore > 0}>
               <div class="wfb-best-badge" data-testid="wfb-best-idle">
-                🏆 {t('birds.bestLabel')}: {stats().birds.highScore}
+                <PhTrophy /> {t('birds.bestLabel')}: {stats().birds.highScore}
               </div>
             </Show>
           </div>
@@ -200,7 +200,7 @@ export function WaifuBirdsGame() {
               <PhCoins /> +{result()!.coins} · +{result()!.exp} EXP
             </div>
             <div class="wfb-best-badge" data-testid="wfb-best-result">
-              🏆 {t('birds.bestLabel')}: {stats().birds.highScore}
+              <PhTrophy /> {t('birds.bestLabel')}: {stats().birds.highScore}
             </div>
             <button
               type="button"

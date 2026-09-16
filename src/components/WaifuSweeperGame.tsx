@@ -19,7 +19,19 @@ import {
 } from '../lib/minesweeper-logic';
 import { minigameStats, recordSweeperGame, reloadMinigameStats } from '../lib/minigame-stats';
 import { MinigameLeaderboard } from './MinigameLeaderboard';
-import { PhBomb, PhTimer, PhTrophy, PhLightning, PhSparkle } from './icons';
+import {
+  PhBomb,
+  PhTimer,
+  PhTrophy,
+  PhLightning,
+  PhSparkle,
+  PhFlag,
+  PhSkull,
+  PhCoins,
+  PhSmiley,
+  PhSmileyWink,
+  PhSmileyBlank
+} from './icons';
 
 const NUMBER_COLORS = [
   '',
@@ -195,7 +207,7 @@ export function WaifuSweeperGame() {
             onFlag(r, c);
           }}
         >
-          {cell?.flagged ? '🚩' : ''}
+          {cell?.flagged ? <PhFlag aria-label={t('sweeper.flagLabel')} /> : ''}
         </button>
       );
     }
@@ -241,11 +253,11 @@ export function WaifuSweeperGame() {
         >
           {result()
             ? result()!.won
-              ? '😎'
-              : '💀'
+              ? <PhSmileyWink aria-label="face-won" />
+              : <PhSkull aria-label="face-lost" />
             : started()
-              ? '🙂'
-              : '😌'}
+              ? <PhSmiley aria-label="face-playing" />
+              : <PhSmileyBlank aria-label="face-idle" />}
         </button>
         <button
           type="button"
@@ -256,7 +268,7 @@ export function WaifuSweeperGame() {
           aria-label={t('sweeper.flagMode')}
           title={t('sweeper.flagMode')}
         >
-          🚩
+          <PhFlag />
         </button>
         <div class="ws-stat">
           <span class="ws-stat-label"><PhTimer /> {t('sweeper.time')}</span>
@@ -301,7 +313,7 @@ export function WaifuSweeperGame() {
           </div>
           <Show when={result()!.won}>
             <div class="ws-result-reward" data-testid="ws-reward">
-              <PhTrophy /> +{result()!.coins} 🪙 · +{result()!.exp} EXP
+              <PhTrophy /> +{result()!.coins} <PhCoins /> · +{result()!.exp} EXP
             </div>
           </Show>
           <button type="button" class="btn-primary" data-testid="ws-play-again" onClick={newGame}>
