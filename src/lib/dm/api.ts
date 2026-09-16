@@ -1,6 +1,8 @@
 import type {
   CallSession,
+  CallSignalType,
   CallStatus,
+  CallStoredSignal,
   CallType,
   DmConversationSummary,
   DmMessage,
@@ -403,6 +405,41 @@ export async function fetchUserProfileRequest(token: string, userId: string): Pr
     token
   );
   return data.profile;
+}
+
+/** Enqueues a WebRTC signal (offer/answer/ice) for a call the user belongs to. */
+export async function sendCallSignalRequest(
+  token: string,
+  callId: string,
+  signalType: CallSignalType,
+  payload: CallStoredSignal['payload']
+): Promise<CallStoredSignal> {
+  const data = await request<{ success: boolean; signal: CallStoredSignal }>(
+    `/api/dm/calls/${callId}/signal`,
+    { method: 'POST', body: JSON.stringify({ signalType, payload }) },
+    token
+  );
+  return data.signal;
+}
+
+/**
+ * Fetches queued WebRTC signals for a call the user participates in, oldest
+ * first. Pass `after` (an ISO createdAt of the last seen row) to poll for
+ * only the signals that arrived since.
+ */
+export async function fetchCallSignalsRequest(
+  token: string,
+  callId: string,
+  after?: string
+): Promise<CallStoredSignal[]> {
+  const params = new URLSearchParams();
+  if (after) params.set('after', after);
+  const data = await request<{ success: boolean; signals: CallStoredSignal[] }>(
+    `/api/dm/calls/${callId}/signal?${params}`,
+    { method: 'GET' },
+    token
+  );
+  return data.signals ?? [];
 }
 
 export interface GifItem {

@@ -1,4 +1,4 @@
-import type { CallSignalPayload, CallType } from './types';
+import type { CallType } from './types';
 
 // ---------------------------------------------------------------------------
 // WebRTC call manager
@@ -7,10 +7,11 @@ import type { CallSignalPayload, CallType } from './types';
 // and the remote MediaStream. Uses dependency injection for the browser media
 // APIs so it can be unit-tested in a non-browser environment.
 //
-// Signaling flow (offered over the Supabase realtime conversation channel):
-//   caller.startLocal() -> createOffer(peerId) -> { offer } broadcast
-//   callee.acceptOffer(peerId, offer)         -> { answer } broadcast
-//   both: adoptIce(candidate)                 -> { ice } broadcast
+// Signaling flow (relayed through the authenticated DB-backed signal queue in
+// `call_signals`, polled by `pollCallSignals` — never over realtime):
+//   caller.startLocal() -> createOffer(peerId) -> { offer } queued
+//   callee.acceptOffer(peerId, offer)           -> { answer } queued
+//   both: adoptIce(candidate)                   -> { ice } queued
 // The ICE candidates are gathered by the underlying peer connection and are
 // handed to the caller through `onIceCandidate` callbacks.
 // ---------------------------------------------------------------------------

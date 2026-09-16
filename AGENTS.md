@@ -140,6 +140,8 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 | `strike/config.ts`, `stats.ts`, `map-save.ts`, `edit-mode.ts` | Strike game config/stats/map editor |
 | `sync/progress.ts` | Plaintext cosmetic + economy sync (server-rejects client reward fields) |
 | `timebudget/sync.ts` | E2E-encrypted blob sync |
+| `schema-dm` routes under `dm/` | Auth-gated DM API (conversations, DMs search, presence, calls) |
+| `dm/calls/[id]/signal.ts` | **WebRTC call signaling queue** — POST stores offer/answer/ICE via `store_call_signal`; GET polls via `get_call_signals` (oldest-first, `after` createdAt cursor) |
 | `holidays.ts`, `leaderboard.ts`, `profile.ts` | Misc data endpoints |
 | `upload/avatar.ts` | Avatar upload |
 
@@ -148,6 +150,7 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 - Falls back to an **in-memory local user store** (not persisted across restarts, seeded demo user `AkariFan`/`waifu123`) when Supabase env vars are missing.
 - Server is authoritative for coins/bond/defense results. Calendar and time-budget data are E2E-encrypted client-side and stored as opaque blobs.
 - **DM/Presence/Call RPCs (`schema-dm-functions.sql`) are SECURITY DEFINER and EXECUTE-granted to `service_role` ONLY** (migration `restrict_dm_rpc_execute_to_service_role`). Their `auth.uid() IS NOT NULL` guards are a no-op for the anon role (`auth.uid()` is NULL), so any anon/authenticated grant would reopen full IDOR. DM routes therefore require `SUPABASE_SERVICE_ROLE_KEY`; `resolveDmContext` returns 503 when it is absent. Do not re-grant these RPCs to anon/authenticated.
+- **WebRTC call signaling is DB-backed, not realtime**: offer/answer/ICE travel through the `call_signals` table via `store_call_signal` / `get_call_signals` (SECURITY DEFINER RPCs, see above), polled only while a call is live. Realtime channels (`dm-*`) are anonymous and carry metadata only (message/typing/reaction/presence) — never SDP, ICE, or message content. Hangup/decline/busy are delivered via call-session status (`update_call_session`) + `pollActiveCallStatus`.
 
 ### State & Persistence
 - One big reactive store in `src/lib/store.ts` (settings, waifu config, calendar events, RPG/economy state) persisted to `localStorage`.

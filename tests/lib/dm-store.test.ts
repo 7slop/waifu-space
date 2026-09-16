@@ -22,9 +22,6 @@ vi.mock('../../src/lib/dm/realtime', () => ({
     sendMessage = vi.fn(async () => undefined);
     sendTyping = vi.fn(async () => undefined);
     sendReaction = vi.fn(async () => undefined);
-    sendCallSignal = vi.fn(async () => undefined);
-    sendIncomingCallOffer = vi.fn(async () => undefined);
-    sendCallCancel = vi.fn(async () => undefined);
     disconnect = vi.fn(async () => undefined);
     getPresence = () => ({});
   }
@@ -127,6 +124,7 @@ import {
   toggleReaction,
   refreshPendingCall,
   pollActiveCallStatus,
+  pollCallSignals,
   handlePeerLeft
 } from '../../src/lib/dm/store';
 
@@ -383,15 +381,26 @@ async function boot() {
       id: 'call-1', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'video' as const,
       status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
     };
-    rt.handlers.onIncomingCall({ kind: 'call-offer', call, callerName: 'bob', offer: { type: 'offer', sdp: 'offer-sdp' } });
+    stubFetch({
+      '/api/dm/calls/pending': () => JSON_RESP({ success: true, call }),
+      '/api/dm/calls/call-1/signal': () => JSON_RESP({ success: true, signals: [] })
+    });
+    await refreshPendingCall();
     expect(dmState.incomingCall?.call.id).toBe('call-1');
     expect(notifySpy).toHaveBeenCalledWith({ title: 'bob is calling', body: 'Video call' });
   });
 });
 
 describe('dm store calls', () => {
-async function boot() {
+  // Captures POST/GET bodies sent to the DB-backed signal queue route.
+  const signalPosts: { url: string; method: string | undefined; body: any }[] = [];
+
+  async function boot() {
     stubFetch({
+      '/signal': (url, init) => {
+        signalPosts.push({ url: String(url), method: init?.method, body: init?.body ? JSON.parse(String(init.body)) : null });
+        return JSON_RESP({ success: true, signals: [], signal: null });
+      },
       '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
       '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
       '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
@@ -412,43 +421,71 @@ async function boot() {
           201
         )
     });
+    signalPosts.length = 0;
     await initDm();
     return rt.instances[0];
   }
 
-  it('startCall creates the call, acquires media, and emits an offer', async () => {
+  it('startCall creates the call, acquires media, and queues an offer signal', async () => {
     const rtInst = await boot();
     await selectConversation('c1');
     const ok = await startCall('voice');
     expect(ok).toBe(true);
     expect(dmState.call?.direction).toBe('outgoing');
     expect(dmState.call?.call.callType).toBe('voice');
-    expect(rtInst.sendCallSignal).toHaveBeenCalledWith(expect.objectContaining({ type: 'offer', callId: 'call-2', sdp: { type: 'offer', sdp: 'offer-sdp' } }));
-    expect(rtInst.sendIncomingCallOffer).toHaveBeenCalledWith(expect.objectContaining({ callerName: 'alice', call: expect.objectContaining({ id: 'call-2' }) }));
+    const offerPost = signalPosts.find((p) => p.url.includes('call-2') && p.body?.signalType === 'offer');
+    expect(offerPost).toBeTruthy();
+    expect(offerPost!.body.payload.sdp).toEqual({ type: 'offer', sdp: 'offer-sdp' });
   });
 
-  it('acceptIncomingCall answers and sends an answer signal', async () => {
+  it('acceptIncomingCall answers and queues an answer signal', async () => {
     const rtInst = await boot();
     const call = {
       id: 'call-9', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'video' as const,
       status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
     };
-    rt.handlers.onIncomingCall({ kind: 'call-offer', call, callerName: 'bob', offer: { type: 'offer', sdp: 'offer-sdp' } });
+    // The incoming call surfaces via the DB pending poll (not a realtime offer)
+    // and its offer is hydrated from the DB signal queue.
+    stubFetch({
+      '/api/dm/calls/pending': () => JSON_RESP({ success: true, call }),
+      '/api/dm/calls/call-9/signal': (url, init) => {
+        if (init?.method === 'POST') {
+          signalPosts.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(String(init.body)) : null });
+          return JSON_RESP({ success: true, signal: null }, 201);
+        }
+        return JSON_RESP({
+          success: true,
+          signals: [{
+            id: 'sig-offer-9', callId: 'call-9', conversationId: 'c1', senderId: 'u-bob', signalType: 'offer',
+            payload: { sdp: { type: 'offer', sdp: 'offer-sdp' } }, createdAt: '2025-01-01T00:00:00.000Z'
+          }]
+        });
+      }
+    });
+    await refreshPendingCall();
+    // Let the offer hydration complete so accept uses the caller's SDP.
+    await new Promise((r) => setTimeout(r, 0));
     await acceptIncomingCall();
     expect(dmState.incomingCall).toBeNull();
     expect(dmState.call?.direction).toBe('incoming');
     expect(dmState.call?.callState).toBe('connected');
-    expect(rtInst.sendCallSignal).toHaveBeenCalledWith(expect.objectContaining({ type: 'answer', callId: 'call-9', sdp: { type: 'answer', sdp: 'answer-sdp' } }));
+    const answerPost = signalPosts.find((p) => p.url.includes('call-9') && p.body?.signalType === 'answer');
+    expect(answerPost).toBeTruthy();
+    expect(answerPost!.body.payload.sdp).toEqual({ type: 'answer', sdp: 'answer-sdp' });
     expect(rtInst.subscribeConversation).toHaveBeenCalledWith('c1');
   });
 
   it('hangUpCall cancels an outgoing ringing call', async () => {
-    const rtInst = await boot();
+    await boot();
     await selectConversation('c1');
     await startCall('voice');
+    const prior = signalPosts.length;
     await hangUpCall();
     expect(dmState.call).toBeNull();
-    expect(rtInst.sendCallCancel).toHaveBeenCalledWith('u-bob', expect.objectContaining({ call: expect.objectContaining({ id: 'call-2' }) }));
+    // Hangs-up/declines never enqueue WebRTC signals anymore — the peer learns
+    // via the status poll. Only the offer remains queued from startCall.
+    expect(signalPosts.slice(prior).filter((p) => p.body?.signalType === 'decline' || p.body?.signalType === 'hangup')).toHaveLength(0);
+    expect(signalPosts.filter((p) => p.body?.signalType === 'offer')).toHaveLength(1);
   });
 
   it('canceled ringing calls apply a call-ended system message to the timeline', async () => {
@@ -475,38 +512,46 @@ async function boot() {
   });
 
   it('an echoed-back offer does not flip an outgoing ringing call to connected', async () => {
-    const rtInst = await boot();
+    await boot();
     await selectConversation('c1');
     await startCall('voice');
     expect(dmState.call?.callState).toBe('ringing');
-    // Supabase realtime echoes a broadcast back to the sender: the caller
-    // receives its own 'offer' on the conversation channel. That must NOT be
-    // treated as a renegotiation (which would call acceptOffer and set state
-    // to 'connected' before the callee has answered).
-    rt.handlers.onCallSignal({
-      kind: 'call-signal',
-      callId: 'call-2',
-      conversationId: 'c1',
-      type: 'offer',
-      sdp: { type: 'offer', sdp: 'offer-sdp' }
+    // Our own offer is stored in the DB queue too; the signal poll must skip
+    // self-sent signals so the caller never treats its own offer as a
+    // renegotiation (which would call acceptOffer and set state to
+    // 'connected' before the callee has answered).
+    stubFetch({
+      '/signal': () =>
+        JSON_RESP({
+          success: true,
+          signals: [{
+            id: 's-echo', callId: 'call-2', conversationId: 'c1', senderId: 'u-me', signalType: 'offer',
+            payload: { sdp: { type: 'offer', sdp: 'offer-sdp' } }, createdAt: '2025-01-01T00:00:00.000Z'
+          }]
+        })
     });
+    await pollCallSignals();
     expect(dmState.call?.callState).toBe('ringing');
-    expect(rtInst.sendCallSignal).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'answer', callId: 'call-2' }));
+    const answerPost = signalPosts.find((p) => p.body?.signalType === 'answer');
+    expect(answerPost).toBeUndefined();
   });
 
   it('declines and cleans up an incoming call', async () => {
-    const rtInst = await boot();
+    await boot();
     const call = {
       id: 'call-7', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'voice' as const,
       status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
     };
-    rt.handlers.onIncomingCall({ kind: 'call-offer', call, callerName: 'bob' });
+    stubFetch({
+      '/api/dm/calls/pending': () => JSON_RESP({ success: true, call }),
+      '/api/dm/calls/call-7/signal': () => JSON_RESP({ success: true, signals: [] })
+    });
+    await refreshPendingCall();
     expect(dmState.incomingCall?.call.id).toBe('call-7');
     // hangUpCall with no active call but an incoming call set acts as decline
     await hangUpCall();
     expect(dmState.incomingCall).toBeNull();
     expect(dmState.call).toBeNull();
-    // simulate the server returning a status update that the realtime path would have sent
   });
 
   it('toggleMute reflects in the call UI state', async () => {
@@ -558,6 +603,10 @@ async function boot() {
 
   it('startCall joins an already-busy call instead of ringing the callee again', async () => {
     stubFetch({
+      '/signal': (url, init) => {
+        signalPosts.push({ url: String(url), method: init?.method, body: init?.body ? JSON.parse(String(init.body)) : null });
+        return JSON_RESP({ success: true, signals: [], signal: null });
+      },
       '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
       '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
       '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
@@ -575,32 +624,24 @@ async function boot() {
     });
     await initDm();
     await selectConversation('c1');
-    const rtInst = rt.instances[0];
     const ok = await startCall('voice');
     expect(ok).toBe(true);
     // Adopts the existing call in the active dock without a fresh ringing flow.
     expect(dmState.call?.call.id).toBe('call-existing');
     expect(dmState.call?.direction).toBe('outgoing');
     expect(dmState.call?.callState).toBe('active');
-    // The already-busy callee must NOT be re-rung with the incoming-call
-    // broadcast, but a renegotiation offer is sent so media can link up.
-    expect(rtInst.sendIncomingCallOffer).not.toHaveBeenCalled();
-    expect(rtInst.sendCallSignal).toHaveBeenCalledWith(expect.objectContaining({ type: 'offer', callId: 'call-existing' }));
+    // The already-busy callee must NOT be re-rung, but a renegotiation offer is
+    // queued in the DB-backed signal store so media can link up.
+    expect(signalPosts.find((p) => p.body?.signalType === 'offer' && p.url.includes('call-existing'))).toBeTruthy();
   });
 
   it('startCall sends callerAvatar and propagates peer info', async () => {
-    const rtInst = await boot();
+    await boot();
     await selectConversation('c1');
     const ok = await startCall('voice');
     expect(ok).toBe(true);
     expect(dmState.call?.remoteName).toBe('bob');
-    expect(rtInst.sendIncomingCallOffer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        callerName: 'alice',
-        callerAvatar: 'https://x/a.png',
-        call: expect.objectContaining({ id: 'call-2' })
-      })
-    );
+    expect(signalPosts.find((p) => p.body?.signalType === 'offer' && p.url.includes('call-2'))).toBeTruthy();
   });
 
   it('incoming call buffers ICE candidates before accept and adopts them upon accept', async () => {
@@ -609,21 +650,29 @@ async function boot() {
       id: 'call-ice-1', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'voice' as const,
       status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
     };
-    rt.handlers.onIncomingCall({
-      kind: 'call-offer',
-      call,
-      callerName: 'bob',
-      callerAvatar: 'https://bob/avatar.png',
-      offer: { type: 'offer', sdp: 'offer-sdp' }
+    // Offer + pre-accept ICE are pulled from the DB queue when the pending poll
+    // surfaces the call.
+    stubFetch({
+      '/api/dm/calls/pending': () => JSON_RESP({ success: true, call }),
+      '/api/dm/calls/call-ice-1/signal': () =>
+        JSON_RESP({
+          success: true,
+          signals: [
+            {
+              id: 'sig-o', callId: 'call-ice-1', conversationId: 'c1', senderId: 'u-bob', signalType: 'offer',
+              payload: { sdp: { type: 'offer', sdp: 'offer-sdp' } }, createdAt: '2025-01-01T00:00:00.000Z'
+            },
+            {
+              id: 'sig-i', callId: 'call-ice-1', conversationId: 'c1', senderId: 'u-bob', signalType: 'ice',
+              payload: { candidate: { candidate: 'candidate:1 1 UDP 12345 1.2.3.4 5678 typ host' } }, createdAt: '2025-01-01T00:00:01.000Z'
+            }
+          ]
+        })
     });
-    // Candidate arrives before callee clicks accept
-    rt.handlers.onCallSignal({
-      kind: 'call-signal',
-      callId: 'call-ice-1',
-      conversationId: 'c1',
-      type: 'ice',
-      candidate: { candidate: 'candidate:1 1 UDP 12345 1.2.3.4 5678 typ host' } as any
-    });
+    await refreshPendingCall();
+    expect(dmState.incomingCall?.call.id).toBe('call-ice-1');
+    // Wait for offer + ICE hydration from the queue to finish.
+    await new Promise((r) => setTimeout(r, 0));
     await acceptIncomingCall();
     const manager = callRegistry.instances[callRegistry.instances.length - 1];
     expect(manager.adoptIce).toHaveBeenCalledWith(
@@ -632,35 +681,44 @@ async function boot() {
     expect(dmState.call?.remoteName).toBe('bob');
   });
 
-  it('declineIncomingCall emits decline signal and call-cancel to caller in real time', async () => {
-    const rtInst = await boot();
+  it('declineIncomingCall marks the call declined on the server without enqueueing WebRTC signals', async () => {
+    await boot();
     const call = {
       id: 'call-dec-1', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'voice' as const,
       status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
     };
-    rt.handlers.onIncomingCall({ kind: 'call-offer', call, callerName: 'bob' });
+    stubFetch({
+      '/api/dm/calls/pending': () => JSON_RESP({ success: true, call }),
+      '/api/dm/calls/call-dec-1/signal': () => JSON_RESP({ success: true, signals: [] })
+    });
+    await refreshPendingCall();
     expect(dmState.incomingCall).not.toBeNull();
+    const prior = signalPosts.length;
     await declineIncomingCall();
     expect(dmState.incomingCall).toBeNull();
-    expect(rtInst.sendCallSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'decline', callId: 'call-dec-1', conversationId: 'c1' })
-    );
-    expect(rtInst.sendCallCancel).toHaveBeenCalledWith('u-bob', expect.objectContaining({ call }));
+    // Decline is delivered via the call session status, never a signal row.
+    expect(signalPosts.slice(prior).filter((p) => p.url.includes('call-dec-1') && p.body?.signalType === 'decline')).toHaveLength(0);
   });
 
-  it('receiving hangup signal displays left the voice chat notice and cancels call after timeout', async () => {
+  it('receiving an ended status displays left the voice chat notice and cancels call after timeout', async () => {
     vi.useFakeTimers();
     try {
       await boot();
       await selectConversation('c1');
       await startCall('voice');
+      // Once connected, if the peer ends the call the status poll must surface
+      // the "left the voice chat" notice (the old hangup realtime signal path).
+      setDmState('call', 'callState', 'connected');
       expect(dmState.call).not.toBeNull();
-      rt.handlers.onCallSignal({
-        kind: 'call-signal',
-        callId: 'call-2',
-        conversationId: 'c1',
-        type: 'hangup'
+      stubFetch({
+        '/signal': () => JSON_RESP({ success: true, signals: [] }),
+        '/api/dm/calls/call-2/status': () =>
+          JSON_RESP({
+            success: true,
+            call: { id: 'call-2', conversationId: 'c1', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice', status: 'ended', startedAt: '', answeredAt: null, endedAt: null, createdAt: '' }
+          })
       });
+      await pollActiveCallStatus();
       expect(dmState.call?.leftNotice).toContain('left the voice chat');
       vi.advanceTimersByTime(3500);
       expect(dmState.call).toBeNull();
@@ -730,10 +788,10 @@ async function boot() {
       }
     });
     await initDm();
-    await selectConversation('c1');
-    // An incoming offer already on screen is not replaced by the poll.
-    rt.handlers.onIncomingCall({ kind: 'call-offer', call: pendingCall, callerName: 'bob' });
+    // Surfacing an incoming call through the DB poll (not a realtime offer).
+    await refreshPendingCall();
     expect(dmState.incomingCall?.call.id).toBe('call-pend-3');
+    // The poll's verify pass must not replace the call already on screen.
     await refreshPendingCall();
     expect(dmState.incomingCall?.call.id).toBe('call-pend-3');
   });
@@ -757,64 +815,71 @@ async function boot() {
   });
 
   it('callee accepting without prior offer sends offer to caller, and caller accepts it to connect', async () => {
-    const rtInst = await boot();
+    await boot();
     // 1. Caller starts the call
     await selectConversation('c1');
     await startCall('voice');
     expect(dmState.call?.callState).toBe('ringing');
 
-    // 2. Caller receives callee's offer (e.g. if callee joined before caller's offer reached them)
-    await rt.handlers.onCallSignal({
-      kind: 'call-signal',
-      callId: 'call-2',
-      conversationId: 'c1',
-      type: 'offer',
-      senderId: 'u-bob',
-      targetUserId: 'u-me',
-      sdp: { type: 'offer', sdp: 'callee-offer-sdp' }
+    // 2. Caller polls the DB queue and finds the callee's offer (e.g. if the
+    //    callee joined before the caller's offer reached them).
+    stubFetch({
+      '/signal': (url, init) => {
+        if (init?.method === 'POST') {
+          signalPosts.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(String(init.body)) : null });
+          return JSON_RESP({ success: true, signal: null }, 201);
+        }
+        return JSON_RESP({
+          success: true,
+          signals: [{
+            id: 'sig-callee-offer', callId: 'call-2', conversationId: 'c1', senderId: 'u-bob', signalType: 'offer',
+            payload: { sdp: { type: 'offer', sdp: 'callee-offer-sdp' } }, createdAt: '2025-01-01T00:00:00.000Z'
+          }]
+        });
+      }
     });
+    await pollCallSignals();
 
-    // Caller should accept callee's offer, transition to connected, and send answer back
+    // Caller should accept callee's offer, transition to connected, and queue an answer back
     expect(dmState.call?.callState).toBe('connected');
-    expect(rtInst.sendCallSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'answer',
-        callId: 'call-2',
-        targetUserId: 'u-bob',
-        senderId: 'u-me'
-      })
-    );
+    expect(signalPosts.find((p) => p.url.includes('call-2') && p.body?.signalType === 'answer')).toBeTruthy();
   });
 
-  it('ignores signals targeted to another user or sent by self', async () => {
-    const rtInst = await boot();
+  it('ignores signals sent by self or from a non-participant', async () => {
+    await boot();
     await selectConversation('c1');
     await startCall('voice');
     expect(dmState.call?.callState).toBe('ringing');
 
-    // Signal sent by self (echo)
-    await rt.handlers.onCallSignal({
-      kind: 'call-signal',
-      callId: 'call-2',
-      conversationId: 'c1',
-      type: 'answer',
-      senderId: 'u-me',
-      targetUserId: 'u-bob',
-      sdp: { type: 'answer', sdp: 'my-own-answer' }
+    // Signal sent by self (echo of our own stored offer)
+    stubFetch({
+      '/signal': () =>
+        JSON_RESP({
+          success: true,
+          signals: [{
+            id: 's-self', callId: 'call-2', conversationId: 'c1', senderId: 'u-me', signalType: 'answer',
+            payload: { sdp: { type: 'answer', sdp: 'my-own-answer' } }, createdAt: '2025-01-01T00:00:00.000Z'
+          }]
+        })
     });
+    await pollCallSignals();
     expect(dmState.call?.callState).toBe('ringing');
 
-    // Signal targeted to someone else
-    await rt.handlers.onCallSignal({
-      kind: 'call-signal',
-      callId: 'call-2',
-      conversationId: 'c1',
-      type: 'answer',
-      senderId: 'u-bob',
-      targetUserId: 'u-someone-else',
-      sdp: { type: 'answer', sdp: 'someone-elses-answer' }
+    // Offer that claims to come from someone who is not the remote party of
+    // this outgoing call is not treated as a renegotiation.
+    stubFetch({
+      '/signal': () =>
+        JSON_RESP({
+          success: true,
+          signals: [{
+            id: 's-stranger', callId: 'call-2', conversationId: 'c1', senderId: 'u-intruder', signalType: 'offer',
+            payload: { sdp: { type: 'offer', sdp: 'intruder-offer' } }, createdAt: '2025-01-01T00:00:00.000Z'
+          }]
+        })
     });
+    await pollCallSignals();
     expect(dmState.call?.callState).toBe('ringing');
+    expect(signalPosts.filter((p) => p.body?.signalType === 'answer')).toHaveLength(0);
   });
 });
 
@@ -1085,7 +1150,7 @@ describe('dm store call status polling and callee acceptance sync', () => {
     expect(result).toBe(false);
   });
 
-  it('outgoing call transitions to connected when callee answer signal is received via realtime', async () => {
+  it('outgoing call transitions to connected when callee answer signal is polled from the DB queue', async () => {
     await boot();
     setDmState('activeConversationId', 'c1');
     setDmState('conversations', [makeConv('c1', 'u-bob')]);
@@ -1114,24 +1179,35 @@ describe('dm store call status polling and callee acceptance sync', () => {
 
     expect(dmState.call?.callState).toBe('ringing');
 
-    // Simulate answer signal arriving from callee
-    await rt.handlers.onCallSignal({
-      kind: 'call-signal',
-      callId: 'call-answer-1',
-      conversationId: 'c1',
-      type: 'answer',
-      sdp: { type: 'answer', sdp: 'remote-answer-sdp' }
+    // Callee's answer is queued in the DB; the signal poll picks it up.
+    stubFetch({
+      '/signal': () =>
+        JSON_RESP({
+          success: true,
+          signals: [{
+            id: 'sig-answer', callId: 'call-answer-1', conversationId: 'c1', senderId: 'u-bob', signalType: 'answer',
+            payload: { sdp: { type: 'answer', sdp: 'remote-answer-sdp' } }, createdAt: '2025-01-01T00:00:00.000Z'
+          }]
+        })
     });
+    await pollCallSignals();
 
     expect(dmState.call?.callState).toBe('connected');
   });
 
-  it('callee accepting incoming call sends answer signal with callerId targetUserId', async () => {
+  it('callee accepting incoming call queues an answer signal', async () => {
+    const signalPosts: { url: string; method: string | undefined; body: any }[] = [];
     await boot();
     setDmState('activeConversationId', 'c1');
     setDmState('conversations', [makeConv('c1', 'u-bob')]);
 
     stubFetch({
+      '/signal': (url, init) => {
+        if (init?.method === 'POST' && String(url).includes('call-accept-1/signal')) {
+          signalPosts.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(String(init.body)) : null });
+        }
+        return JSON_RESP({ success: true, signals: [], signal: null });
+      },
       '/api/dm/calls/call-accept-1/status': () =>
         JSON_RESP({
           success: true,
@@ -1151,7 +1227,6 @@ describe('dm store call status polling and callee acceptance sync', () => {
     });
 
     setDmState('incomingCall', {
-      kind: 'call-offer',
       call: {
         id: 'call-accept-1',
         conversationId: 'c1',
@@ -1171,16 +1246,10 @@ describe('dm store call status polling and callee acceptance sync', () => {
     const accepted = await acceptIncomingCall();
     expect(accepted).toBe(true);
 
-    const latestRt = rt.instances[rt.instances.length - 1];
-    expect(latestRt.sendCallSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'call-signal',
-        callId: 'call-accept-1',
-        conversationId: 'c1',
-        type: 'answer',
-        targetUserId: 'u-bob'
-      })
-    );
+    const answerPost = signalPosts.find((p) => p.body?.signalType === 'answer');
+    expect(answerPost).toBeTruthy();
+    expect(answerPost!.url).toContain('call-accept-1/signal');
+    expect(answerPost!.body.payload.sdp).toEqual({ type: 'answer', sdp: 'answer-sdp' });
   });
 
   it('handlePeerLeft sets leftNotice and automatically cancels call after timeout', () => {

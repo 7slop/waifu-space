@@ -1,7 +1,6 @@
 import { createSignal } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import type {
-  CallOfferBroadcast,
   CallSession,
   CallSignalPayload,
   CallType,
@@ -44,7 +43,9 @@ import {
   removeGifFavorite,
   gifKeyOfUrl,
   fetchUserProfileRequest,
-  heartbeatPresenceRequest
+  heartbeatPresenceRequest,
+  sendCallSignalRequest,
+  fetchCallSignalsRequest
 } from './api';
 import { DmRealtime, RealtimePresencePayload } from './realtime';
 import { CallManager, CallState } from './call';
@@ -87,6 +88,19 @@ export interface DmCallUi {
   leftNotice?: string | null;
 }
 
+/**
+ * A ringing/active call surfaced to the user for accept/decline (or rejoin),
+ * hydrated and refreshed from the DB — not from a realtime broadcast.
+ */
+export interface DmIncomingCall {
+  call: CallSession;
+  callerName: string;
+  callerAvatar?: string | null;
+  /** The caller's SDP offer, polled from the DB-backed signal queue. */
+  offer?: RTCSessionDescriptionInit | null;
+  leftNotice?: string | null;
+}
+
 export interface DmStoreState {
   ready: boolean;
   connecting: boolean;
@@ -100,7 +114,7 @@ export interface DmStoreState {
   realtimePresence: Record<string, RealtimePresencePayload>;
   myPresence: UserPresence | null;
   totalUnread: number;
-  incomingCall: CallOfferBroadcast | null;
+  incomingCall: DmIncomingCall | null;
   call: DmCallUi | null;
   pendingIce: CallSignalPayload[];
   searchQuery: string;
@@ -134,6 +148,9 @@ interface DmRuntime {
   presenceOrigin: 'auto' | 'manual';
   pendingPollTimer: ReturnType<typeof setInterval> | null;
   callStatusPollTimer: ReturnType<typeof setInterval> | null;
+  callSignalPollTimer: ReturnType<typeof setInterval> | null;
+  /** Per-call poll watermark: highest `createdAt` of signals already applied. */
+  signalCursor: Map<string, string>;
   peerLeftTimeout: ReturnType<typeof setTimeout> | null;
   lastOffer: RTCSessionDescriptionInit | null;
 }
@@ -148,12 +165,17 @@ const runtime: DmRuntime = {
   presenceOrigin: 'manual',
   pendingPollTimer: null,
   callStatusPollTimer: null,
+  callSignalPollTimer: null,
+  signalCursor: new Map<string, string>(),
   peerLeftTimeout: null,
   lastOffer: null
 };
 
 /** How often the store re-polls the DB for a pending (ringing/active) call. */
 const PENDING_CALL_POLL_MS = 2_500;
+
+/** How often queued call signals are polled while a call is live. */
+const CALL_SIGNAL_POLL_MS = 800;
 
 const INITIAL: DmStoreState = {
   ready: false,
@@ -345,11 +367,17 @@ function onRealtimePresence(map: Record<string, RealtimePresencePayload>): void 
   setDmState('realtimePresence', map);
 }
 
-function sendSignal(type: CallSignalPayload['type'], callId: string, conversationId: string, extras: Partial<CallSignalPayload>, targetUserId?: string): void {
+/**
+ * Stores a WebRTC signal (offer/answer/ice) in the DB-backed queue. The peer
+ * picks it up via its own authenticated signal poll; nothing call-shaped rides
+ * the anonymous realtime channels. Failures are fire-and-forget — the signal
+ * poll loop plus the caller's lastOffer re-send recover lost writes.
+ */
+function sendSignal(type: CallSignalPayload['type'], callId: string, _conversationId: string, extras: Partial<CallSignalPayload>): void {
   const auth = currentAuth();
-  const current = dmState.call;
-  const peerId = targetUserId ?? (current ? (current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId) : undefined);
-  void runtime.realtime?.sendCallSignal({ kind: 'call-signal', callId, conversationId, type, targetUserId: peerId, senderId: auth?.id, ...extras });
+  if (!auth || !callId || callId === 'undefined' || callId === 'null') return;
+  void sendCallSignalRequest(auth.token, callId, type, { sdp: extras.sdp, candidate: extras.candidate, reason: extras.reason })
+    .catch(() => undefined);
 }
 
 const pendingInboundIce = new Map<string, RTCIceCandidateInit[]>();
@@ -379,6 +407,7 @@ export function handlePeerLeft(callId: string, remoteName?: string): void {
   if (call.leftNotice) return;
 
   stopCallStatusPolling();
+  stopCallSignalPolling();
   const name = remoteName || call.remoteName || 'User';
   setDmState('call', 'leftNotice', t('dm.userLeftVoiceChat', { name }));
 
@@ -395,26 +424,8 @@ export function handlePeerLeft(callId: string, remoteName?: string): void {
       setLocalStreamSignal(null);
       setRemoteStreamSignal(null);
       runtime.call = null;
-    }
-  }, 3500);
-}
-
-export function handleIncomingCallDismiss(callId: string, callerName?: string): void {
-  if (dmState.incomingCall?.call?.id !== callId) return;
-  if (dmState.incomingCall?.leftNotice) return;
-
-  const name = callerName || dmState.incomingCall?.callerName || 'User';
-  setDmState('incomingCall', (prev) => (prev ? { ...prev, leftNotice: t('dm.userLeftVoiceChat', { name }) } : null));
-
-  if (runtime.peerLeftTimeout) {
-    clearTimeout(runtime.peerLeftTimeout);
-  }
-
-  runtime.peerLeftTimeout = setTimeout(() => {
-    runtime.peerLeftTimeout = null;
-    if (dmState.incomingCall?.call?.id === callId) {
-      setDmState('incomingCall', null);
-      runtime.pendingAccept = null;
+      runtime.signalCursor.delete(callId);
+      pendingInboundIce.delete(callId);
     }
   }, 3500);
 }
@@ -422,20 +433,9 @@ export function handleIncomingCallDismiss(callId: string, callerName?: string): 
 async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
   const auth = currentAuth();
   if (auth && signal.senderId && signal.senderId === auth.id) return;
-  if (auth && signal.targetUserId && signal.targetUserId !== auth.id) return;
 
   const manager = runtime.call;
   const call = dmState.call;
-
-  if (signal.type === 'hangup' || signal.type === 'decline') {
-    if (dmState.incomingCall?.call?.id === signal.callId) {
-      handleIncomingCallDismiss(signal.callId, dmState.incomingCall?.callerName);
-    }
-    if (call?.call?.id === signal.callId) {
-      handlePeerLeft(signal.callId, call.remoteName);
-    }
-    return;
-  }
 
   if (signal.type === 'offer') {
     // Caller's offer for an incoming call the user already accepted.
@@ -444,20 +444,20 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
       runtime.pendingAccept = null;
       if (manager) {
         const answer = await manager.acceptOffer(pending.call.id, pending.call.callerId, signal.sdp);
-        if (answer) sendSignal('answer', pending.call.id, pending.call.conversationId, { sdp: answer }, pending.call.callerId);
+        if (answer) sendSignal('answer', pending.call.id, pending.call.conversationId, { sdp: answer });
         drainInboundIce(pending.call.id, manager);
         flushPendingIce(pending.call.conversationId, pending.call.id);
       }
       return;
     }
-    // An offer arrived for an in-progress or ringing call
+    // An offer arrived for an in-progress or ringing call (renegotiation).
     if (call && manager && signal.callId === call.call.id && signal.sdp) {
       const remoteId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
       if (call.direction === 'outgoing' && call.callState === 'ringing' && signal.senderId !== remoteId) {
         return;
       }
       const answer = await manager.acceptOffer(call.call.id, remoteId, signal.sdp);
-      if (answer) sendSignal('answer', call.call.id, call.call.conversationId, { sdp: answer }, remoteId);
+      if (answer) sendSignal('answer', call.call.id, call.call.conversationId, { sdp: answer });
       if (call.callState === 'ringing' || call.callState === 'active') {
         setDmState('call', 'callState', 'connected');
       }
@@ -497,27 +497,33 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
   }
 }
 
-function onIncomingCallOffer(broadcast: CallOfferBroadcast): void {
-  const auth = currentAuth();
-  if (auth && broadcast.call.callerId === auth.id) return;
-  if (dmState.incomingCall?.call.id === broadcast.call.id) return;
-  if (dmState.call?.call.id === broadcast.call.id) return;
-
-  void runtime.realtime?.subscribeConversation(broadcast.call.conversationId);
-  if (!dmState.conversations.some((c) => c.id === broadcast.call.conversationId)) {
-    void refreshConversations();
-  }
-
-  setDmState('incomingCall', broadcast);
-  notify(`${broadcast.callerName} is calling`, callTypeLabel(broadcast.call.callType));
-}
-
-function onIncomingCallCancel(broadcast: CallOfferBroadcast): void {
-  if (dmState.incomingCall?.call.id === broadcast.call.id) {
-    handleIncomingCallDismiss(broadcast.call.id, broadcast.callerName);
-  }
-  if (dmState.call?.call.id === broadcast.call.id) {
-    handlePeerLeft(broadcast.call.id, broadcast.callerName);
+/**
+ * Fetches the offer + pre-accept ICE the caller queued for an incoming call.
+ * Runs once when `refreshPendingCall` surfaces a ringing/active call so the
+ * accept flow has the SDP already in hand; also seeds the poll watermark.
+ */
+async function hydrateIncomingSignals(callId: string, auth: DmAuth): Promise<void> {
+  try {
+    const signals = await fetchCallSignalsRequest(auth.token, callId);
+    let offer: RTCSessionDescriptionInit | null = null;
+    for (const s of signals) {
+      if (s.senderId === auth.id) continue;
+      if (s.signalType === 'offer' && s.payload?.sdp) offer = s.payload.sdp;
+      else if (s.signalType === 'ice' && s.payload?.candidate) {
+        const list = pendingInboundIce.get(callId) ?? [];
+        list.push(s.payload.candidate);
+        pendingInboundIce.set(callId, list);
+      }
+    }
+    if (signals.length) {
+      const last = signals[signals.length - 1];
+      runtime.signalCursor.set(callId, last.createdAt);
+    }
+    if (offer && dmState.incomingCall?.call?.id === callId) {
+      setDmState('incomingCall', (prev) => (prev ? { ...prev, offer } : prev));
+    }
+  } catch {
+    // Non-fatal: acceptIncomingCall falls back to generating its own offer.
   }
 }
 
@@ -629,9 +635,6 @@ export async function initDm(): Promise<boolean> {
       onMessage: onRealtimeMessage,
       onTyping: onRealtimeTyping,
       onReaction: onRealtimeReaction,
-      onCallSignal: (s) => void handleCallSignal(s),
-      onIncomingCall: onIncomingCallOffer,
-      onCallCancel: onIncomingCallCancel,
       onPresenceChange: onRealtimePresence
     });
     runtime.realtime = rt;
@@ -645,9 +648,10 @@ export async function initDm(): Promise<boolean> {
     ]);
     setDmState({ conversations: convs, myPresence: presence, totalUnread: unread, ready: true, connecting: false });
 
-    // Subscribe to every conversation channel for the whole session so messages
-    // and call signals arrive live no matter which page the user is on (the
-    // channel set is small and unsubscribe only happens on disconnect).
+    // Subscribe to every conversation channel for the whole session so message
+    // metadata (and typing/reactions) arrive live no matter which page the user
+    // is on (the channel set is small and unsubscribe only happens on
+    // disconnect). Call signaling never rides realtime — see realtime.ts.
     for (const c of convs) void rt.subscribeConversation(c.id);
 
     const participantIds = Array.from(new Set(convs.flatMap(c => (c.otherUser?.id ? [c.otherUser.id] : []))));
@@ -669,8 +673,9 @@ export async function initDm(): Promise<boolean> {
     // the picker has ever been opened.
     void gifLoadFavorites();
 
-    // Incoming/busy calls ride the lossy realtime channel; poll the DB so a
-    // missed call-offer broadcast or a refresh never hides a pending call.
+    // Poll the DB for pending (ringing/active) calls so a refresh never hides
+    // one; once surfaced, offers/answers/ICE are also pulled from the same DB
+    // queue by the signal poll loop.
     void refreshPendingCall();
     runtime.pendingPollTimer ??= setInterval(() => void refreshPendingCall(), PENDING_CALL_POLL_MS);
     return true;
@@ -1105,19 +1110,11 @@ export async function startCall(type: CallType): Promise<boolean> {
       await runtime.realtime.subscribeConversation(conv.id);
     }
     startCallStatusPolling();
+    startCallSignalPolling();
     const offer = await manager.createOffer(call.id, otherId);
     if (offer) {
       runtime.lastOffer = offer;
-      sendSignal('offer', call.id, conv.id, { sdp: offer }, otherId);
-      if (runtime.realtime) {
-        await runtime.realtime.sendIncomingCallOffer({
-          kind: 'call-offer',
-          call,
-          callerName: auth.username,
-          callerAvatar: auth.avatarUrl,
-          offer
-        });
-      }
+      sendSignal('offer', call.id, conv.id, { sdp: offer });
     }
     return true;
   } catch (err) {
@@ -1135,11 +1132,11 @@ export async function startCall(type: CallType): Promise<boolean> {
 /**
  * Adopts a call the server told us already exists (busy/ringing/active in the
  * same conversation). The caller becomes the joining party: the remote side is
- * already busy, so there is NO ringing and no new incoming-call broadcast.
+ * already busy, so there is NO ringing and no new incoming-call banner.
  * Instead the call manager is wired to the returned call id, the UI moves
- * straight to the active dock, and a renegotiation offer is sent over the
- * conversation's call-signal channel so the already-joined participant answers
- * it (the existing accept/answer wiring) and the media links up.
+ * straight to the active dock, and a renegotiation offer is queued in the
+ * DB-backed signal store so the already-joined participant answers it (the
+ * existing accept/answer wiring) and the media links up.
  */
 async function joinExistingCall(call: CallSession, conv: DmConversationSummary, auth: DmAuth): Promise<boolean> {
   const manager = makeCallManager();
@@ -1160,6 +1157,7 @@ async function joinExistingCall(call: CallSession, conv: DmConversationSummary, 
   });
   void runtime.realtime?.subscribeConversation(call.conversationId);
   startCallStatusPolling();
+  startCallSignalPolling();
   const offer = await manager.createOffer(call.id, call.calleeId === auth.id ? call.callerId : call.calleeId);
   if (offer) sendSignal('offer', call.id, call.conversationId, { sdp: offer });
   return true;
@@ -1199,8 +1197,7 @@ export async function pollActiveCallStatus(): Promise<void> {
         drainInboundIce(callId, runtime.call);
         flushPendingIce(current.call.conversationId, callId);
         if (runtime.lastOffer && (typeof (runtime.call as any).isConnected === 'function' ? !(runtime.call as any).isConnected() : runtime.call.currentState !== 'connected')) {
-          const remoteId = current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId;
-          sendSignal('offer', callId, current.call.conversationId, { sdp: runtime.lastOffer }, remoteId);
+          sendSignal('offer', callId, current.call.conversationId, { sdp: runtime.lastOffer });
         }
       }
       setDmState('call', 'call', latest);
@@ -1236,12 +1233,74 @@ export function stopCallStatusPolling(): void {
   }
 }
 
+export function startCallSignalPolling(): void {
+  stopCallSignalPolling();
+  runtime.callSignalPollTimer = setInterval(() => {
+    void pollCallSignals();
+  }, CALL_SIGNAL_POLL_MS);
+}
+
+export function stopCallSignalPolling(): void {
+  if (runtime.callSignalPollTimer) {
+    clearInterval(runtime.callSignalPollTimer);
+    runtime.callSignalPollTimer = null;
+  }
+}
+
 /**
- * Recovery/fallback path for the lossy realtime call-offer channel: asks the
- * DB for the newest ringing/active call the current user is a party to and
- * hydrates the incoming-call state so a missed broadcast or a refresh never
- * hides an in-progress call. Constantly verifies whether ringing calls have been
- * canceled or declined by the peer so stale incoming banners are cleared.
+ * Pulls queued WebRTC signals (offer/answer/ice) for the live call from the
+ * DB, applying them to the call manager. Runs on an interval while a call is
+ * in progress (started when a call starts or is accepted; stopped when it
+ * ends). Services both directions:
+ *   - caller: collects the callee's answer + trickle ICE,
+ *   - callee: collects renegotiation offers + ICE arriving after accept.
+ * `hydrateIncomingSignals` seeds the per-call cursor so the pre-accept burst
+ * (fetched when the incoming ring first appeared) is not re-applied here.
+ */
+export async function pollCallSignals(): Promise<void> {
+  const auth = currentAuth();
+  const current = dmState.call;
+  if (!auth || !current) {
+    stopCallSignalPolling();
+    return;
+  }
+  const callId = current.call?.id;
+  if (!callId || callId === 'undefined' || callId === 'null') return;
+
+  const cursor = runtime.signalCursor.get(callId);
+  let signals;
+  try {
+    signals = await fetchCallSignalsRequest(auth.token, callId, cursor);
+  } catch {
+    return; // transient; retried next tick
+  }
+  if (!Array.isArray(signals) || !signals.length) return;
+  if (dmState.call?.call?.id !== callId) return;
+
+  for (const s of signals) {
+    const ts = new Date(s.createdAt).getTime();
+    const cur = runtime.signalCursor.get(callId);
+    if (!cur || ts > new Date(cur).getTime()) runtime.signalCursor.set(callId, s.createdAt);
+    if (s.senderId && s.senderId === auth.id) continue;
+    await handleCallSignal({
+      kind: 'call-signal',
+      callId: s.callId || callId,
+      conversationId: s.conversationId || current.call.conversationId,
+      type: s.signalType,
+      senderId: s.senderId,
+      sdp: s.payload?.sdp,
+      candidate: s.payload?.candidate
+    });
+  }
+}
+
+/**
+ * DB poll for the newest ringing/active call the current user is a party to,
+ * hydrating the incoming-call state (and its offer/ICE from the signal queue)
+ * so a refresh never hides an in-progress call. Constantly verifies whether
+ * ringing calls have been declined/canceled by the caller so stale incoming
+ * banners are cleared. Runs alongside the realtime presence channels — the
+ * calls themselves never ride realtime.
  */
 export async function refreshPendingCall(): Promise<void> {
   const auth = currentAuth();
@@ -1289,8 +1348,14 @@ export async function refreshPendingCall(): Promise<void> {
     }
 
     setDmState('incomingCall', { call, callerName: peerName || 'Unknown User', callerAvatar: peerAvatar });
+    if (call.status === 'ringing') {
+      notify(`${peerName || 'Someone'} is calling`, callTypeLabel(call.callType));
+    }
+    // Pull the caller's SDP offer (and any pre-accept ICE) from the DB queue
+    // so acceptIncomingCall can connect immediately.
+    void hydrateIncomingSignals(call.id, auth);
   } catch {
-    // Poll failures are transient; the realtime channel remains the fast path.
+    // Poll failures are transient; will retry on next tick.
   }
 }
 
@@ -1327,13 +1392,14 @@ export async function acceptIncomingCall(): Promise<boolean> {
     await runtime.realtime.subscribeConversation(call.conversationId);
   }
   startCallStatusPolling();
+  startCallSignalPolling();
   // Mark the call as answered on the server so both timelines get the
   // "call started" system message and the call session reflects the state.
   const result = await updateCallStatusRequest(auth.token, call.id, 'active').catch(() => null);
   if (result?.systemMessage) applySystemMessage(call.conversationId, result.systemMessage);
   if (offer.offer) {
     const answer = await manager.acceptOffer(call.id, call.callerId, offer.offer);
-    if (answer) sendSignal('answer', call.id, call.conversationId, { sdp: answer }, call.callerId);
+    if (answer) sendSignal('answer', call.id, call.conversationId, { sdp: answer });
     drainInboundIce(call.id, manager);
     flushPendingIce(call.conversationId, call.id);
     return true;
@@ -1341,7 +1407,7 @@ export async function acceptIncomingCall(): Promise<boolean> {
   // Offer not yet arrived / hydrated via DB poll: generate offer to caller
   const calleeOffer = await manager.createOffer(call.id, call.callerId);
   if (calleeOffer) {
-    sendSignal('offer', call.id, call.conversationId, { sdp: calleeOffer }, call.callerId);
+    sendSignal('offer', call.id, call.conversationId, { sdp: calleeOffer });
   }
   runtime.pendingAccept = { call, callerName, callerAvatar: offer.callerAvatar };
   return true;
@@ -1358,8 +1424,8 @@ export async function declineIncomingCall(): Promise<void> {
   setDmState('incomingCall', null);
   runtime.pendingAccept = null;
   if (!auth || !offer) return;
-  sendSignal('decline', offer.call.id, offer.call.conversationId, { reason: 'declined' });
-  void runtime.realtime?.sendCallCancel(offer.call.callerId, offer);
+  // No WebRTC signal needed to decline: the caller learns via its status poll
+  // (ringing -> declined).
   const result = await updateCallStatusRequest(auth.token, offer.call.id, 'declined').catch(() => null);
   if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
 }
@@ -1379,8 +1445,6 @@ export async function hangUpCall(): Promise<void> {
     setDmState('incomingCall', null);
     runtime.pendingAccept = null;
     if (auth && offer?.call.status === 'ringing') {
-      sendSignal('decline', offer.call.id, offer.call.conversationId, { reason: 'declined' });
-      void runtime.realtime?.sendCallCancel(offer.call.callerId, { kind: 'call-offer', call: offer.call, callerName: auth.username });
       const result = await updateCallStatusRequest(auth.token, offer.call.id, 'declined').catch(() => null);
       if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
     }
@@ -1391,8 +1455,9 @@ export async function hangUpCall(): Promise<void> {
   const convId = call.call.conversationId;
 
   runtime.call?.hangUp('ended');
-  sendSignal(call.callState === 'ringing' ? 'decline' : 'hangup', callId, convId, { reason: 'ended' });
-  announceCallCancel(call, auth);
+  stopCallSignalPolling();
+  runtime.signalCursor.delete(callId);
+  pendingInboundIce.delete(callId);
   if (auth) {
     const status = call.callState === 'ringing' ? (call.direction === 'outgoing' ? 'canceled' : 'declined') : 'ended';
     const result = await updateCallStatusRequest(auth.token, callId, status).catch(() => null);
@@ -1405,19 +1470,12 @@ export async function hangUpCall(): Promise<void> {
   runtime.call = null;
 }
 
-function announceCallCancel(call: DmCallUi, auth: DmAuth | null): void {
-  if (!auth) return;
-  const remoteUserId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
-  void runtime.realtime?.sendCallCancel(remoteUserId, { kind: 'call-offer', call: call.call, callerName: auth.username });
-}
-
 export async function markCallBusyAndReject(): Promise<void> {
   stopCallStatusPolling();
   const auth = currentAuth();
   const offer = dmState.incomingCall;
   if (!auth || !offer) return;
-  sendSignal('decline', offer.call.id, offer.call.conversationId, { reason: 'busy' });
-  void runtime.realtime?.sendCallCancel(offer.call.callerId, offer);
+  // No WebRTC signal needed: the caller learns via its status poll.
   const result = await updateCallStatusRequest(auth.token, offer.call.id, 'busy').catch(() => null);
   if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
   setDmState('incomingCall', null);
@@ -1506,6 +1564,9 @@ export function toggleDeafen(): boolean {
 
 export function resetDmStore(): void {
   stopCallStatusPolling();
+  stopCallSignalPolling();
+  runtime.signalCursor = new Map<string, string>();
+  pendingInboundIce.clear();
   if (runtime.peerLeftTimeout) {
     clearTimeout(runtime.peerLeftTimeout);
     runtime.peerLeftTimeout = null;
@@ -1528,6 +1589,7 @@ export function resetDmStore(): void {
 
 export async function disconnectDm(): Promise<void> {
   stopCallStatusPolling();
+  stopCallSignalPolling();
   if (runtime.peerLeftTimeout) {
     clearTimeout(runtime.peerLeftTimeout);
     runtime.peerLeftTimeout = null;
@@ -1546,28 +1608,16 @@ export async function disconnectDm(): Promise<void> {
 
 if (typeof window !== 'undefined') {
   const onPageUnload = () => {
+    stopCallSignalPolling();
     const call = dmState.call;
     const auth = currentAuth();
-    if (!call || !auth) return;
+    if (!call || !auth || !runtime.call) return;
     const callId = call.call?.id;
     const convId = call.call?.conversationId;
     if (!callId || callId === 'undefined' || callId === 'null' || !convId) return;
-    const peerId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
 
-    void runtime.realtime?.sendCallSignal({
-      kind: 'call-signal',
-      callId,
-      conversationId: convId,
-      type: 'hangup',
-      targetUserId: peerId,
-      reason: 'left'
-    });
-    void runtime.realtime?.sendCallCancel(peerId, {
-      kind: 'call-offer',
-      call: call.call,
-      callerName: auth.username
-    });
-
+    // Best-effort status beacon so the peer's status poll converges without
+    // relying on this page's realtime socket, which is about to die.
     try {
       fetch(`/api/dm/calls/${callId}/status`, {
         method: 'POST',

@@ -91,6 +91,24 @@ CREATE TABLE IF NOT EXISTS public.call_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_call_sessions_conversation ON public.call_sessions(conversation_id, created_at DESC);
 
+-- 6. Call Signaling (DB-backed WebRTC signal queue)
+--
+-- Replaces the anonymous realtime call-signal / call-offer / call-cancel
+-- broadcasts: SDP offers/answers and ICE candidates ride an authenticated,
+-- participant-scoped table instead. Clients poll it while a call is live.
+CREATE TABLE IF NOT EXISTS public.call_signals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  call_id UUID NOT NULL REFERENCES public.call_sessions(id) ON DELETE CASCADE,
+  conversation_id UUID NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  signal_type TEXT NOT NULL CHECK (signal_type IN ('offer', 'answer', 'ice')),
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_call_signals_call_created
+  ON public.call_signals (call_id, created_at ASC, id ASC);
+
 -- 3c. Message Reactions (Discord-style emoji reactions, max 20 distinct per message)
 CREATE TABLE IF NOT EXISTS public.message_reactions (
   message_id UUID NOT NULL REFERENCES public.messages(id) ON DELETE CASCADE,
@@ -110,6 +128,7 @@ ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_presence ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.call_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.call_signals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gif_favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
 
@@ -233,6 +252,31 @@ CREATE POLICY "Participants can update call sessions"
     EXISTS (
       SELECT 1 FROM public.conversation_participants cp
       WHERE cp.conversation_id = call_sessions.conversation_id AND cp.user_id = auth.uid()
+    )
+  );
+
+-- Call signaling: participants of the parent call's conversation can read;
+-- only a participant can enqueue a signal, and only on their own behalf.
+DROP POLICY IF EXISTS "Participants can read call signals" ON public.call_signals;
+CREATE POLICY "Participants can read call signals"
+  ON public.call_signals FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.conversation_participants cp
+      JOIN public.call_sessions cs ON cs.conversation_id = cp.conversation_id
+      WHERE cs.id = call_signals.call_id AND cp.user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Participants can insert call signals" ON public.call_signals;
+CREATE POLICY "Participants can insert call signals"
+  ON public.call_signals FOR INSERT
+  WITH CHECK (
+    sender_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.conversation_participants cp
+      JOIN public.call_sessions cs ON cs.conversation_id = cp.conversation_id
+      WHERE cs.id = call_signals.call_id AND cp.user_id = auth.uid()
     )
   );
 

@@ -947,6 +947,100 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.store_call_signal(
+  p_user_id uuid,
+  p_call_id uuid,
+  p_signal_type text,
+  p_payload jsonb DEFAULT '{}'::jsonb
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_signal public.call_signals%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF p_signal_type NOT IN ('offer', 'answer', 'ice') THEN
+    RAISE EXCEPTION 'invalid signal type';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.call_sessions cs
+    JOIN public.conversation_participants cp ON cp.conversation_id = cs.conversation_id
+    WHERE cs.id = p_call_id AND cp.user_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'not a participant of this call';
+  END IF;
+
+  INSERT INTO public.call_signals (call_id, conversation_id, sender_id, signal_type, payload)
+  SELECT cs.id, cs.conversation_id, p_user_id, p_signal_type, p_payload
+    FROM public.call_sessions cs
+   WHERE cs.id = p_call_id
+  RETURNING * INTO v_signal;
+
+  RETURN jsonb_build_object(
+    'id', v_signal.id,
+    'callId', v_signal.call_id,
+    'conversationId', v_signal.conversation_id,
+    'senderId', v_signal.sender_id,
+    'signalType', v_signal.signal_type,
+    'payload', v_signal.payload,
+    'createdAt', v_signal.created_at
+  );
+END;
+$$;
+
+-- Returns the queued signals for a call the user participates in, oldest
+-- first, optionally after a cursor timestamp (polling watermark).
+CREATE OR REPLACE FUNCTION public.get_call_signals(
+  p_user_id uuid,
+  p_call_id uuid,
+  p_after_created_at timestamptz DEFAULT NULL
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_signals jsonb;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.call_sessions cs
+    JOIN public.conversation_participants cp ON cp.conversation_id = cs.conversation_id
+    WHERE cs.id = p_call_id AND cp.user_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'not a participant of this call';
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(s), '[]'::jsonb) INTO v_signals
+  FROM (
+    SELECT jsonb_build_object(
+      'id', s.id,
+      'callId', s.call_id,
+      'conversationId', s.conversation_id,
+      'senderId', s.sender_id,
+      'signalType', s.signal_type,
+      'payload', s.payload,
+      'createdAt', s.created_at
+    ) AS s
+    FROM public.call_signals s
+    WHERE s.call_id = p_call_id
+      AND (p_after_created_at IS NULL OR s.created_at > p_after_created_at)
+    ORDER BY s.created_at ASC, s.id ASC
+  ) t;
+
+  RETURN v_signals;
+END;
+$$;
+
 -- Grant EXECUTE to the server role in play. Note: anon/authenticated are
 -- intentionally NOT granted — these SECURITY DEFINER functions guard on
 -- auth.uid() which is always NULL for the anon role, so any anon grant would
@@ -986,6 +1080,10 @@ REVOKE ALL ON FUNCTION public.get_pending_call_for_user(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_pending_call_for_user(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.get_call_session(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_call_session(uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.store_call_signal(uuid, uuid, text, jsonb) FROM anon, authenticated, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.store_call_signal(uuid, uuid, text, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.get_call_signals(uuid, uuid, timestamptz) FROM anon, authenticated, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_call_signals(uuid, uuid, timestamptz) TO service_role;
 REVOKE ALL ON FUNCTION public.get_user_profile_public(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_user_profile_public(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.touch_user_presence(uuid) FROM PUBLIC;

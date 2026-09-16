@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
       conversation_participants: [] as any[],
       messages: [] as any[],
       user_presence: [] as any[],
-      call_sessions: [] as any[]
+      call_sessions: [] as any[],
+      call_signals: [] as any[]
     }
   }
 }));
@@ -28,6 +29,7 @@ import { GET as presenceBatchGET } from '../../src/routes/api/dm/presence/batch'
 import { POST as callsPOST } from '../../src/routes/api/dm/calls';
 import { GET as pendingCallGET } from '../../src/routes/api/dm/calls/pending';
 import { POST as callStatusPOST, GET as callStatusGET } from '../../src/routes/api/dm/calls/[id]/status';
+import { POST as signalPOST, GET as signalGET } from '../../src/routes/api/dm/calls/[id]/signal';
 import { GET as userProfileGET } from '../../src/routes/api/dm/users/[id]/profile';
 import { createSessionToken } from '../../src/lib/server/auth';
 
@@ -185,6 +187,46 @@ function buildFakeClient() {
           id: call.id, conversationId: call.conversation_id, callerId: call.caller_id, calleeId: call.callee_id,
           callType: call.call_type, status: call.status, startedAt: call.started_at, answeredAt: call.answered_at, endedAt: call.ended_at, createdAt: call.created_at
         },
+        error: null
+      };
+    },
+    store_call_signal: ({ p_user_id, p_call_id, p_signal_type, p_payload }: any) => {
+      const call = db.call_sessions.find(c => c.id === p_call_id);
+      if (!call) return { data: null, error: { message: 'call not found' } };
+      if (!memberIds(call.conversation_id).includes(p_user_id)) {
+        return { data: null, error: { message: 'not a participant' } };
+      }
+      if (!['offer', 'answer', 'ice'].includes(p_signal_type)) {
+        return { data: null, error: { message: 'invalid signal type' } };
+      }
+      const row = {
+        id: nextId('sig'), call_id: p_call_id, conversation_id: call.conversation_id, sender_id: p_user_id,
+        signal_type: p_signal_type, payload: p_payload ?? {}, created_at: nowIso()
+      };
+      db.call_signals.push(row);
+      return {
+        data: {
+          id: row.id, callId: row.call_id, conversationId: row.conversation_id, senderId: row.sender_id,
+          signalType: row.signal_type, payload: row.payload, createdAt: row.created_at
+        },
+        error: null
+      };
+    },
+    get_call_signals: ({ p_user_id, p_call_id, p_after_created_at }: any) => {
+      const call = db.call_sessions.find(c => c.id === p_call_id);
+      if (!call) return { data: null, error: { message: 'not a participant' } };
+      if (!memberIds(call.conversation_id).includes(p_user_id)) {
+        return { data: null, error: { message: 'not a participant' } };
+      }
+      const after = p_after_created_at ? new Date(p_after_created_at).getTime() : -Infinity;
+      const rows = db.call_signals
+        .filter(s => s.call_id === p_call_id && new Date(s.created_at).getTime() > after)
+        .sort((a, b) => (a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at)));
+      return {
+        data: rows.map(row => ({
+          id: row.id, callId: row.call_id, conversationId: row.conversation_id, senderId: row.sender_id,
+          signalType: row.signal_type, payload: row.payload, createdAt: row.created_at
+        })),
         error: null
       };
     },
@@ -705,5 +747,101 @@ describe('GET /api/dm/calls/:id/status', () => {
       params: { id: 'undefined' }
     });
     expect(postUndefined.status).toBe(400);
+  });
+});
+
+describe('DM call signal queue', () => {
+  beforeEach(() => {
+    mocks.state.configured = true;
+    for (const key of Object.keys(mocks.state.db)) mocks.state.db[key] = [];
+    mocks.state.client = buildFakeClient();
+    seed();
+  });
+
+  async function startRingingCall(): Promise<any> {
+    const created = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    );
+    return (await created.json()).call;
+  }
+
+  it('queues an offer signal for a participant and returns the stored row (201)', async () => {
+    const call = await startRingingCall();
+    const res = await signalPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/signal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ signalType: 'offer', payload: { sdp: { type: 'offer', sdp: 'sdp-1' } } })
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.signal).toMatchObject({ callId: call.id, senderId: A, signalType: 'offer', payload: { sdp: { type: 'offer', sdp: 'sdp-1' } } });
+  });
+
+  it('polls queued signals oldest-first and honors the after cursor', async () => {
+    const call = await startRingingCall();
+    const a1 = ticket(A, 'alice');
+    const b1 = ticket(B, 'bob');
+    await signalPOST(req(`http://localhost/api/dm/calls/${call.id}/signal`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a1}` },
+      body: JSON.stringify({ signalType: 'offer', payload: { sdp: { type: 'offer', sdp: 'o1' } } })
+    }));
+    await signalPOST(req(`http://localhost/api/dm/calls/${call.id}/signal`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${b1}` },
+      body: JSON.stringify({ signalType: 'ice', payload: { candidate: { candidate: 'cand-1' } } })
+    }));
+
+    const poll = await signalGET(
+      req(`http://localhost/api/dm/calls/${call.id}/signal`, { headers: { Authorization: `Bearer ${b1}` } })
+    );
+    expect(poll.status).toBe(200);
+    const body = await poll.json();
+    expect(body.success).toBe(true);
+    expect(body.signals.map((s: any) => s.signalType)).toEqual(['offer', 'ice']);
+
+    // After the second signal, polling with its createdAt returns nothing new.
+    const last = body.signals[1];
+    const resume = await signalGET(
+      req(`http://localhost/api/dm/calls/${call.id}/signal?after=${encodeURIComponent(last.createdAt)}`, { headers: { Authorization: `Bearer ${b1}` } })
+    );
+    const resumeBody = await resume.json();
+    expect(resumeBody.signals).toEqual([]);
+  });
+
+  it('rejects signal types outside offer/answer/ice with 400', async () => {
+    const call = await startRingingCall();
+    const res = await signalPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/signal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ signalType: 'hangup', payload: {} })
+      })
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('forbids non-participants from storing or reading signals (403)', async () => {
+    const call = await startRingingCall();
+    const strangerTicket = createSessionToken({ id: '99999999-9999-9999-9999-999999999999', username: 'eve', email: 'e@t.dev' });
+
+    const store = await signalPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/signal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${strangerTicket}` },
+        body: JSON.stringify({ signalType: 'ice', payload: { candidate: { candidate: 'eve' } } })
+      })
+    );
+    expect(store.status).toBe(403);
+
+    const read = await signalGET(
+      req(`http://localhost/api/dm/calls/${call.id}/signal`, { headers: { Authorization: `Bearer ${strangerTicket}` } })
+    );
+    expect(read.status).toBe(403);
   });
 });

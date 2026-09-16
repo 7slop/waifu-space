@@ -20,9 +20,6 @@ const { FakeRealtime } = vi.hoisted(() => {
     async subscribeConversation() { return undefined; }
     async sendMessage() { return undefined; }
     async sendTyping() { return undefined; }
-    async sendCallSignal() { return undefined; }
-    async sendIncomingCallOffer() { return undefined; }
-    async sendCallCancel() { return undefined; }
   }
   return { FakeRealtime };
 });

@@ -144,7 +144,21 @@ export interface DmMessageBroadcast {
   senderAvatar?: string;
 }
 
-/** Payload broadcast over Supabase Realtime when a call is offered. */
+/**
+ * WebRTC signal types that ride the DB-backed call-signal queue. Hang-ups,
+ * declines and busy rejections are delivered through the call session status
+ * (update_call_session) + the status-poll loop, NOT through signals.
+ */
+export type CallSignalType = 'offer' | 'answer' | 'ice';
+
+/**
+ * Payload broadcast over Supabase Realtime when a call is offered.
+ *
+ * Note: call offers no longer ride realtime — the caller stores an `offer`
+ * signal in the DB queue (see `CallStoredSignal`) and the callee's
+ * refreshPendingCall poll hydrates it from there. This type is kept only to
+ * describe the legacy/inbound shape used by tests and older UI code paths.
+ */
 export interface CallOfferBroadcast {
   kind: 'call-offer';
   call: CallSession;
@@ -158,12 +172,27 @@ export interface CallSignalPayload {
   kind: 'call-signal';
   callId: string;
   conversationId: string;
-  type: 'offer' | 'answer' | 'ice' | 'hangup' | 'decline';
+  type: CallSignalType;
   targetUserId?: string;
   senderId?: string;
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   reason?: string;
+}
+
+/** A queued WebRTC signal row from `public.call_signals` (via the API). */
+export interface CallStoredSignal {
+  id: string;
+  callId: string;
+  conversationId: string;
+  senderId: string;
+  signalType: CallSignalType;
+  payload: {
+    sdp?: RTCSessionDescriptionInit;
+    candidate?: RTCIceCandidateInit;
+    reason?: string;
+  };
+  createdAt: string;
 }
 
 export interface TypingBroadcast {

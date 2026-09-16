@@ -1,7 +1,5 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import type {
-  CallOfferBroadcast,
-  CallSignalPayload,
   DmMessageBroadcast,
   PresenceStatus,
   ReactionBroadcast,
@@ -24,13 +22,15 @@ import { isVisiblePresence } from './presence';
 // of those events refetch the authoritative payload over the authenticated
 // REST API (see syncConversationAfterEvent in the store).
 //
+// Call signaling does NOT ride realtime at all. SDP offers/answers and ICE
+// candidates are stored in the `call_signals` table through authenticated
+// REST routes and polled by each participant while a call is live, so nothing
+// WebRTC-shaped ever crosses an anonymous channel.
+//
 // Channel layout:
 //   - presence        : shared channel, every visible user tracks one entry.
 //   - dm-<convId>     : one per conversation, joined while it is open (message
-//                       metadata, typing, and call signalling ride this channel).
-//   - dm-calls-<uid>  : per-user channel that always stays subscribed, so a
-//                       user receives incoming call offers even when they are
-//                       not looking at that conversation.
+//                       metadata + typing + reactions only).
 // ---------------------------------------------------------------------------
 
 export interface RealtimePresencePayload {
@@ -46,9 +46,6 @@ export interface DmRealtimeHandlers {
   onMessage(broadcast: DmMessageBroadcast): void;
   onTyping(broadcast: TypingBroadcast): void;
   onReaction(broadcast: ReactionBroadcast): void;
-  onCallSignal(signal: CallSignalPayload): void;
-  onIncomingCall(broadcast: CallOfferBroadcast): void;
-  onCallCancel(broadcast: CallOfferBroadcast): void;
   onPresenceChange(presence: Record<string, RealtimePresencePayload>): void;
 }
 
@@ -73,9 +70,7 @@ type PresenceBindable = {
 export class DmRealtime {
   private client: SupabaseClient | null = null;
   private presenceChannel: RealtimeChannel | null = null;
-  private incomingChannel: RealtimeChannel | null = null;
   private convChannels = new Map<string, RealtimeChannel>();
-  private outboundChannels = new Map<string, RealtimeChannel>();
   private handlers: DmRealtimeHandlers;
   private config: DmRealtimeConfig;
   private connected = false;
@@ -133,7 +128,7 @@ export class DmRealtime {
     this.handlers.onPresenceChange(this.getPresence());
   }
 
-  /** Connects the shared presence + personal incoming-call channels. */
+  /** Connects the shared presence channel. */
   async connect(user: { id: string; username: string; avatar?: string }): Promise<void> {
     this.myUserId = user.id;
     this.client = this.makeClient();
@@ -158,28 +153,12 @@ export class DmRealtime {
     });
     this.presenceChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+          this.connected = true;
           this.presenceMap = {};
           this.handlePresenceState();
           if (this.myPresence && isVisiblePresence(this.myPresence.status)) {
             await this.trackPresence(this.myPresence);
           }
-        }
-      });
-
-    this.incomingChannel = this.client.channel(`dm-calls-${user.id}`);
-    this.incomingChannel
-      .on('broadcast', { event: 'call-offer' }, ({ payload }) => {
-        this.handlers.onIncomingCall(payload as CallOfferBroadcast);
-      })
-      .on('broadcast', { event: 'call-cancel' }, ({ payload }) => {
-        this.handlers.onCallCancel(payload as CallOfferBroadcast);
-      })
-      .on('broadcast', { event: 'call-signal' }, ({ payload }) => {
-        this.handlers.onCallSignal(payload as CallSignalPayload);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          if (status === 'SUBSCRIBED') this.connected = true;
         }
       });
   }
@@ -204,50 +183,32 @@ export class DmRealtime {
   }
 
   /**
-   * Retrieves or creates a RealtimeChannel, ensuring it reaches the SUBSCRIBED
-   * state before returning so that broadcasts are pushed immediately over
-   * WebSocket instead of failing or falling back to REST.
+   * Retrieves or creates a conversation channel, ensuring it reaches the
+   * SUBSCRIBED state before returning so that broadcasts are pushed
+   * immediately over WebSocket instead of failing or falling back to REST.
    */
-  private async getOrCreateSubscribedChannel(channelName: string): Promise<RealtimeChannel | null> {
+  private async getOrCreateSubscribedChannel(conversationId: string): Promise<RealtimeChannel | null> {
     const client = this.client;
     if (!client) return null;
 
-    let chan: RealtimeChannel;
+    let chan = this.convChannels.get(conversationId);
     let isNew = false;
 
-    if (channelName.startsWith('dm-') && !channelName.startsWith('dm-calls-')) {
-      const convId = channelName.slice(3);
-      const existing = this.convChannels.get(convId);
-      if (existing) {
-        chan = existing;
-      } else {
-        chan = client.channel(channelName);
-        chan
-          .on('broadcast', { event: 'dm-message' }, ({ payload }) => this.handlers.onMessage(payload as DmMessageBroadcast))
-          .on('broadcast', { event: 'typing' }, ({ payload }) => this.handlers.onTyping(payload as TypingBroadcast))
-          .on('broadcast', { event: 'dm-reaction' }, ({ payload }) => this.handlers.onReaction(payload as ReactionBroadcast))
-          .on('broadcast', { event: 'call-signal' }, ({ payload }) => this.handlers.onCallSignal(payload as CallSignalPayload))
-          .on('broadcast', { event: 'call-offer' }, ({ payload }) => this.handlers.onIncomingCall(payload as CallOfferBroadcast))
-          .on('broadcast', { event: 'call-cancel' }, ({ payload }) => this.handlers.onCallCancel(payload as CallOfferBroadcast));
-        this.convChannels.set(convId, chan);
-        isNew = true;
-      }
-    } else {
-      const existing = this.outboundChannels.get(channelName);
-      if (existing) {
-        chan = existing;
-      } else {
-        chan = client.channel(channelName);
-        this.outboundChannels.set(channelName, chan);
-        isNew = true;
-      }
+    if (!chan) {
+      chan = client.channel(`dm-${conversationId}`);
+      chan
+        .on('broadcast', { event: 'dm-message' }, ({ payload }) => this.handlers.onMessage(payload as DmMessageBroadcast))
+        .on('broadcast', { event: 'typing' }, ({ payload }) => this.handlers.onTyping(payload as TypingBroadcast))
+        .on('broadcast', { event: 'dm-reaction' }, ({ payload }) => this.handlers.onReaction(payload as ReactionBroadcast));
+      this.convChannels.set(conversationId, chan);
+      isNew = true;
     }
 
     if (!isNew && this.isChannelJoined(chan)) {
       return chan;
     }
 
-    let readyPromise = this.channelReadyPromises.get(channelName);
+    let readyPromise = this.channelReadyPromises.get(`dm-${conversationId}`);
     if (!readyPromise) {
       readyPromise = new Promise<RealtimeChannel>((resolve) => {
         let settled = false;
@@ -265,16 +226,16 @@ export class DmRealtime {
           }
         });
       });
-      this.channelReadyPromises.set(channelName, readyPromise);
+      this.channelReadyPromises.set(`dm-${conversationId}`, readyPromise);
     }
 
     return readyPromise;
   }
 
-  /** Joins a conversation channel to receive message/typing/call events. */
+  /** Joins a conversation channel to receive message/typing/reaction events. */
   async subscribeConversation(conversationId: string): Promise<void> {
     if (!this.client || !this.myUserId) return;
-    await this.getOrCreateSubscribedChannel(`dm-${conversationId}`);
+    await this.getOrCreateSubscribedChannel(conversationId);
   }
 
   async unsubscribeConversation(conversationId: string): Promise<void> {
@@ -307,32 +268,10 @@ export class DmRealtime {
     await this.broadcast(`dm-${payload.conversationId}`, 'dm-reaction', safe);
   }
 
-  async sendCallSignal(signal: CallSignalPayload): Promise<void> {
-    const promises = [this.broadcast(`dm-${signal.conversationId}`, 'call-signal', signal)];
-    if (signal.targetUserId) {
-      promises.push(this.broadcast(`dm-calls-${signal.targetUserId}`, 'call-signal', signal));
-    }
-    await Promise.all(promises);
-  }
-
-  async sendIncomingCallOffer(broadcast: CallOfferBroadcast): Promise<void> {
-    await Promise.all([
-      this.broadcast(`dm-calls-${broadcast.call.calleeId}`, 'call-offer', broadcast),
-      this.broadcast(`dm-${broadcast.call.conversationId}`, 'call-offer', broadcast)
-    ]);
-  }
-
-  async sendCallCancel(userId: string, broadcast: CallOfferBroadcast): Promise<void> {
-    await Promise.all([
-      this.broadcast(`dm-calls-${userId}`, 'call-cancel', broadcast),
-      this.broadcast(`dm-${broadcast.call.conversationId}`, 'call-cancel', broadcast)
-    ]);
-  }
-
   private async broadcast(channelName: string, event: string, payload: unknown): Promise<void> {
     if (!this.client) return;
     try {
-      const chan = await this.getOrCreateSubscribedChannel(channelName);
+      const chan = await this.getOrCreateSubscribedChannel(channelName.slice(3));
       if (chan) {
         await chan.send({ type: 'broadcast', event, payload });
       }
@@ -348,16 +287,12 @@ export class DmRealtime {
     const client = this.client;
     const channels = [
       this.presenceChannel,
-      this.incomingChannel,
-      ...Array.from(this.convChannels.values()),
-      ...Array.from(this.outboundChannels.values())
+      ...Array.from(this.convChannels.values())
     ].filter(Boolean) as RealtimeChannel[];
     this.convChannels.clear();
-    this.outboundChannels.clear();
     this.channelReadyPromises.clear();
     this.presenceMap = {};
     this.presenceChannel = null;
-    this.incomingChannel = null;
     this.client = null;
     if (client) {
       for (const ch of channels) {
