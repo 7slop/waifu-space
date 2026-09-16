@@ -1307,6 +1307,8 @@ describe('dm store call status polling and callee acceptance sync', () => {
     // caller is never offered two different SDPs.
     expect(signalPosts.filter((p) => p.body?.signalType === 'offer')).toHaveLength(0);
     expect(dmState.call?.call.id).toBe('call-wait-1');
+    // No offer applied yet -> media is still linking, never falsely 'connected'.
+    expect(dmState.call?.callState).toBe('active');
 
     // The caller's offer arrives over the DB signal poll afterwards...
     stubFetch({
@@ -1329,6 +1331,109 @@ describe('dm store call status polling and callee acceptance sync', () => {
     const answerPost = signalPosts.find((p) => p.url.includes('call-wait-1/signal') && p.body?.signalType === 'answer');
     expect(answerPost).toBeTruthy();
     expect(answerPost!.body.payload.sdp).toEqual({ type: 'answer', sdp: 'answer-sdp' });
+  });
+
+  it('accepted call with no offer yet tears down on prompt end without a stale answer or peer-left notice', async () => {
+    const signalPosts: { url: string; method: string | undefined; body: any }[] = [];
+    await boot();
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    stubFetch({
+      '/signal': (url, init) => {
+        if (init?.method === 'POST' && String(url).includes('call-wait2/signal')) {
+          signalPosts.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(String(init.body)) : null });
+        }
+        return JSON_RESP({ success: true, signals: [], signal: null });
+      },
+      '/api/dm/calls/call-wait2/status': () =>
+        JSON_RESP({
+          success: true,
+          call: {
+            id: 'call-wait2', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me',
+            callType: 'voice', status: 'active', startedAt: '', answeredAt: '2025-01-01', endedAt: null, createdAt: ''
+          }
+        })
+    });
+
+    setDmState('incomingCall', {
+      call: {
+        id: 'call-wait2', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me',
+        callType: 'voice', status: 'ringing', startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+      },
+      callerName: 'Bob',
+      offer: null
+    });
+
+    const accepted = await acceptIncomingCall();
+    expect(accepted).toBe(true);
+    // Media is still linking: the dock must read as 'active', not a full
+    // 'connected' in-call session the UI would show a video stage for.
+    expect(dmState.call?.callState).toBe('active');
+
+    // Caller cancels before ever sending the offer. A call that never
+    // connected is torn down immediately (no "left the voice chat" notice).
+    stubFetch({
+      '/api/dm/calls/call-wait2/status': () =>
+        JSON_RESP({
+          success: true,
+          call: {
+            id: 'call-wait2', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me',
+            callType: 'voice', status: 'canceled', startedAt: '', answeredAt: '2025-01-01', endedAt: '2025-01-01', createdAt: ''
+          }
+        })
+    });
+    await pollActiveCallStatus();
+    expect(dmState.call).toBeNull();
+    expect(dmState.incomingCall).toBeNull();
+    expect(dmState.call?.leftNotice).toBeUndefined();
+
+    // A late offer for the dead call must not resurrect it or produce an answer.
+    const answerCount = signalPosts.filter((p) => p.body?.signalType === 'answer').length;
+    stubFetch({
+      '/signal': () =>
+        JSON_RESP({
+          success: true,
+          signals: [{
+            id: 'sig-stale2', callId: 'call-wait2', conversationId: 'c1', senderId: 'u-bob', signalType: 'offer',
+            payload: { sdp: { type: 'offer', sdp: 'stale-sdp' } }, createdAt: '2025-01-01T00:00:00.001Z'
+          }]
+        })
+    });
+    await pollCallSignals();
+    expect(dmState.call).toBeNull();
+    expect(signalPosts.filter((p) => p.body?.signalType === 'answer')).toHaveLength(answerCount);
+  });
+
+  it('onPeerDisconnected ignores transient drops before the call is connected', async () => {
+    await boot();
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    const call = {
+      id: 'call-peer-2', conversationId: 'c1', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice' as const,
+      status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+    };
+    stubFetch({
+      '/api/dm/calls': () => JSON_RESP({ success: true, call }, 201),
+      '/api/dm/calls/call-peer-2/status': () => JSON_RESP({ success: true, call }),
+      '/signal': () => JSON_RESP({ success: true, signals: [], signal: null })
+    });
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    expect(dmState.call?.callState).toBe('ringing');
+
+    const manager = callRegistry.instances[callRegistry.instances.length - 1];
+    // Media never linked yet: a transport blip must not fabricate a peer-left.
+    manager.deps.onPeerDisconnected?.();
+    expect(dmState.call).not.toBeNull();
+    expect(dmState.call?.leftNotice).toBeUndefined();
+
+    // Once genuinely connected, a drop means the peer actually left.
+    await manager.adoptAnswer();
+    expect(dmState.call?.callState).toBe('connected');
+    manager.deps.onPeerDisconnected?.();
+    expect(dmState.call?.leftNotice).not.toBeUndefined();
   });
 
   it('handlePeerLeft sets leftNotice and automatically cancels call after timeout', () => {

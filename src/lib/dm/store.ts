@@ -422,6 +422,7 @@ export function handlePeerLeft(callId: string, remoteName?: string): void {
       setLocalStreamSignal(null);
       setRemoteStreamSignal(null);
       runtime.call = null;
+      runtime.pendingAccept = null;
       runtime.signalCursor.delete(callId);
       pendingInboundIce.delete(callId);
       startPendingCallPoll();
@@ -439,6 +440,13 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
   if (signal.type === 'offer') {
     // Caller's offer for an incoming call the user already accepted.
     if (runtime.pendingAccept && signal.callId === runtime.pendingAccept.call.id && signal.sdp) {
+      // Only meaningful while the accepted call is still live: once the call
+      // was torn down (peer-left timeout, hang-up, triggered end) the offer is
+      // stale and must not resurrect the session or send a late answer.
+      if (!call || call.call?.id !== signal.callId) {
+        runtime.pendingAccept = null;
+        return;
+      }
       const pending = runtime.pendingAccept;
       runtime.pendingAccept = null;
       if (manager) {
@@ -603,7 +611,15 @@ function wireCallManager(call: CallSession, manager: CallManager): void {
     sendSignal('offer', call.id, call.conversationId, { sdp: offer });
   };
   manager.deps.onPeerDisconnected = () => {
-    handlePeerLeft(call.id, dmState.call?.remoteName);
+    // Only a call that actually connected has a peer whose drop means they
+    // left. Before/while media is linking (ringing/active) a
+    // connectionState/iceConnectionState of 'disconnected' or 'failed' is a
+    // transient negotiation state that frequently recovers — surfacing it as
+    // "left the voice chat" would stop the polls and tear the call down while
+    // the peer is still there. The status poll resolves non-connected ends.
+    if (dmState.call?.callState === 'connected') {
+      handlePeerLeft(call.id, dmState.call?.remoteName);
+    }
   };
 }
 
@@ -1230,6 +1246,9 @@ export async function pollActiveCallStatus(): Promise<void> {
         setLocalStreamSignal(null);
         setRemoteStreamSignal(null);
         runtime.call = null;
+        runtime.pendingAccept = null;
+        runtime.signalCursor.delete(callId);
+        pendingInboundIce.delete(callId);
         startPendingCallPoll();
       }
     }
@@ -1400,7 +1419,12 @@ export async function acceptIncomingCall(): Promise<boolean> {
       direction: 'incoming',
       remoteName: callerName,
       remoteAvatar,
-      callState: 'connected',
+      // With a hydrated offer the answer handshake immediately follows and
+      // flips to 'connected' (via onStateChange). Without one (pendingAccept
+      // awaiting the caller's DB-polled offer) the call is only 'active' —
+      // accepted, media still linking — so the dock never claims an in-call
+      // connection that has not been established yet.
+      callState: offer.offer ? 'connected' : 'active',
       muted: false,
       videoOff: call.callType !== 'video',
       screenSharing: false,
