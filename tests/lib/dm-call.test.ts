@@ -253,8 +253,7 @@ describe('CallManager', () => {
       noiseSuppression: true,
       autoGainControl: true,
       channelCount: 1,
-      sampleRate: 48000,
-      latency: 0
+      sampleRate: 48000
     });
   });
 

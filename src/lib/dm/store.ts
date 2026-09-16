@@ -246,7 +246,7 @@ function onRealtimeMessage(broadcast: DmMessageBroadcast): void {
 
   // The broadcast carries only metadata (channels are anonymous); refetch the
   // authoritative message list + unread counters so the UI reflects reality.
-  syncConversationAfterEvent(convId, meta);
+  syncConversationAfterEvent(convId);
 
   if (!isMine && !isSystem) {
     const dnd = dmState.presence[meta.senderId]?.status === 'dnd';

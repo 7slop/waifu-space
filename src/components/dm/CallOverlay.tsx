@@ -377,7 +377,6 @@ function ActiveCallBar() {
           setAudioEl(el);
         }}
         autoplay
-        playsinline
         style={{
           position: 'fixed',
           top: '-9999px',
