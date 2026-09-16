@@ -70,6 +70,9 @@ export class CallManager {
   private creatingAnswer = false;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private videoSender: RTCRtpSender | null = null;
+  private candidateEventsSent = 0;
+  private candidatesReceived = 0;
+  private candidatesApplied = 0;
   private screenTrack: MediaStreamTrack | null = null;
   private screenStream: MediaStream | null = null;
   private screenActive = false;
@@ -179,7 +182,10 @@ export class CallManager {
     const createPeer = this.deps.createPeer ?? (() => new RTCPeerConnection(defaultPeerConfiguration(this.deps.iceServers)));
     this.pc = createPeer();
     this.pc.onicecandidate = (ev) => {
-      if (ev.candidate && this.callId) this.deps.onIceCandidate?.(ev.candidate.toJSON(), this.callId);
+      if (ev.candidate && this.callId) {
+        this.candidateEventsSent += 1;
+        this.deps.onIceCandidate?.(ev.candidate.toJSON(), this.callId);
+      }
     };
     this.pc.onconnectionstatechange = () => {
       const st = this.pc?.connectionState;
@@ -405,6 +411,7 @@ export class CallManager {
       for (const c of this.pendingCandidates.splice(0)) {
         try {
           await this.pc!.addIceCandidate(new RTCIceCandidate(c));
+          this.candidatesApplied += 1;
         } catch {
           // stale/unusable candidate - ignore
         }
@@ -455,6 +462,7 @@ export class CallManager {
       for (const c of this.pendingCandidates.splice(0)) {
         try {
           await this.pc.addIceCandidate(new RTCIceCandidate(c));
+          this.candidatesApplied += 1;
         } catch {
           // ignore
         }
@@ -469,12 +477,14 @@ export class CallManager {
   }
 
   async adoptIce(candidate: RTCIceCandidateInit): Promise<void> {
+    this.candidatesReceived += 1;
     if (!this.pc || !this.pc.remoteDescription) {
       this.pendingCandidates.push(candidate);
       return;
     }
     try {
       await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      this.candidatesApplied += 1;
     } catch {
       // ignore stale candidates
     }
@@ -637,6 +647,30 @@ export class CallManager {
     return !!this.localStream && this.localStream.getVideoTracks().length > 0;
   }
 
+  /** Console debug snapshot — wired into `window.__dmDebug` in store.ts. */
+  debugSnapshot(): Record<string, unknown> {
+    const pc = this.pc as RTCPeerConnection | null;
+    const local = this.localStream?.getTracks().map((t) => ({ kind: t.kind, state: t.readyState, enabled: t.enabled })) ?? [];
+    const remote = this.remoteStream?.getTracks().map((t) => ({ kind: t.kind, state: t.readyState, enabled: t.enabled })) ?? [];
+    return {
+      state: this.state,
+      callId: this.callId,
+      peerId: this.peerId,
+      signalingState: pc?.signalingState ?? null,
+      iceConnectionState: pc?.iceConnectionState ?? null,
+      connectionState: pc?.connectionState ?? null,
+      iceGatheringState: pc?.iceGatheringState ?? null,
+      pendingCandidatesQueued: this.pendingCandidates.length,
+      candidateEventsSent: this.candidateEventsSent,
+      candidatesReceived: this.candidatesReceived,
+      candidatesApplied: this.candidatesApplied,
+      localTracks: local,
+      remoteTracks: remote,
+      localMediaTracks: this.localMedia?.getTracks().map((t) => t.kind) ?? [],
+      remoteMediaTracks: this.remoteMedia?.getTracks().map((t) => t.kind) ?? []
+    };
+  }
+
   hangUp(reason: 'ended' | 'declined' | 'canceled' = 'ended'): void {
     this.clearPeerGoneCheck();
     if (this.pc) {
@@ -667,6 +701,9 @@ export class CallManager {
     }
     this.remoteStream = null;
     this.pendingCandidates = [];
+    this.candidateEventsSent = 0;
+    this.candidatesReceived = 0;
+    this.candidatesApplied = 0;
     this.callId = null;
     this.peerId = null;
     this.options = null;

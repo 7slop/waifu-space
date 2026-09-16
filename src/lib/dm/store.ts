@@ -1837,3 +1837,25 @@ if (typeof window !== 'undefined') {
     runtime.call?.setPaused(document.visibilityState === 'hidden');
   });
 }
+
+/**
+ * Console debug hook — call `JSON.stringify(__dmDebug(), null, 1)` in the
+ * browser console during an active call to dump the connection state for both
+ * peers.
+ */
+export function dmCallDebug(): Record<string, unknown> {
+  const call = dmState.call;
+  const manager = runtime.call;
+  return {
+    call: call ? { id: call.call?.id, direction: call.direction, callState: call.callState } : null,
+    incomingCall: !!dmState.incomingCall,
+    pendingIceCount: dmState.pendingIce.length,
+    manager: manager ? manager.debugSnapshot() : null,
+    hasLocalStream: !!localStreamSignal() || !!runtime.call?.localMedia,
+    hasRemoteStream: !!remoteStreamSignal() || !!runtime.call?.remoteMedia
+  };
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).__dmDebug = dmCallDebug;
+}
