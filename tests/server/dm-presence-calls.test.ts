@@ -518,4 +518,24 @@ describe('GET /api/dm/calls/:id/status', () => {
     );
     expect(statusRes.status).toBe(403);
   });
+
+  it('safely rejects undefined or null call id with 400 Bad Request', async () => {
+    const getUndefined = await callStatusGET({
+      request: new Request('http://localhost/api/dm/calls/undefined/status', {
+        headers: { Authorization: `Bearer ${ticket(A, 'alice')}` }
+      }),
+      params: { id: 'undefined' }
+    });
+    expect(getUndefined.status).toBe(400);
+
+    const postUndefined = await callStatusPOST({
+      request: new Request('http://localhost/api/dm/calls/undefined/status', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ticket(A, 'alice')}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' })
+      }),
+      params: { id: 'undefined' }
+    });
+    expect(postUndefined.status).toBe(400);
+  });
 });

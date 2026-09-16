@@ -372,6 +372,9 @@ export interface CallStatusResult {
 }
 
 export async function updateCallStatusRequest(token: string, callId: string, status: CallStatus): Promise<CallStatusResult> {
+  if (!callId || callId === 'undefined' || callId === 'null') {
+    throw new Error('Valid call ID is required');
+  }
   const data = await request<{ success: boolean; call: CallSession; systemMessage?: any }>(
     `/api/dm/calls/${callId}/status`,
     { method: 'POST', body: JSON.stringify({ status }) },
@@ -382,6 +385,9 @@ export async function updateCallStatusRequest(token: string, callId: string, sta
 }
 
 export async function fetchCallStatus(token: string, callId: string): Promise<CallSession | null> {
+  if (!callId || callId === 'undefined' || callId === 'null') {
+    return null;
+  }
   const data = await request<{ success: boolean; call: CallSession | null }>(
     `/api/dm/calls/${callId}/status`,
     { method: 'GET' },

@@ -1,5 +1,5 @@
 import { json } from '@solidjs/router';
-import { resolveDmContext, badRequestResponse } from '../../../../../lib/server/dm-context';
+import { resolveDmContext, badRequestResponse, isUuidLike } from '../../../../../lib/server/dm-context';
 import type { CallSession, CallStatus } from '../../../../../lib/dm/types';
 
 const VALID_STATUSES: CallStatus[] = ['ringing', 'active', 'ended', 'declined', 'missed', 'canceled', 'busy'];
@@ -9,7 +9,7 @@ export async function POST(event: { request: Request; params: Record<string, str
   if (ctx instanceof Response) return ctx;
 
   const callId = event.params.id;
-  if (!callId) return badRequestResponse('call id is required');
+  if (!callId || callId === 'undefined' || callId === 'null') return badRequestResponse('call id is required');
 
   let body: any;
   try {
@@ -64,7 +64,7 @@ export async function GET(event: { request: Request; params: Record<string, stri
   if (ctx instanceof Response) return ctx;
 
   const callId = event.params.id;
-  if (!callId) return badRequestResponse('call id is required');
+  if (!callId || callId === 'undefined' || callId === 'null') return badRequestResponse('call id is required');
 
   let { data, error } = await ctx.supabase.rpc('get_call_session', {
     p_user_id: ctx.session.userId,

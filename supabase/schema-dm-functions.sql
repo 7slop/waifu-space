@@ -666,6 +666,37 @@ BEGIN
     RAISE EXCEPTION 'both users must be part of the conversation';
   END IF;
 
+  -- If there is already an active call in this conversation, return it so the caller joins it
+  SELECT * INTO v_call
+    FROM public.call_sessions
+   WHERE conversation_id = p_conversation_id
+     AND status = 'active'
+   ORDER BY created_at DESC
+   LIMIT 1;
+
+  IF FOUND THEN
+    RETURN jsonb_build_object(
+      'id', v_call.id,
+      'conversationId', v_call.conversation_id,
+      'callerId', v_call.caller_id,
+      'calleeId', v_call.callee_id,
+      'callType', v_call.call_type,
+      'status', v_call.status,
+      'startedAt', v_call.started_at,
+      'answeredAt', v_call.answered_at,
+      'endedAt', v_call.ended_at,
+      'createdAt', v_call.created_at,
+      'joined', true
+    );
+  END IF;
+
+  -- Cancel any previous ringing calls in this conversation so only one call session exists
+  UPDATE public.call_sessions
+     SET status = 'canceled',
+         ended_at = now()
+   WHERE conversation_id = p_conversation_id
+     AND status = 'ringing';
+
   INSERT INTO public.call_sessions (conversation_id, caller_id, callee_id, call_type, status)
   VALUES (p_conversation_id, p_user_id, p_callee_id, p_call_type, 'ringing')
   RETURNING * INTO v_call;
@@ -680,7 +711,8 @@ BEGIN
     'startedAt', v_call.started_at,
     'answeredAt', v_call.answered_at,
     'endedAt', v_call.ended_at,
-    'createdAt', v_call.created_at
+    'createdAt', v_call.created_at,
+    'joined', false
   );
 END;
 $$;

@@ -1123,10 +1123,13 @@ export async function pollActiveCallStatus(): Promise<void> {
     return;
   }
 
-  const callId = current.call.id;
+  const callId = current.call?.id;
+  if (!callId || callId === 'undefined' || callId === 'null') {
+    return;
+  }
   try {
     const latest = await fetchCallStatus(auth.token, callId);
-    if (!dmState.call || dmState.call.call.id !== callId) return;
+    if (!dmState.call || dmState.call.call?.id !== callId) return;
 
     if (!latest) return;
 
@@ -1187,11 +1190,12 @@ export async function refreshPendingCall(): Promise<void> {
 
   // If an incoming call offer is currently ringing on screen, verify if it was declined, busy or canceled
   if (dmState.incomingCall) {
-    const callId = dmState.incomingCall.call.id;
+    const callId = dmState.incomingCall.call?.id;
+    if (!callId || callId === 'undefined' || callId === 'null') return;
     try {
       const status = await fetchCallStatus(auth.token, callId);
       if (!status || status.status !== 'ringing') {
-        if (dmState.incomingCall?.call.id === callId) {
+        if (dmState.incomingCall?.call?.id === callId) {
           setDmState('incomingCall', null);
           runtime.pendingAccept = null;
         }
@@ -1474,8 +1478,9 @@ if (typeof window !== 'undefined') {
     const call = dmState.call;
     const auth = currentAuth();
     if (!call || !auth) return;
-    const callId = call.call.id;
-    const convId = call.call.conversationId;
+    const callId = call.call?.id;
+    const convId = call.call?.conversationId;
+    if (!callId || callId === 'undefined' || callId === 'null' || !convId) return;
     const peerId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
 
     void runtime.realtime?.sendCallSignal({
