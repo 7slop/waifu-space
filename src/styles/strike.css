@@ -1442,7 +1442,7 @@
 .stc-overlay {
   position: absolute;
   inset: 0;
-  z-index: 30;
+  z-index: 40;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
@@ -1461,7 +1461,7 @@
 .stc-joystick {
   position: absolute;
   left: 18px;
-  bottom: 96px;
+  bottom: 150px;
   width: 116px;
   height: 116px;
   pointer-events: auto;
@@ -1492,7 +1492,7 @@
 .stc-buttons {
   position: absolute;
   right: 14px;
-  bottom: 18px;
+  bottom: 130px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1557,6 +1557,7 @@
 @media (max-width: 420px) {
   .stc-btn { width: 44px; height: 44px; font-size: 18px; }
   .stc-btn-fire { width: 60px; height: 60px; font-size: 24px; }
-  .stc-joystick { width: 104px; height: 104px; left: 12px; bottom: 112px; }
+  .stc-joystick { width: 104px; height: 104px; left: 12px; bottom: 170px; }
   .stc-joystick-knob { width: 48px; height: 48px; }
+  .stc-buttons { bottom: 150px; }
 }
