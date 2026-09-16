@@ -1,7 +1,15 @@
 import { Vector3, AbstractMesh } from '@babylonjs/core';
 import type { MapBuilder } from '../types';
 import { createMachiyaHouse, createKuraStorehouse } from './house';
-import { createSakuraTree, createGardenBush, createBambooFence } from './nature';
+import {
+  createSakuraTree,
+  createGardenBush,
+  createBambooFence,
+  createBambooPlant,
+  createBigSakuraTree,
+  createOakFence,
+  createFallenWood
+} from './nature';
 import {
   createCrateCluster,
   createMerchantStall,
@@ -12,7 +20,7 @@ import {
   createParkBench,
   createStoreSign
 } from './props';
-import { createTorii } from './structures';
+import { createTorii, createJapanFlag } from './structures';
 import { createStoneLantern, createHangingLantern } from './lights';
 import {
   createFountain,
@@ -20,7 +28,8 @@ import {
   createBambooWaterFeature,
   createRockGarden,
   createStonePath,
-  createWindChime
+  createWindChime,
+  createRock
 } from './decorations';
 import {
   createStoneArch,
@@ -28,8 +37,16 @@ import {
   createShrineTable,
   createBannerPole,
   createPathMarker,
-  createOrnamentalBridge
+  createOrnamentalBridge,
+  createWall,
+  createFloor,
+  createRoof,
+  WallStyle,
+  FloorStyle,
+  RoofStyle
 } from './architecture';
+import { createDoor, createFuton, createTable, createChair, createMangaPile } from './interior';
+import { createServerRack, createComputerDesk } from './electronics';
 import type { MapComponentObject } from '../map-format';
 
 export type ComponentParams = Record<string, number | string | boolean>;
@@ -269,6 +286,140 @@ export const COMPONENTS: ComponentDef[] = [
     hint: 'Arching footbridge over ponds or gardens',
     defaults: { span: 4 },
     build: (b, name, pos, p) => createOrnamentalBridge(b, name, pos, num(p, 'span', 4))
+  },
+  {
+    id: 'door',
+    label: 'Door',
+    hint: 'Timber door that opens/closes with E (plays a sound)',
+    defaults: { width: 1.2, height: 2.4, swing: 1 },
+    build: (b, name, pos, p) =>
+      createDoor(b, name, pos, {
+        width: num(p, 'width', 1.2),
+        height: num(p, 'height', 2.4),
+        swing: String(p.swing) === '-1' ? -1 : 1
+      })
+  },
+  {
+    id: 'futon',
+    label: 'Futon',
+    hint: 'Traditional sleeping futon with indigo blanket',
+    defaults: { width: 1.9 },
+    build: (b, name, pos, p) => createFuton(b, name, pos, { width: num(p, 'width', 1.9) })
+  },
+  {
+    id: 'table',
+    label: 'Table',
+    hint: 'Simple wooden dining table',
+    defaults: { width: 1.8, depth: 1 },
+    build: (b, name, pos, p) => createTable(b, name, pos, { width: num(p, 'width', 1.8), depth: num(p, 'depth', 1) })
+  },
+  {
+    id: 'chair',
+    label: 'Chair',
+    hint: 'Wooden chair with a reclined backrest',
+    defaults: {},
+    build: (b, name, pos) => createChair(b, name, pos)
+  },
+  {
+    id: 'mangaPile',
+    label: 'Manga Pile',
+    hint: 'Stack of manga volumes with colorful spines',
+    defaults: { count: 6 },
+    build: (b, name, pos, p) => createMangaPile(b, name, pos, { count: num(p, 'count', 6) })
+  },
+  {
+    id: 'serverRack',
+    label: 'Server Rack',
+    hint: '19-inch rack with blinking activity LEDs',
+    defaults: { rows: 3, blinkSpeed: 2 },
+    build: (b, name, pos, p) =>
+      createServerRack(b, name, pos, { rows: num(p, 'rows', 3), blinkSpeed: num(p, 'blinkSpeed', 2) })
+  },
+  {
+    id: 'computerDesk',
+    label: 'Computer Desk',
+    hint: 'Battlestation desk with monitor and RGB lighting',
+    defaults: { rgbOn: true, monitorSize: 1 },
+    build: (b, name, pos, p) =>
+      createComputerDesk(b, name, pos, { rgbOn: bool(p, 'rgbOn', true), monitorSize: num(p, 'monitorSize', 1) })
+  },
+  {
+    id: 'bambooPlant',
+    label: 'Bamboo Plant',
+    hint: 'Single bamboo culm that sways in the breeze',
+    defaults: { height: 4 },
+    build: (b, name, pos, p) => createBambooPlant(b, name, pos, num(p, 'height', 4))
+  },
+  {
+    id: 'sakuraBig',
+    label: 'Big Sakura Tree',
+    hint: 'Large detailed cherry blossom tree',
+    defaults: { scale: 1 },
+    build: (b, name, pos, p) => createBigSakuraTree(b, name, pos, num(p, 'scale', 1))
+  },
+  {
+    id: 'oakFence',
+    label: 'Oak Fence',
+    hint: 'Picket fence with air between the wood',
+    defaults: { length: 4, alongZ: true },
+    build: (b, name, pos, p) => createOakFence(b, name, pos, num(p, 'length', 4), bool(p, 'alongZ', true))
+  },
+  {
+    id: 'fallenWood',
+    label: 'Fallen Wood',
+    hint: 'Bark log lying on the ground',
+    defaults: { length: 1.6, alongZ: true },
+    build: (b, name, pos, p) => createFallenWood(b, name, pos, num(p, 'length', 1.6), bool(p, 'alongZ', true))
+  },
+  {
+    id: 'japanFlag',
+    label: 'Japan Flag',
+    hint: 'Hi no Maru flag on a pole',
+    defaults: { size: 1 },
+    build: (b, name, pos, p) => createJapanFlag(b, name, pos, num(p, 'size', 1))
+  },
+  {
+    id: 'rock',
+    label: 'Rock',
+    hint: 'Configured rock (10 variants)',
+    defaults: { variant: 0, scale: 1 },
+    build: (b, name, pos, p) => createRock(b, name, pos, parseInt(String(p.variant), 10) || 0, num(p, 'scale', 1))
+  },
+  {
+    id: 'wall',
+    label: 'Wall',
+    hint: 'Configurable wall pane (plaster / timber / stone / shoji)',
+    defaults: { width: 4, height: 3, style: 'plaster' },
+    build: (b, name, pos, p) =>
+      createWall(b, name, pos, {
+        width: num(p, 'width', 4),
+        height: num(p, 'height', 3),
+        style: (p.style as WallStyle) || 'plaster'
+      })
+  },
+  {
+    id: 'floor',
+    label: 'Floor',
+    hint: 'Configurable floor pane (deck / tatami / stone / sand)',
+    defaults: { width: 4, depth: 4, style: 'woodDeck' },
+    build: (b, name, pos, p) =>
+      createFloor(b, name, pos, {
+        width: num(p, 'width', 4),
+        depth: num(p, 'depth', 4),
+        style: (p.style as FloorStyle) || 'woodDeck'
+      })
+  },
+  {
+    id: 'roof',
+    label: 'Roof',
+    hint: 'Configurable flat roof pane (tile / thatch / red / metal)',
+    defaults: { width: 4, depth: 4, style: 'tileRoof' },
+    build: (b, name, pos, p) =>
+      createRoof(b, name, pos, {
+        width: num(p, 'width', 4),
+        depth: num(p, 'depth', 4),
+        style: (p.style as RoofStyle) || 'tileRoof'
+      })
   }
 ];
 

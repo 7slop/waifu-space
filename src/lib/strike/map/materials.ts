@@ -813,11 +813,70 @@ export function createMapMaterials(scene: Scene): MapMaterials {
   const neonPink = createMat(scene, 'matNeonPink', new Color3(0.90, 0.35, 0.62), undefined, new Color3(0.60, 0.25, 0.42));
   const neonCyan = createMat(scene, 'matNeonCyan', new Color3(0.0, 0.80, 0.78), undefined, new Color3(0.0, 0.60, 0.58));
 
+  // Soft woven textile for futons, upholstery and cushions
+  const fabric = createTexturedMat(
+    scene,
+    'matFabric',
+    new Color3(0.95, 0.92, 0.85),
+    2, 2,
+    (ctx, w, h) => {
+      ctx.fillStyle = '#d9cdbb';
+      ctx.fillRect(0, 0, w, h);
+      // Fine diagonal weave grain
+      for (let i = 0; i < 1400; i++) {
+        const fx = Math.random() * w;
+        const fy = Math.random() * h;
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255, 255, 255, 0.07)' : 'rgba(90, 75, 55, 0.07)';
+        ctx.fillRect(fx, fy, 2 + Math.random() * 6, 1);
+      }
+      // Soft rolled tufts
+      for (let i = 0; i < 600; i++) {
+        const cx = Math.random() * w;
+        const cy = Math.random() * h;
+        ctx.strokeStyle = 'rgba(120, 100, 75, 0.12)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4 + Math.random() * 8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    },
+    new Color3(0.05, 0.05, 0.05),
+    undefined,
+    8
+  );
+
+  // Deep indigo futon blanket (aizome dyed)
+  const blanket = createTexturedMat(
+    scene,
+    'matBlanket',
+    new Color3(0.92, 0.94, 0.98),
+    2, 2,
+    (ctx, w, h) => {
+      ctx.fillStyle = '#27375f';
+      ctx.fillRect(0, 0, w, h);
+      // Vertical indigo batting ticks
+      for (let x = 0; x < w; x += 24) {
+        ctx.fillStyle = 'rgba(10, 16, 38, 0.35)';
+        ctx.fillRect(x, 0, 6, h);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.fillRect(x + 7, 0, 3, h);
+      }
+      // Subtle fabric sheen
+      for (let y = 0; y < h; y += 6) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        ctx.fillRect(0, y, w, 2);
+      }
+    },
+    new Color3(0.06, 0.06, 0.08),
+    undefined,
+    8
+  );
+
   return {
     ground, wall, plaster, timber, tileRoof, shoji, shrineRed, crate,
     zenSand, woodDeck, bark, stone, darkWood, straw, gold,
     lanternGlow, windowGlow, sakura, bush, bamboo, neonPink, neonCyan,
-    water, ceramic, moss, metal
+    water, ceramic, moss, metal, fabric, blanket
   };
 }
 

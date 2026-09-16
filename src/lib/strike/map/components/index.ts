@@ -5,3 +5,6 @@ export * from './props';
 export * from './structures';
 export * from './decorations';
 export * from './architecture';
+export * from './interior';
+export * from './electronics';
+export * from './runtime-effects';

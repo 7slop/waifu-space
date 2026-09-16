@@ -1,5 +1,87 @@
-import { MeshBuilder, Vector3, AbstractMesh } from '@babylonjs/core';
-import type { MapBuilder } from '../types';
+import { MeshBuilder, Vector3, AbstractMesh, StandardMaterial } from '@babylonjs/core';
+import type { MapBuilder, MapMaterials } from '../types';
+
+export type WallStyle = 'plaster' | 'timber' | 'stone' | 'shoji';
+export type FloorStyle = 'woodDeck' | 'tatami' | 'stone' | 'sand';
+export type RoofStyle = 'tileRoof' | 'straw' | 'shrineRed' | 'metal';
+
+function matFor(mats: MapMaterials, key: string): StandardMaterial {
+  return mats[key as keyof MapMaterials] as unknown as StandardMaterial;
+}
+
+/** Configurable solid wall pane (plaster / timber / stone / shoji). */
+export function createWall(
+  b: MapBuilder,
+  prefix: string,
+  pos: Vector3,
+  opts: { width?: number; height?: number; style?: WallStyle } = {}
+): AbstractMesh[] {
+  const meshes: AbstractMesh[] = [];
+  const w = Math.max(1, Math.min(12, opts.width ?? 4));
+  const h = Math.max(1, Math.min(6, opts.height ?? 3));
+  const style: WallStyle = opts.style ?? 'plaster';
+  b.beginComponent('wall', prefix, pos, { width: w, height: h, style });
+
+  const core = style === 'timber' ? 'timber' : style === 'shoji' ? 'shoji' : style;
+  const panel = b.addBox(`${prefix}_Pane`, w, h, 0.22, new Vector3(pos.x, pos.y + h / 2, pos.z), matFor(b.mats, core), true, true);
+  meshes.push(panel);
+
+  if (style === 'timber' || style === 'shoji') {
+    // Timber frame posts/beams over the face
+    const t = 0.12;
+    meshes.push(b.addBox(`${prefix}_PostL`, t, h, 0.26, new Vector3(pos.x - w / 2 + t / 2, pos.y + h / 2, pos.z), b.mats.darkWood, false, false));
+    meshes.push(b.addBox(`${prefix}_PostR`, t, h, 0.26, new Vector3(pos.x + w / 2 - t / 2, pos.y + h / 2, pos.z), b.mats.darkWood, false, false));
+    meshes.push(b.addBox(`${prefix}_RailT`, w, t, 0.26, new Vector3(pos.x, pos.y + h - t / 2, pos.z), b.mats.darkWood, false, false));
+    meshes.push(b.addBox(`${prefix}_RailB`, w, t, 0.26, new Vector3(pos.x, pos.y + t / 2, pos.z), b.mats.darkWood, false, false));
+  }
+
+  b.endComponent();
+  return meshes;
+}
+
+/** Configurable floor pane (wood deck / tatami / stone / sand). */
+export function createFloor(
+  b: MapBuilder,
+  prefix: string,
+  pos: Vector3,
+  opts: { width?: number; depth?: number; style?: FloorStyle } = {}
+): AbstractMesh[] {
+  const meshes: AbstractMesh[] = [];
+  const w = Math.max(1, Math.min(12, opts.width ?? 4));
+  const d = Math.max(1, Math.min(12, opts.depth ?? 4));
+  const style: FloorStyle = opts.style ?? 'woodDeck';
+  b.beginComponent('floor', prefix, pos, { width: w, depth: d, style });
+
+  const mat = style === 'tatami' ? b.mats.straw : style === 'stone' ? b.mats.stone : style === 'sand' ? b.mats.zenSand : b.mats.woodDeck;
+  meshes.push(b.addBox(`${prefix}_Pane`, w, 0.18, d, new Vector3(pos.x, pos.y + 0.09, pos.z), mat, true, false));
+
+  b.endComponent();
+  return meshes;
+}
+
+/** Configurable flat roof pane (kawara tile / thatch / shrine red / metal). */
+export function createRoof(
+  b: MapBuilder,
+  prefix: string,
+  pos: Vector3,
+  opts: { width?: number; depth?: number; style?: RoofStyle } = {}
+): AbstractMesh[] {
+  const meshes: AbstractMesh[] = [];
+  const w = Math.max(1, Math.min(12, opts.width ?? 4));
+  const d = Math.max(1, Math.min(12, opts.depth ?? 4));
+  const style: RoofStyle = opts.style ?? 'tileRoof';
+  b.beginComponent('roof', prefix, pos, { width: w, depth: d, style });
+
+  const mat = style === 'straw' ? b.mats.straw : style === 'shrineRed' ? b.mats.shrineRed : style === 'metal' ? b.mats.metal : b.mats.tileRoof;
+  meshes.push(b.addBox(`${prefix}_Pane`, w, 0.2, d, new Vector3(pos.x, pos.y + 0.1, pos.z), mat, true, true));
+
+  // Slight overhang lip on the eaves
+  meshes.push(b.addBox(`${prefix}_LipA`, w + 0.18, 0.05, 0.08, new Vector3(pos.x, pos.y + 0.16, pos.z + d / 2 + 0.02), mat, false, false));
+  meshes.push(b.addBox(`${prefix}_LipB`, w + 0.18, 0.05, 0.08, new Vector3(pos.x, pos.y + 0.16, pos.z - d / 2 - 0.02), mat, false, false));
+
+  b.endComponent();
+  return meshes;
+}
 
 /** Stone archway gate with mossy pillars and lintel */
 export function createStoneArch(b: MapBuilder, prefix: string, pos: Vector3, scale = 1.0): AbstractMesh[] {

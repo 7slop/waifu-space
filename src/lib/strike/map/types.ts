@@ -25,7 +25,27 @@ export interface BabylonMapData {
   setRtxShadows?: (enabled: boolean) => void;
   setShadowQuality?: (quality: ShadowQuality) => void;
   updateDayNightCycle?: (elapsedSeconds: number) => void;
+  /** Player-interactive elements (doors, etc.) for runtime behavior. */
+  interactables?: MapInteractable[];
 }
+
+/** A player-interactive map element that the game engine can animate. */
+export type MapInteractableType = 'door';
+
+export interface MapDoorInteractable {
+  type: 'door';
+  id: string;
+  /** The hinge pivot mesh rotated when the door opens / closes. The engine
+   *  reads its live world position via getAbsolutePosition() for proximity
+   *  checks (component meshes are re-parented after registration). */
+  mesh: AbstractMesh;
+  /** Swing direction around mesh rotation.y (1 = clockwise, -1 = counter). */
+  swing: 1 | -1;
+  /** Live state toggled by the engine when the player interacts. */
+  open: boolean;
+}
+
+export type MapInteractable = MapDoorInteractable;
 
 /**
  * Shared material library for the Kyoto map. Every material is created once
@@ -58,6 +78,8 @@ export interface MapMaterials {
   ceramic: StandardMaterial;
   moss: StandardMaterial;
   metal: StandardMaterial;
+  fabric: StandardMaterial;
+  blanket: StandardMaterial;
 }
 
 export interface PointLightOptions {
@@ -77,6 +99,8 @@ export interface MapBuilder {
   mats: MapMaterials;
   colliders: AbstractMesh[];
   lanternLights: PointLight[];
+  /** Player-interactive elements registered by components. */
+  interactables: MapInteractable[];
   /** Editor mode: meshes are not frozen and stay transformable. */
   editor: boolean;
   /** Active .wsmap recorder (present when built with record: true). */
@@ -133,4 +157,7 @@ export interface MapBuilder {
 
   /** Captures point lights emitted while the last component was being built */
   takeComponentLights(): PointLight[];
+
+  /** Registers a player-interactive element (see MapInteractable) for the game engine */
+  registerInteractable(interactable: MapInteractable): void;
 }
