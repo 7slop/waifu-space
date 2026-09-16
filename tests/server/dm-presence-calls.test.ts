@@ -151,6 +151,18 @@ function buildFakeClient() {
       if (!memberIds(call.conversation_id).includes(p_user_id)) {
         return { data: null, error: { message: 'not a participant of this call' } };
       }
+      const role = call.caller_id === p_user_id ? 'caller' : 'callee';
+      const from = call.status;
+      const ok =
+        (from === 'ringing' && p_status === 'ringing') ||
+        (from === 'ringing' && ['active', 'declined', 'busy'].includes(p_status) && role === 'callee') ||
+        (from === 'ringing' && p_status === 'canceled' && role === 'caller') ||
+        (from === 'ringing' && ['missed', 'ended'].includes(p_status)) ||
+        (from === 'active' && p_status === 'ended') ||
+        (from === p_status);
+      if (!ok) {
+        return { data: null, error: { message: `invalid call state transition ${from} -> ${p_status}` } };
+      }
       call.status = p_status;
       if (p_status === 'active') call.answered_at = nowIso();
       if (['ended', 'declined', 'missed', 'canceled', 'busy'].includes(p_status)) call.ended_at = nowIso();
@@ -466,6 +478,95 @@ describe('DM call routes', () => {
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error).toBe('Callee is busy on another call');
+  });
+
+  it('rejects a caller answering their own ringing call (callee-only transition)', async () => {
+    const created = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    );
+    const call = (await created.json()).call;
+
+    const res = await callStatusPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ status: 'active' })
+      })
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('Call is no longer in that state');
+  });
+
+  it('rejects resumed live calls from terminal states (ended -> active)', async () => {
+    const created = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    );
+    const call = (await created.json()).call;
+
+    await callStatusPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(B, 'bob')}` },
+        body: JSON.stringify({ status: 'active' })
+      })
+    );
+    await callStatusPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ status: 'ended' })
+      })
+    );
+
+    const res = await callStatusPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ status: 'active' })
+      })
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('Call is no longer in that state');
+  });
+
+  it('allows idempotent terminal status re-announcements', async () => {
+    const created = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    );
+    const call = (await created.json()).call;
+
+    await callStatusPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ status: 'canceled' })
+      })
+    );
+
+    const replay = await callStatusPOST(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ status: 'canceled' })
+      })
+    );
+    expect(replay.status).toBe(200);
+    const body = await replay.json();
+    expect(body.call.status).toBe('canceled');
   });
 
   it('returns call:null from pending when the user has no live call', async () => {

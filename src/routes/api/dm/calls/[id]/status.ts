@@ -33,6 +33,9 @@ export async function POST(event: { request: Request; params: Record<string, str
     if (error.message.includes('not a participant')) {
       return json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
+    if (error.message.includes('invalid call state transition')) {
+      return json({ success: false, error: 'Call is no longer in that state' }, { status: 409 });
+    }
     return json({ success: false, error: error.message }, { status: 500 });
   }
 

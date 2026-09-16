@@ -641,6 +641,12 @@ END;
 $$;
 
 -- Update a call's lifecycle status (answer / decline / hang up / cancel).
+-- Enforces the call state machine (see migration enforce_call_state_transitions):
+--   ringing  -> active/declined/busy   (callee only)
+--   ringing  -> canceled               (caller only)
+--   ringing  -> missed/ended           (any participant)
+--   active   -> ended                  (any participant)
+-- Terminal statuses are sticky; replaying the same terminal status is a no-op.
 CREATE OR REPLACE FUNCTION public.update_call_session(
   p_user_id uuid,
   p_call_id uuid,
@@ -652,7 +658,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_call public.call_sessions%ROWTYPE;
-  v_is_participant boolean;
+  v_role text;
   v_msg jsonb;
   v_kind text;
 BEGIN
@@ -664,14 +670,37 @@ BEGIN
     RAISE EXCEPTION 'invalid call status';
   END IF;
 
-  SELECT EXISTS (
-    SELECT 1 FROM public.conversation_participants cp
-    JOIN public.call_sessions cs ON cs.conversation_id = cp.conversation_id
-    WHERE cs.id = p_call_id AND cp.user_id = p_user_id
-  ) INTO v_is_participant;
+  SELECT * INTO v_call
+    FROM public.call_sessions
+   WHERE id = p_call_id;
 
-  IF NOT v_is_participant THEN
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'call not found';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.conversation_participants
+    WHERE conversation_id = v_call.conversation_id AND user_id = p_user_id
+  ) THEN
     RAISE EXCEPTION 'not a participant of this call';
+  END IF;
+
+  v_role := CASE WHEN v_call.caller_id = p_user_id THEN 'caller' ELSE 'callee' END;
+
+  IF v_call.status = 'ringing' AND p_status = 'ringing' THEN
+    NULL;
+  ELSIF v_call.status = 'ringing' AND p_status IN ('active', 'declined', 'busy') AND v_role = 'callee' THEN
+    NULL;
+  ELSIF v_call.status = 'ringing' AND p_status = 'canceled' AND v_role = 'caller' THEN
+    NULL;
+  ELSIF v_call.status = 'ringing' AND p_status IN ('ended', 'missed') THEN
+    NULL;
+  ELSIF v_call.status = 'active' AND p_status = 'ended' THEN
+    NULL;
+  ELSIF v_call.status = p_status THEN
+    NULL;
+  ELSE
+    RAISE EXCEPTION 'invalid call state transition % -> %', v_call.status, p_status;
   END IF;
 
   UPDATE public.call_sessions
