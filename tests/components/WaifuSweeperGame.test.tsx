@@ -40,7 +40,7 @@ describe('WaifuSweeperGame', () => {
     expect(screen.getByTestId('ws-mines')).toHaveTextContent('24');
   });
 
-  it('first click never explodes and enters play mode', () => {
+it('first click never explodes and enters play mode', () => {
     mockRng();
     render(() => <WaifuSweeperGame />);
     fireEvent.click(screen.getByTestId('cell-0-0'));
@@ -48,6 +48,11 @@ describe('WaifuSweeperGame', () => {
     expect(screen.getByTestId('ws-face').textContent).toBe('🙂');
     // The guarded click exposes tiles but drops no mines from the counter.
     expect(screen.getByTestId('ws-mines')).toHaveTextContent('25');
+    // Flood-fill must visibly reveal the clicked tile and its guarded neighbours.
+    expect(screen.getByTestId('cell-0-0')).toHaveClass('ws-revealed');
+    expect(screen.getByTestId('cell-0-1')).toHaveClass('ws-revealed');
+    expect(screen.getByTestId('cell-1-0')).toHaveClass('ws-revealed');
+    expect(screen.getByTestId('cell-1-1')).toHaveClass('ws-revealed');
   });
 
   it('detonates when a mine is clicked and lets the player restart', () => {

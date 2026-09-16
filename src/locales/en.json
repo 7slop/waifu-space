@@ -24,14 +24,14 @@
   "nav": {
     "companion": "Companion",
     "calendar": "Calendar",
-    "minigames": "Minigames",
-    "rpg": "Minigames",
+    "minigames": "Games",
+    "rpg": "Games",
     "settings": "Settings",
     "profile": "Profile",
     "leaderboard": "Leaderboard",
     "login": "Login",
     "logout": "Logout",
-    "coinTooltip": "Gold Coins - Click to visit Minigames"
+    "coinTooltip": "Gold Coins - Click to visit Games"
   },
   "profile": {
     "title": "Commander Profile",
@@ -369,6 +369,10 @@
       "newModesTitle": "New Gamemodes Coming Soon",
       "newModesDesc": "Exciting new minigames including Waifu Card Battles, Rhythm Tap, and Shrine Dungeon Expeditions are in active development!",
       "playDefense": "Play Waifu Defense"
+    },
+    "sections": {
+      "flagship": "Flagship Game",
+      "casual": "Casual Minigames"
     },
     "affectionRoad": {
       "title": "Affection Road Milestones",
@@ -885,7 +889,8 @@
     "winDesc": "{tiles} safe tiles cleared in {sec}s.",
     "loseDesc": "You tripped over {tiles} safe tiles before a mine got you!",
     "winToast": "Minefield cleared! (+{coins} 🪙, +{exp} EXP)",
-    "statHint": "Left-click to reveal a tile, right-click to flag a suspected mine. Avoid the waifu traps!"
+    "statHint": "Left-click to reveal a tile, right-click to flag a suspected mine. Avoid the waifu traps!",
+    "leaderboardTitle": "Global Sweeper Leaderboard"
   },
   "birds": {
     "title": "Waifu Birds",
@@ -895,7 +900,11 @@
     "gameOverTitle": "Flap ended!",
     "playAgain": "Flap Again",
     "finishToast": "Waifu Birds run finished! (+{coins} 🪙, +{exp} EXP)",
-    "footnote": "Weave through the torii gates!"
+    "footnote": "Weave through the torii gates!",
+    "leaderboardTitle": "Waifu Birds Leaderboard"
+  },
+  "minigames": {
+    "leaderboardEmpty": "No scores recorded yet — be the first!"
   },
   "strike": {
     "title": "Waifu Strike",

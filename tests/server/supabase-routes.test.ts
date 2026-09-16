@@ -33,6 +33,8 @@ import { POST as syncPOST, GET as syncGET } from '../../src/routes/api/sync/prog
 import { POST as privacyPOST, GET as privacyGET } from '../../src/routes/api/timebudget/sync';
 import { POST as rollPOST } from '../../src/routes/api/gacha/roll';
 import { GET as leaderboardGET } from '../../src/routes/api/leaderboard';
+import { GET as minigameLeaderboardGET } from '../../src/routes/api/minigames/leaderboard';
+import { POST as minigameRecordPOST } from '../../src/routes/api/minigames/record';
 import { createSessionToken, SESSION_COOKIE_NAME } from '../../src/lib/server/auth';
 import { COSMETIC_CATALOG } from '../../src/lib/store';
 
@@ -804,6 +806,154 @@ describe('Supabase-backed API routes (regression guard)', () => {
       expect(data.success).toBe(true);
       expect(data.entries.length).toBeGreaterThan(0);
       expect(data.entries.map((e: any) => e.username)).toContain('SakuraEmpress');
+    });
+  });
+
+  describe('minigames leaderboard (WaifuSweeper / WaifuBirds)', () => {
+    const userId = 'c7d0f2a1-4b3e-4f5a-9c6d-2e8f0a1b2c3d';
+    const token = createSessionToken({ id: userId, username: 'SweeperPro', email: 'swp@waifuspace.moe' });
+
+    it('records a sweeper run and only ever raises the stored best', async () => {
+      mocks.state.db.user_progress.push({
+        user_id: userId,
+        sweeper_best_tiles: 40,
+        sweeper_best_time_sec: 200,
+        sweeper_wins: 1,
+        birds_best_score: 0,
+        birds_wins: 0
+      });
+
+      const res = await minigameRecordPOST(
+        req('http://localhost/api/minigames/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ game: 'sweeper', tilesCleared: 90, timeSec: 120, won: true })
+        })
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.verified).toBe(true);
+
+      let row = mocks.state.db.user_progress.find(p => p.user_id === userId)!;
+      expect(row.sweeper_best_tiles).toBe(90);
+      expect(row.sweeper_best_time_sec).toBe(120);
+      expect(row.sweeper_wins).toBe(2);
+
+      // A worse run must not lower the stored best, and losses do not add wins.
+      await minigameRecordPOST(
+        req('http://localhost/api/minigames/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ game: 'sweeper', tilesCleared: 30, timeSec: 300, won: false })
+        })
+      );
+      row = mocks.state.db.user_progress.find(p => p.user_id === userId)!;
+      expect(row.sweeper_best_tiles).toBe(90);
+      expect(row.sweeper_best_time_sec).toBe(120);
+      expect(row.sweeper_wins).toBe(2);
+
+      // Faster rerun on a new best still keeps the fastest time for that level.
+      await minigameRecordPOST(
+        req('http://localhost/api/minigames/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ game: 'sweeper', tilesCleared: 90, timeSec: 90, won: true })
+        })
+      );
+      row = mocks.state.db.user_progress.find(p => p.user_id === userId)!;
+      expect(row.sweeper_best_time_sec).toBe(90);
+
+      const logs = mocks.state.db.action_logs.filter(l => l.user_id === userId);
+      expect(logs.some(l => l.action_type === 'minigame_score')).toBe(true);
+    });
+
+    it('caps absurd client-supplied values before persisting', async () => {
+      mocks.state.db.user_progress.push({ user_id: userId, sweeper_best_tiles: 0, sweeper_best_time_sec: 0, sweeper_wins: 0, birds_best_score: 0, birds_wins: 0 });
+
+      await minigameRecordPOST(
+        req('http://localhost/api/minigames/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ game: 'sweeper', tilesCleared: 99999, timeSec: 99999, won: true })
+        })
+      );
+
+      let row = mocks.state.db.user_progress.find(p => p.user_id === userId)!;
+      expect(row.sweeper_best_tiles).toBe(211);
+      expect(row.sweeper_best_time_sec).toBe(3600);
+
+      await minigameRecordPOST(
+        req('http://localhost/api/minigames/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ game: 'birds', score: 99999, won: true })
+        })
+      );
+      row = mocks.state.db.user_progress.find(p => p.user_id === userId)!;
+      expect(row.birds_best_score).toBe(200);
+    });
+
+    it('records a birds high score and tracks wins', async () => {
+      mocks.state.db.user_progress.push({ user_id: userId, sweeper_best_tiles: 0, sweeper_best_time_sec: 0, sweeper_wins: 0, birds_best_score: 0, birds_wins: 0 });
+
+      await minigameRecordPOST(
+        req('http://localhost/api/minigames/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ game: 'birds', score: 25, won: true })
+        })
+      );
+      const row = mocks.state.db.user_progress.find(p => p.user_id === userId)!;
+      expect(row.birds_best_score).toBe(25);
+      expect(row.birds_wins).toBe(1);
+    });
+
+    it('rejects invalid games and unauthenticated submissions', async () => {
+      const badGame = await minigameRecordPOST(
+        req('http://localhost/api/minigames/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ game: 'chess', score: 1 })
+        })
+      );
+      expect(badGame.status).toBe(400);
+
+      const anon = await minigameRecordPOST(
+        req('http://localhost/api/minigames/record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game: 'birds', score: 3 })
+        })
+      );
+      expect(anon.status).toBe(401);
+    });
+
+    it('returns the leaderboard sorted by the requested game metric', async () => {
+      mocks.state.db.leaderboard_view = [
+        { username: 'Abe', avatar_url: '', sweeper_best_tiles: 10, sweeper_best_time_sec: 100, sweeper_wins: 1, birds_best_score: 3, birds_wins: 0 },
+        { username: 'Char', avatar_url: '', sweeper_best_tiles: 50, sweeper_best_time_sec: 80, sweeper_wins: 2, birds_best_score: 8, birds_wins: 0 }
+      ];
+
+      const sweeper = await minigameLeaderboardGET(req('http://localhost/api/minigames/leaderboard?game=sweeper'));
+      const sweeperData = await sweeper.json();
+      expect(sweeperData.success).toBe(true);
+      expect(sweeperData.entries.map((e: any) => e.username)).toEqual(['Char', 'Abe']);
+      expect(sweeperData.entries[0].value).toBe(50);
+      expect(sweeperData.entries[0].timeSec).toBe(80);
+      expect(sweeperData.entries[0].wins).toBe(2);
+
+      const birds = await minigameLeaderboardGET(req('http://localhost/api/minigames/leaderboard?game=birds'));
+      const birdsData = await birds.json();
+      expect(birdsData.entries[0].username).toBe('Char');
+      expect(birdsData.entries[0].value).toBe(8);
+    });
+
+    it('falls back to a demo board when there is no data', async () => {
+      const res = await minigameLeaderboardGET(req('http://localhost/api/minigames/leaderboard?game=bananas'));
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.entries[0].username).toBe('SakuraEmpress');
+      expect(data.entries[0].value).toBeGreaterThan(0);
     });
   });
 

@@ -2261,3 +2261,143 @@
   gap: 6px;
 }
 
+/* ─── Games tab: flagship vs casual sections ────────────────────────────── */
+
+.games-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.game-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.game-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.game-section-title span:first-child {
+  color: var(--primary-accent);
+  display: inline-flex;
+}
+
+.game-section .gamemode-selector-bar {
+  margin: 0;
+}
+
+/* ─── Minigame leaderboard panel ───────────────────────────────────────── */
+
+.mlb-panel {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mlb-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.mlb-header span:first-child {
+  color: var(--primary-accent);
+  display: inline-flex;
+}
+
+.mlb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.mlb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mlb-row.self {
+  background: rgba(255, 105, 180, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 105, 180, 0.4);
+}
+
+.mlb-rank {
+  width: 26px;
+  flex: 0 0 26px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mlb-rank-1 { color: #ffd166; }
+.mlb-rank-2 { color: #c0c7d6; }
+.mlb-rank-3 { color: #e09b5a; }
+
+.mlb-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.mlb-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.mlb-metric strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--primary-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.mlb-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.mlb-state {
+  padding: 14px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+

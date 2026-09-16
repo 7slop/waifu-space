@@ -24,14 +24,14 @@
   "nav": {
     "companion": "パートナー",
     "calendar": "カレンダー",
-    "minigames": "ミニゲーム",
-    "rpg": "ミニゲーム",
+    "minigames": "ゲーム",
+    "rpg": "ゲーム",
     "settings": "設定",
     "profile": "プロフィール",
     "leaderboard": "ランキング",
     "login": "ログイン",
     "logout": "ログアウト",
-    "coinTooltip": "ゴールドコイン - クリックしてミニゲームへ"
+    "coinTooltip": "ゴールドコイン - クリックしてゲームへ"
   },
   "profile": {
     "title": "コマンダープロフィール",
@@ -369,6 +369,10 @@
       "newModesTitle": "新ゲームモード近日公開予定",
       "newModesDesc": "ワイフカードバトル、リズムタップ、神社ダンジョン遠征など、魅力的な新ミニゲームを鋭意開発中です！",
       "playDefense": "防衛戦をプレイ"
+    },
+    "sections": {
+      "flagship": "メインゲーム",
+      "casual": "カジュアルミニゲーム"
     },
     "affectionRoad": {
       "title": "親密度の道 マイルストーン",
@@ -885,7 +889,8 @@
     "winDesc": "{tiles} マスの安全タイルを {sec} 秒で開けました。",
     "loseDesc": "{tiles} マス開けたところで地雷に当たってしまった…",
     "winToast": "地雷原クリア！(+{coins} 🪙, +{exp} EXP)",
-    "statHint": "左クリックでタイルを開き、右クリックで地雷に旗を立てます。ワイフトラップを避けましょう！"
+    "statHint": "左クリックでタイルを開き、右クリックで地雷に旗を立てます。ワイフトラップを避けましょう！",
+    "leaderboardTitle": "スイーパー世界ランキング"
   },
   "birds": {
     "title": "ワイフバーズ",
@@ -895,7 +900,11 @@
     "gameOverTitle": "飛行終了！",
     "playAgain": "もう一度飛ぶ",
     "finishToast": "ワイフバーズ終了！(+{coins} 🪙, +{exp} EXP)",
-    "footnote": "鳥居の間をすり抜けましょう！"
+    "footnote": "鳥居の間をすり抜けましょう！",
+    "leaderboardTitle": "ワイフバーズランキング"
+  },
+  "minigames": {
+    "leaderboardEmpty": "まだスコアがありません — 一番乗りしよう！"
   },
   "strike": {
     "title": "ワイフストライク (Waifu Strike)",

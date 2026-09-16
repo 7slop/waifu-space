@@ -104,7 +104,7 @@ src/app.tsx            Root shell: nav, theme, modals, notification scheduler
 src/entry-client.tsx   Client entry
 src/entry-server.tsx   Server entry
 src/routes/            Route definitions + server API routes (see below)
-src/components/        ~36 .tsx UI components (WaifuAvatar, WaifuDefenseGame, WaifuStrikeGame, WaifuSweeperGame, WaifuBirdsGame, Calendar*, Editor*, RPG, etc.)
+src/components/        ~36 .tsx UI components (WaifuAvatar, WaifuDefenseGame, WaifuStrikeGame, WaifuSweeperGame, WaifuBirdsGame, MinigameLeaderboard, Calendar*, Editor*, RPG, etc.)
 src/lib/               Shared + client logic
   store.ts              Central reactive Solid store (~2600 lines) + all cloud sync + localStorage persistence (waifu_space_data_v1_acct_<userId>)
   personality.ts        5 archetypes + dialogue engine (Tsundere/Kuudere/Yandere/Deredere/Dandere)
@@ -141,6 +141,7 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 | `auth/login.ts`, `auth/register.ts`, `auth/me.ts` | Custom HMAC-JWT auth (not Supabase Auth) |
 | `defense/start.ts`, `defense/complete-wave.ts` | Tower-defense server-authoritative scoring |
 | `gacha/roll.ts` | Gacha draws |
+| `minigames/leaderboard.ts`, `minigames/record.ts` | WaifuSweeper/WaifuBirds leaderboards (GET top-20, POST best-score upsert) |
 | `strike/config.ts`, `stats.ts`, `map-save.ts`, `edit-mode.ts` | Strike game config/stats/map editor |
 | `sync/progress.ts` | Plaintext cosmetic + economy sync (server-rejects client reward fields) |
 | `timebudget/sync.ts` | E2E-encrypted blob sync |
@@ -177,7 +178,7 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 - **Write migrations** for every schema change. Keep `supabase/schema.sql` in sync with the migrations so it continues to describe the full current schema.
 - Schema highlights you must preserve:
   - `public.profiles` — users (id UUID PK, username unique, email, avatar_url, bio).
-  - `public.user_progress` — coins ≥0, bond_exp, bond_level, waifu config, appearance/settings JSONB, claimed_milestones, defense stats, goblins_defeated, calendar_overrides/synced_at.
+  - `public.user_progress` — coins ≥0, bond_exp, bond_level, waifu config, appearance/settings JSONB, claimed_milestones, defense stats, goblins_defeated, calendar_overrides/synced_at — plus casual-minigame leaderboard stats (`sweeper_best_tiles/_time_sec/_wins`, `birds_best_score/_wins`).
   - `public.user_inventory` — cosmetics, unique `(user_id, item_id)`.
   - `public.user_showcase` — up to 6 featured items, PK `(user_id, slot_index)`.
   - `public.calendar_items` — events/tasks/birthdays, PK `(user_id, item_id)`, recurrence types none/daily/weekly/monthly/weekdays.

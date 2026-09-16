@@ -113,47 +113,63 @@ export function RpgHub() {
         {/* 1. GAMES TAB */}
         <Show when={activeTab() === 'games'}>
           <div class="tab-pane games-mode-pane">
-            {/* Gamemode Submenu Selector */}
-            <div class="gamemode-selector-bar">
-              <button
-                class={`gamemode-chip-btn ${selectedGame() === 'defense' ? 'active' : ''}`}
-                onClick={() => setSelectedGame('defense')}
-              >
-                <span><PhSword /></span>
-                <span>{t('rpg.tabs.defense')}</span>
-              </button>
+            {/* Gamemode Submenu Selector — flagship vs casual games */}
+            <div class="games-sections">
+              <div class="game-section">
+                <div class="game-section-title">
+                  <span><PhLightning /></span>
+                  <span>{t('rpg.sections.flagship')}</span>
+                </div>
+                <div class="gamemode-selector-bar">
+                  <button
+                    class={`gamemode-chip-btn ${selectedGame() === 'strike' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('strike')}
+                  >
+                    <span><PhLightning /></span>
+                    <span>{t('strike.title') || 'Waifu Strike 3D'}</span>
+                  </button>
+                </div>
+              </div>
 
-              <button
-                class={`gamemode-chip-btn ${selectedGame() === 'strike' ? 'active' : ''}`}
-                onClick={() => setSelectedGame('strike')}
-              >
-                <span><PhLightning /></span>
-                <span>{t('strike.title') || 'Waifu Strike 3D'}</span>
-              </button>
+              <div class="game-section">
+                <div class="game-section-title">
+                  <span><PhGameController /></span>
+                  <span>{t('rpg.sections.casual')}</span>
+                </div>
+                <div class="gamemode-selector-bar">
+                  <button
+                    class={`gamemode-chip-btn ${selectedGame() === 'defense' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('defense')}
+                  >
+                    <span><PhSword /></span>
+                    <span>{t('rpg.tabs.defense')}</span>
+                  </button>
 
-              <button
-                class={`gamemode-chip-btn ${selectedGame() === 'sweeper' ? 'active' : ''}`}
-                onClick={() => setSelectedGame('sweeper')}
-              >
-                <span><PhBomb /></span>
-                <span>{t('sweeper.title')}</span>
-              </button>
+                  <button
+                    class={`gamemode-chip-btn ${selectedGame() === 'sweeper' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('sweeper')}
+                  >
+                    <span><PhBomb /></span>
+                    <span>{t('sweeper.title')}</span>
+                  </button>
 
-              <button
-                class={`gamemode-chip-btn ${selectedGame() === 'birds' ? 'active' : ''}`}
-                onClick={() => setSelectedGame('birds')}
-              >
-                <span><PhBird /></span>
-                <span>{t('birds.title')}</span>
-              </button>
+                  <button
+                    class={`gamemode-chip-btn ${selectedGame() === 'birds' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('birds')}
+                  >
+                    <span><PhBird /></span>
+                    <span>{t('birds.title')}</span>
+                  </button>
 
-              <button
-                class={`gamemode-chip-btn coming-soon ${selectedGame() === 'future' ? 'active' : ''}`}
-                onClick={() => setSelectedGame('future')}
-              >
-                <span><PhSparkle /></span>
-                <span>{t('rpg.tabs.moreModes')}</span>
-              </button>
+                  <button
+                    class={`gamemode-chip-btn coming-soon ${selectedGame() === 'future' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('future')}
+                  >
+                    <span><PhSparkle /></span>
+                    <span>{t('rpg.tabs.moreModes')}</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Selected Gamemode View */}

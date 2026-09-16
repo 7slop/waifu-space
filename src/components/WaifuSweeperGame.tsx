@@ -1,6 +1,6 @@
-import { createSignal, onMount, onCleanup, Show, For } from 'solid-js';
+import { createSignal, createMemo, onMount, onCleanup, Show, For } from 'solid-js';
 import { t } from '../lib/i18n';
-import { addCoins, gainBondExp, showToast } from '../lib/store';
+import { addCoins, gainBondExp, showToast, state } from '../lib/store';
 import {
   getSweeperCoinsReward,
   getSweeperExpReward,
@@ -18,6 +18,7 @@ import {
   type SweeperCell
 } from '../lib/minesweeper-logic';
 import { minigameStats, recordSweeperGame, reloadMinigameStats } from '../lib/minigame-stats';
+import { MinigameLeaderboard } from './MinigameLeaderboard';
 import { PhBomb, PhTimer, PhTrophy, PhLightning, PhSparkle } from './icons';
 
 const NUMBER_COLORS = [
@@ -52,6 +53,7 @@ export function WaifuSweeperGame() {
   const [started, setStarted] = createSignal(false);
   const [seconds, setSeconds] = createSignal(0);
   const [result, setResult] = createSignal<Result | null>(null);
+  const [lbRefreshKey, setLbRefreshKey] = createSignal(0);
 
   let tickerId: ReturnType<typeof setInterval> | null = null;
 
@@ -99,6 +101,24 @@ export function WaifuSweeperGame() {
       setResult({ won, coins: 0, exp: 0, tiles, sec });
     }
     recordSweeperGame({ tilesCleared: won ? TOTAL_SAFE(b) : b.safeRevealed, timeSec: sec, won });
+    recordRun(b, won, sec);
+  };
+
+  const recordRun = (b: SweeperBoard, won: boolean, sec: number) => {
+    const tiles = won ? TOTAL_SAFE(b) : b.safeRevealed;
+    const bumped = () => setLbRefreshKey(k => k + 1);
+    const token = state.user?.token;
+    if (!token) {
+      bumped();
+      return;
+    }
+    fetch('/api/minigames/record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ game: 'sweeper', tilesCleared: tiles, timeSec: sec, won })
+    })
+      .catch(() => undefined)
+      .finally(bumped);
   };
 
   const onReveal = (row: number, col: number) => {
@@ -147,11 +167,20 @@ export function WaifuSweeperGame() {
   const gridCols = () => preset().cols;
   const minesLeft = () => (board() ? minesRemaining(board()!) : preset().mines);
 
-  const boardCell = (r: number, c: number): SweeperCell | null =>
-    board() ? cellAt(board()!, r, c) : null;
+  // Each grid entry is a fresh object identity per board change, so <For>
+  // re-renders every cell whenever the board signal updates (the per-item
+  // callback would otherwise only track the item itself, never `board()`).
+  const gridCells = createMemo(() => {
+    const b = board();
+    const cols = gridCols();
+    return Array.from({ length: preset().rows * preset().cols }, (_, i) => {
+      const r = Math.floor(i / cols);
+      const c = i % cols;
+      return { key: i, r, c, cell: b ? cellAt(b, r, c) : null };
+    });
+  });
 
-  const renderCell = (r: number, c: number) => {
-    const cell = boardCell(r, c);
+  const renderCell = ({ r, c, cell }: { r: number; c: number; cell: SweeperCell | null }) => {
     if (!cell || !cell.revealed) {
       return (
         <button
@@ -242,13 +271,7 @@ export function WaifuSweeperGame() {
       {/* Board */}
       <div class="ws-board-wrap">
         <div class="ws-grid" style={{ '--ws-cols': gridCols() }}>
-          <For each={Array.from({ length: preset().rows * preset().cols }, (_, i) => i)}>
-            {i => {
-              const r = Math.floor(i / gridCols());
-              const c = i % gridCols();
-              return renderCell(r, c);
-            }}
-          </For>
+          <For each={gridCells()}>{renderCell}</For>
         </div>
       </div>
 
@@ -298,6 +321,8 @@ export function WaifuSweeperGame() {
       </div>
 
       <p class="ws-hint">{t('sweeper.statHint')}</p>
+
+      <MinigameLeaderboard game="sweeper" refreshKey={lbRefreshKey()} />
     </div>
   );
 }

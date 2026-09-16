@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, Show, For } from 'solid-js';
 import { t } from '../lib/i18n';
-import { addCoins, gainBondExp, showToast } from '../lib/store';
+import { addCoins, gainBondExp, showToast, state } from '../lib/store';
 import { getBirdsCoinsReward, getBirdsExpReward } from '../lib/economy';
 import {
   createFlappyState,
@@ -17,6 +17,7 @@ import {
   type FlappyBirdsState
 } from '../lib/flappy-logic';
 import { minigameStats, recordBirdsGame, reloadMinigameStats } from '../lib/minigame-stats';
+import { MinigameLeaderboard } from './MinigameLeaderboard';
 import { PhBird, PhLightning, PhCoins, PhHeart } from './icons';
 
 const MAX_FRAME_DT = 50;
@@ -31,6 +32,7 @@ export function WaifuBirdsGame() {
   const [gameState, setGameState] = createSignal<FlappyBirdsState>(createFlappyState());
   const [started, setStarted] = createSignal(false);
   const [result, setResult] = createSignal<BirdResult | null>(null);
+  const [lbRefreshKey, setLbRefreshKey] = createSignal(0);
 
   let gameRef: HTMLDivElement | undefined;
   let rafId = 0;
@@ -51,8 +53,25 @@ export function WaifuBirdsGame() {
     addCoins(coins);
     gainBondExp(exp);
     recordBirdsGame({ score: s.score });
+    recordRun(s.score);
     setResult({ score: s.score, coins, exp });
     showToast(t('birds.finishToast', { score: s.score, coins, exp }));
+  };
+
+  const recordRun = (score: number) => {
+    const bumped = () => setLbRefreshKey(k => k + 1);
+    const token = state.user?.token;
+    if (!token) {
+      bumped();
+      return;
+    }
+    fetch('/api/minigames/record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ game: 'birds', score, won: false })
+    })
+      .catch(() => undefined)
+      .finally(bumped);
   };
 
   const loop = (time: number) => {
@@ -199,6 +218,8 @@ export function WaifuBirdsGame() {
       </div>
 
       <div class="wfb-footnote"><PhHeart /> {t('birds.footnote')}</div>
+
+      <MinigameLeaderboard game="birds" refreshKey={lbRefreshKey()} />
     </div>
   );
 }
