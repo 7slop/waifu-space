@@ -94,7 +94,15 @@ export class CallManager {
     };
     this.pc.ontrack = (ev) => {
       if (!this.remoteStream) this.remoteStream = new MediaStream();
-      this.remoteStream.addTrack(ev.track);
+      if (!this.remoteStream.getTracks().includes(ev.track)) {
+        this.remoteStream.addTrack(ev.track);
+      }
+      ev.track.onended = () => {
+        if (this.remoteStream) {
+          try { (this.remoteStream as any).removeTrack?.(ev.track); } catch {}
+          this.deps.onRemoteStream?.(this.remoteStream);
+        }
+      };
       this.deps.onRemoteStream?.(this.remoteStream);
     };
     if (this.localStream) {
@@ -201,6 +209,18 @@ export class CallManager {
       return false;
     }
     this.localStream = stream;
+    if (options.video) {
+      this.cameraTrack = stream.getVideoTracks()[0] ?? null;
+    }
+    if (options.screen) {
+      this.screenTrack = stream.getVideoTracks()[0] ?? null;
+      this.screenActive = true;
+      if (this.screenTrack) {
+        this.screenTrack.onended = () => {
+          void this.disableScreenShare();
+        };
+      }
+    }
     this.deps.onLocalStream?.(stream, options);
     this.setState('ringing');
     return true;
@@ -295,18 +315,37 @@ export class CallManager {
   /** Toggles the camera track when a video/screen call is active. */
   toggleVideo(): boolean {
     if (!this.localStream) return false;
-    const tracks = this.localStream.getVideoTracks();
+    if (this.cameraTrack) {
+      this.cameraTrack.enabled = !this.cameraTrack.enabled;
+      if (!this.screenActive) {
+        void this.applyVideoTrack(this.cameraTrack.enabled ? this.cameraTrack : null);
+      }
+      this.deps.onStateChange?.(this.state);
+      return this.cameraTrack.enabled;
+    }
+    const tracks = this.localStream.getVideoTracks().filter(t => t !== this.screenTrack);
     if (!tracks.length) return false;
     const next = !tracks[0].enabled;
     for (const t of tracks) t.enabled = next;
+    if (!this.screenActive) {
+      void this.applyVideoTrack(next ? tracks[0] : null);
+    }
+    this.deps.onStateChange?.(this.state);
     return next;
   }
 
   /** Ensures a camera feed is live mid-call (used from a voice call). */
   async ensureCamera(): Promise<boolean> {
     if (!this.localStream) return false;
-    const existing = this.localStream.getVideoTracks()[0];
-    if (existing && existing !== this.screenTrack) return true;
+    if (this.cameraTrack && this.cameraTrack.readyState !== 'ended') {
+      this.cameraTrack.enabled = true;
+      if (!this.screenActive) {
+        await this.applyVideoTrack(this.cameraTrack);
+      }
+      this.deps.onStateChange?.(this.state);
+      this.deps.onLocalStream?.(this.localStream, this.options ?? { type: 'video', audio: true, video: true, screen: this.screenActive });
+      return true;
+    }
     const getUserMedia = this.deps.getUserMedia ?? ((constraints: MediaStreamConstraints) => {
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
         return Promise.reject(new Error('camera unavailable'));
@@ -322,14 +361,12 @@ export class CallManager {
     const track = stream.getVideoTracks()[0];
     if (!track) return false;
     this.cameraTrack = track;
-    this.screenActive = false;
-    this.screenTrack = null;
     this.localStream.addTrack(track);
-    if (this.screenStream) {
-      for (const t of this.screenStream.getTracks()) t.stop();
-      this.screenStream = null;
+    if (!this.screenActive) {
+      await this.applyVideoTrack(track);
     }
-    await this.applyVideoTrack(track);
+    this.deps.onStateChange?.(this.state);
+    this.deps.onLocalStream?.(this.localStream, this.options ?? { type: 'video', audio: true, video: true, screen: this.screenActive });
     return true;
   }
 
@@ -353,23 +390,39 @@ export class CallManager {
     this.screenStream = stream;
     this.screenTrack = track;
     this.screenActive = true;
+    track.onended = () => {
+      void this.disableScreenShare();
+    };
     this.localStream.addTrack(track);
     await this.applyVideoTrack(track);
+    this.deps.onStateChange?.(this.state);
+    this.deps.onLocalStream?.(this.localStream, this.options ?? { type: 'video', audio: true, video: !this.isVideoOff(), screen: true });
     return true;
   }
 
   /** Stops screen sharing and restores the camera feed if one was live. */
   async disableScreenShare(): Promise<boolean> {
     if (!this.screenActive || !this.screenTrack) return false;
-    this.screenTrack.stop();
-    this.localStream?.removeTrack(this.screenTrack);
+    try {
+      this.screenTrack.stop();
+    } catch {}
+    try {
+      this.localStream?.removeTrack(this.screenTrack);
+    } catch {}
     if (this.screenStream) {
-      for (const t of this.screenStream.getTracks()) t.stop();
+      try {
+        for (const t of this.screenStream.getTracks()) t.stop();
+      } catch {}
     }
     this.screenStream = null;
     this.screenTrack = null;
     this.screenActive = false;
-    await this.applyVideoTrack(this.cameraTrack && this.cameraTrack.enabled ? this.cameraTrack : null);
+    const restoreTrack = this.cameraTrack && this.cameraTrack.enabled && this.cameraTrack.readyState !== 'ended' ? this.cameraTrack : null;
+    await this.applyVideoTrack(restoreTrack);
+    this.deps.onStateChange?.(this.state);
+    if (this.localStream) {
+      this.deps.onLocalStream?.(this.localStream, this.options ?? { type: 'video', audio: true, video: !this.isVideoOff(), screen: false });
+    }
     return true;
   }
 
@@ -391,8 +444,16 @@ export class CallManager {
 
   /** Tracks whether the video is currently disabled. */
   isVideoOff(): boolean {
-    const tracks = this.localStream?.getVideoTracks();
+    if (this.screenActive) return false;
+    if (this.cameraTrack) return !this.cameraTrack.enabled;
+    const tracks = this.localStream?.getVideoTracks().filter(t => t !== this.screenTrack);
     return !tracks || tracks.length === 0 || tracks.every(t => !t.enabled);
+  }
+
+  /** Whether any local camera track exists and is not ended. */
+  hasCameraTrack(): boolean {
+    return (!!this.cameraTrack && this.cameraTrack.readyState !== 'ended') ||
+      (!!this.localStream && this.localStream.getVideoTracks().some(t => t !== this.screenTrack && t.readyState !== 'ended'));
   }
 
   /** Whether any local video track exists (camera or screen). */
@@ -409,13 +470,23 @@ export class CallManager {
       }
       this.pc = null;
     }
+    if (this.screenTrack) {
+      try { this.screenTrack.stop(); } catch {}
+      this.screenTrack = null;
+    }
+    if (this.screenStream) {
+      try {
+        for (const t of this.screenStream.getTracks()) t.stop();
+      } catch {}
+      this.screenStream = null;
+    }
+    if (this.cameraTrack) {
+      try { this.cameraTrack.stop(); } catch {}
+      this.cameraTrack = null;
+    }
     if (this.localStream) {
       for (const t of this.localStream.getTracks()) t.stop();
       this.localStream = null;
-    }
-    if (this.screenStream) {
-      for (const t of this.screenStream.getTracks()) t.stop();
-      this.screenStream = null;
     }
     this.remoteStream = null;
     this.pendingCandidates = [];
@@ -423,9 +494,8 @@ export class CallManager {
     this.peerId = null;
     this.options = null;
     this.videoSender = null;
-    this.screenTrack = null;
     this.screenActive = false;
-    this.cameraTrack = null;
+    this.renegotiating = false;
     this.setState(reason === 'canceled' ? 'idle' : reason === 'declined' ? 'ended' : 'ended');
   }
 }

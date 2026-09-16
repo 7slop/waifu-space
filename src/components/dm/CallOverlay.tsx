@@ -36,7 +36,9 @@ function DmVideoView(props: { stream: () => MediaStream | null; muted?: boolean;
     const video = ref;
     if (video) {
       const stream = props.stream();
-      video.srcObject = stream as any;
+      try {
+        video.srcObject = stream as any;
+      } catch {}
       if (stream) void video.play?.().catch(() => {});
     }
   });
@@ -175,9 +177,12 @@ function ActiveCallBar() {
   // answers (WebRTC connected); 'active' merely reflects the server-side
   // call row and must not read as "in call" while the peer hasn't joined.
   const calling = () => call().callState === 'ringing';
-  // Camera/screen toggles are allowed while ringing too (Discord-style
-  // "start preparing"): the local preview fills the stage before answering.
-  const videoActive = () => !call().videoOff && (connected() || ringing());
+  const remoteHasVideo = () => {
+    const s = screen();
+    return !!s && s.getVideoTracks().some((t) => t.readyState !== 'ended');
+  };
+  const videoActive = () => (!call().videoOff || call().screenSharing || remoteHasVideo()) && (connected() || ringing());
+  const showPip = () => connected() && (sharing() || !call().videoOff);
   const screen = createMemo<MediaStream | null>(() => (connected() ? callRemoteStream() : null));
   const local = createMemo<MediaStream | null>(() => callLocalStream());
   const conv = () => dmState.conversations.find((c) => c.id === call().call.conversationId);
@@ -203,7 +208,9 @@ function ActiveCallBar() {
     const el = audioRef;
     const stream = callRemoteStream();
     if (el) {
-      el.srcObject = stream;
+      try {
+        el.srcObject = stream as any;
+      } catch {}
       el.muted = call().deafened;
       if (stream) void el.play?.().catch(() => {});
     }
@@ -271,11 +278,13 @@ function ActiveCallBar() {
         <div class="dm-call-video-row">
           <div class="dm-call-video-stage">
             <DmVideoView stream={mainStream} class="dm-call-remote-video" />
-            <DmVideoView
-              stream={pipStream}
-              muted={!sharing()}
-              class={sharing() ? 'dm-call-pip-video screen' : 'dm-call-pip-video'}
-            />
+            <Show when={showPip()}>
+              <DmVideoView
+                stream={pipStream}
+                muted={!sharing()}
+                class={sharing() ? 'dm-call-pip-video screen' : 'dm-call-pip-video'}
+              />
+            </Show>
           </div>
         </div>
       </Show>

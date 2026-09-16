@@ -5,6 +5,8 @@ import { dmState, setDmState, startCall } from '../../../src/lib/dm/store';
 import { resetForDmTests, stubFetch, flush } from '../../dm-helpers';
 import type { CallOfferBroadcast, CallSession } from '../../../src/lib/dm/types';
 
+let lastCallManager: any = null;
+
 vi.mock('../../../src/lib/dm/call', () => ({
   CallManager: class {
     deps: any = {};
@@ -16,6 +18,7 @@ vi.mock('../../../src/lib/dm/call', () => ({
     private screenSharing = false;
     constructor(deps: any) {
       this.deps = deps ?? {};
+      lastCallManager = this;
     }
     async startLocal(): Promise<boolean> {
       return true;
@@ -381,6 +384,45 @@ describe('CallOverlay', () => {
     await flush();
     expect(dmState.call?.deafened).toBe(true);
     expect(audioEl?.muted).toBe(true);
+
+    restore();
+  });
+
+  it('shows video stage when remote peer has video even if local camera is off, and hides empty PiP', async () => {
+    seedConv();
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession({ id: 'call-v1', callType: 'voice' }),
+      callerName: 'Bob',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+    const restore = stubFetch({ '/api/dm/calls/call-v1/status': () => ({ body: { success: true } }) });
+    const { container } = render(() => <CallOverlay />);
+    fireEvent.click(container.querySelector('[data-testid="dm-call-accept"]')!);
+    await flush();
+
+    expect(dmState.call?.callState).toBe('connected');
+    expect(dmState.call?.videoOff).toBe(true);
+
+    // Initially with no remote video and videoOff=true, video stage is not rendered
+    expect(container.querySelector('.dm-call-remote-video')).not.toBeInTheDocument();
+
+    // Remote peer sends a stream with a video track
+    const fakeRemoteTrack = { kind: 'video', readyState: 'live', enabled: true, stop: () => {} };
+    const fakeRemoteStream = {
+      getTracks: () => [fakeRemoteTrack],
+      getVideoTracks: () => [fakeRemoteTrack],
+      getAudioTracks: () => []
+    } as unknown as MediaStream;
+
+    lastCallManager?.deps.onRemoteStream?.(fakeRemoteStream);
+    await flush();
+
+    // Video stage is now visible for remote participant
+    expect(container.querySelector('.dm-call-remote-video')).toBeInTheDocument();
+    // But since local user has camera off (videoOff: true), PiP is NOT shown (no empty black box)
+    expect(container.querySelector('.dm-call-pip-video')).not.toBeInTheDocument();
 
     restore();
   });

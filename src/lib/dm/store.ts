@@ -1162,6 +1162,7 @@ export async function hangUpCall(): Promise<void> {
   setDmState('incomingCall', null);
   setLocalStreamSignal(null);
   setRemoteStreamSignal(null);
+  runtime.call = null;
 }
 
 function announceCallCancel(call: DmCallUi, auth: DmAuth | null): void {
@@ -1219,7 +1220,10 @@ export async function enableCallCamera(): Promise<boolean> {
 export async function cameraButtonPressed(): Promise<void> {
   const manager = runtime.call;
   if (!manager) return;
-  if (manager.hasVideoTracks()) {
+  const hasCam = typeof (manager as any).hasCameraTrack === 'function'
+    ? (manager as any).hasCameraTrack()
+    : manager.hasVideoTracks();
+  if (hasCam) {
     manager.toggleVideo();
   } else {
     await manager.ensureCamera();
@@ -1248,6 +1252,11 @@ export function toggleDeafen(): boolean {
 export function resetDmStore(): void {
   setLocalStreamSignal(null);
   setRemoteStreamSignal(null);
+  if (runtime.call) {
+    try { runtime.call.hangUp('ended'); } catch {}
+    runtime.call = null;
+  }
+  runtime.pendingAccept = null;
   if (runtime.pendingPollTimer) {
     clearInterval(runtime.pendingPollTimer);
     runtime.pendingPollTimer = null;

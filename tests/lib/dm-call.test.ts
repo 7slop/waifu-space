@@ -12,6 +12,8 @@ interface FakeTrack {
   kind: 'audio' | 'video';
   enabled: boolean;
   stop: () => void;
+  onended?: (() => void) | null;
+  readyState?: 'live' | 'ended';
 }
 
 interface FakeStream {
@@ -19,7 +21,7 @@ interface FakeStream {
 }
 
 function makeTrack(kind: 'audio' | 'video'): FakeTrack {
-  return { kind, enabled: true, stop: vi.fn() };
+  return { kind, enabled: true, stop: vi.fn(), onended: null, readyState: 'live' };
 }
 
 function makeStream(...kinds: Array<'audio' | 'video'>): FakeStream {
@@ -31,7 +33,8 @@ const streamObj = (s: FakeStream): MediaStream =>
     getTracks: () => s.tracks,
     getAudioTracks: () => s.tracks.filter(t => t.kind === 'audio'),
     getVideoTracks: () => s.tracks.filter(t => t.kind === 'video'),
-    addTrack: (t: any) => void s.tracks.push(t)
+    addTrack: (t: any) => void s.tracks.push(t),
+    removeTrack: (t: any) => { s.tracks = s.tracks.filter(x => x !== t); }
   }) as unknown as MediaStream;
 
 class FakePeerConnection {
@@ -39,7 +42,11 @@ class FakePeerConnection {
   remoteDescription: { type: string; sdp: string } | null = null;
   ontrack: ((ev: { track: unknown }) => void) | null = null;
   onicecandidate: ((ev: { candidate: { toJSON: () => object } | null }) => void) | null = null;
-  addTrack = vi.fn();
+  addTrack = vi.fn((track: any) => ({
+    replaceTrack: vi.fn(async () => undefined),
+    getParameters: vi.fn(() => ({ encodings: [{ maxBitrate: 0 }] })),
+    setParameters: vi.fn(async () => undefined)
+  }));
   close = vi.fn();
   createOffer = vi.fn(async () => ({ type: 'offer', sdp: 'offer-sdp' }));
   createAnswer = vi.fn(async () => ({ type: 'answer', sdp: 'answer-sdp' }));
@@ -69,7 +76,7 @@ function installMedia() {
   globalThis.MediaStream = class {
     tracks: FakeTrack[] = [];
     constructor(stream?: FakeStream) {
-      if (stream) this.tracks = stream.tracks;
+      if (stream) this.tracks = [...stream.tracks];
     }
     getTracks() {
       return this.tracks;
@@ -81,7 +88,10 @@ function installMedia() {
       return this.tracks.filter(t => t.kind === 'video');
     }
     addTrack(t: FakeTrack) {
-      this.tracks.push(t);
+      if (!this.tracks.includes(t)) this.tracks.push(t);
+    }
+    removeTrack(t: FakeTrack) {
+      this.tracks = this.tracks.filter(x => x !== t);
     }
   } as unknown as typeof MediaStream;
   (globalThis as any).RTCSessionDescription = class {
@@ -293,5 +303,121 @@ describe('CallManager', () => {
     expect((encodings[0] as any).priority).toBe('high');
     expect((encodings[0] as any).networkPriority).toBe('high');
     expect(fakeSender.setParameters).toHaveBeenCalledWith({ encodings });
+  });
+
+  it('enables screen sharing, toggles camera without interrupting screen, and restores camera on stop', async () => {
+    installMedia();
+    const peers = setupPeers(1);
+    const cameraStream = streamObj(makeStream('audio', 'video'));
+    const screenStream = streamObj(makeStream('video'));
+    const manager = new CallManager({
+      getUserMedia: async () => cameraStream,
+      getDisplayMedia: async () => screenStream
+    });
+
+    await manager.startLocal({ type: 'video', audio: true, video: true, screen: false });
+    await manager.createOffer('call-s1', 'peer-s1');
+    expect(manager.isScreenSharing()).toBe(false);
+    expect(manager.isVideoOff()).toBe(false);
+    expect(manager.hasCameraTrack()).toBe(true);
+
+    // Enable screen share
+    const okShare = await manager.enableScreenShare();
+    expect(okShare).toBe(true);
+    expect(manager.isScreenSharing()).toBe(true);
+    expect(manager.isVideoOff()).toBe(false);
+
+    // Toggle camera while sharing screen
+    const camState = manager.toggleVideo();
+    expect(camState).toBe(false);
+    // Screen sharing should still be active
+    expect(manager.isScreenSharing()).toBe(true);
+
+    // Turn camera back on
+    manager.toggleVideo();
+
+    // Disable screen share
+    const okStop = await manager.disableScreenShare();
+    expect(okStop).toBe(true);
+    expect(manager.isScreenSharing()).toBe(false);
+    expect(manager.isVideoOff()).toBe(false);
+  });
+
+  it('automatically disables screen share when native screenTrack ends', async () => {
+    installMedia();
+    setupPeers(1);
+    const local = streamObj(makeStream('audio'));
+    const screenTrack = makeTrack('video');
+    const screenStream = streamObj({ tracks: [screenTrack] });
+    let stateChanges = 0;
+    const manager = new CallManager({
+      getUserMedia: async () => local,
+      getDisplayMedia: async () => screenStream,
+      onStateChange: () => {
+        stateChanges++;
+      }
+    });
+
+    await manager.startLocal({ type: 'voice', audio: true, video: false, screen: false });
+    await manager.createOffer('call-s2', 'peer-s2');
+
+    await manager.enableScreenShare();
+    expect(manager.isScreenSharing()).toBe(true);
+
+    // Native browser "Stop sharing" fires onended on screenTrack
+    screenTrack.onended?.();
+    expect(manager.isScreenSharing()).toBe(false);
+    expect(stateChanges).toBeGreaterThan(0);
+  });
+
+  it('acquires camera while screen sharing without stopping the screen share', async () => {
+    installMedia();
+    setupPeers(1);
+    const voiceStream = streamObj(makeStream('audio'));
+    const screenStream = streamObj(makeStream('video'));
+    const cameraStream = streamObj(makeStream('video'));
+
+    const manager = new CallManager({
+      getUserMedia: async (constraints) => (constraints && typeof constraints === 'object' && 'video' in constraints && constraints.video ? cameraStream : voiceStream),
+      getDisplayMedia: async () => screenStream
+    });
+
+    // Start voice call
+    await manager.startLocal({ type: 'voice', audio: true, video: false, screen: false });
+    await manager.createOffer('call-s3', 'peer-s3');
+    expect(manager.hasCameraTrack()).toBe(false);
+
+    // Start screen sharing
+    await manager.enableScreenShare();
+    expect(manager.isScreenSharing()).toBe(true);
+
+    // Acquire camera mid-share
+    const okCam = await manager.ensureCamera();
+    expect(okCam).toBe(true);
+    expect(manager.hasCameraTrack()).toBe(true);
+    expect(manager.isScreenSharing()).toBe(true);
+  });
+
+  it('removes remote track when track fires onended', async () => {
+    installMedia();
+    const peers = setupPeers(1);
+    let remoteStreamRef: MediaStream | null = null;
+    const manager = new CallManager({
+      getUserMedia: async () => streamObj(makeStream('audio')),
+      onRemoteStream: (s) => {
+        remoteStreamRef = s;
+      }
+    });
+    await manager.startLocal({ type: 'voice', audio: true, video: false, screen: false });
+    await manager.createOffer('call-s4', 'peer-s4');
+
+    const remoteVideoTrack = makeTrack('video');
+    peers[0].ontrack!({ track: remoteVideoTrack as any });
+    expect(remoteStreamRef).not.toBeNull();
+    expect((remoteStreamRef as any).getVideoTracks().length).toBe(1);
+
+    // Remote track ends
+    remoteVideoTrack.onended?.();
+    expect((remoteStreamRef as any).getVideoTracks().length).toBe(0);
   });
 });
