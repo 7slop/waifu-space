@@ -13,6 +13,7 @@ import {
   DynamicTexture,
   GlowLayer
 } from '@babylonjs/core';
+import type { MapDoorInteractable } from './map/types';
 import {
   WeaponId,
   WeaponDef,
@@ -93,6 +94,8 @@ export interface StrikeBabylonCallbacks {
   onGrenadeArmedChange?: (armed: boolean) => void;
   onInvulnerableChange?: (invulnerable: boolean) => void;
   onGrenadeEmptyFeedback?: () => void;
+  /** Called when the interactable door prompt under the crosshair changes or clears. */
+  onInteractPrompt?: (label: string | null) => void;
 }
 
 export class StrikeBabylonEngine {
@@ -196,6 +199,14 @@ export class StrikeBabylonEngine {
   public grenadeCharging = false;
   private grenadeTrajectoryPreview: AbstractMesh | null = null;
   private jumpQueued = false;
+  /** Interactable door state: per-door current pivot yaw (rad) and the live open target. */
+  private doorYaw = new Map<string, number>();
+  /** True while an E-press is queued for the current frame. */
+  private interactQueued = false;
+  /** Timestamp of the last door toggle, to prevent rapid E spam. */
+  private lastDoorToggleAt = 0;
+  /** The interactable id currently targeted by the player (drives the prompt). */
+  private targetedInteractableId: string | null = null;
 
   // Explosive grenade concussive slowdown state
   private speedDebuffMultiplier = 1.0;
@@ -491,6 +502,9 @@ export class StrikeBabylonEngine {
       // but precise re-presses still allow bunnyhopping.
       if (e.code === this.keybindings.jump || e.code === 'Space') {
         this.jumpQueued = true;
+      }
+      if (e.code === this.keybindings.interact) {
+        this.interactQueued = true;
       }
       if (e.code === this.keybindings.reload) this.reload();
       if (e.code === this.keybindings.weapon1) this.switchWeapon(this.loadout.primary);
@@ -1988,6 +2002,94 @@ export class StrikeBabylonEngine {
 
     // Keep held weapons (viewmodel + remote avatar guns) out of the bloom layer
     this.excludeWeaponGlow();
+
+    // Door interaction targets + animations (prompt + E toggle)
+    this.updateInteractions(dt);
+  }
+
+  /** Finds the interactable door the player is looking at, toggles it on E, and
+   *  animates every registered door toward its target swing each frame. */
+  private updateInteractions(dt: number) {
+    const doors = this.mapData?.interactables;
+    if (!doors || doors.length === 0) {
+      if (this.targetedInteractableId !== null) {
+        this.targetedInteractableId = null;
+        this.callbacks.onInteractPrompt?.(null);
+      }
+      return;
+    }
+
+    const turnSpeed = 5.0; // rad/s — snappy hinge swing, still visibly smooth
+
+    // Animate every door toward its current open/closed target rotation
+    for (const it of doors) {
+      if (it.type !== 'door') continue;
+      const target = it.open ? it.swing * (Math.PI / 2) : 0;
+      let cur = this.doorYaw.get(it.id);
+      if (cur === undefined) {
+        cur = it.open ? target : 0;
+        this.doorYaw.set(it.id, cur);
+      }
+      const diff = target - cur;
+      if (Math.abs(diff) > 0.002) {
+        const step = Math.min(Math.abs(diff), turnSpeed * dt) * Math.sign(diff);
+        cur += step;
+        it.mesh.rotation.y = cur;
+        this.doorYaw.set(it.id, cur);
+      } else if (cur !== target) {
+        it.mesh.rotation.y = target;
+        this.doorYaw.set(it.id, target);
+      }
+    }
+
+    // Resolve the door currently under the crosshair (range + facing)
+    const camPos = this.playerCollider.position;
+    const fwdX = Math.sin(this.camera.rotation.y);
+    const fwdZ = Math.cos(this.camera.rotation.y);
+    let best: MapDoorInteractable | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const it of doors) {
+      if (it.type !== 'door') continue;
+      const pivot = it.mesh.getAbsolutePosition();
+      const dx = pivot.x - camPos.x;
+      const dz = pivot.z - camPos.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 3.0) continue;
+      const facing = (fwdX * dx + fwdZ * dz) / Math.max(0.001, dist);
+      if (facing < 0.25) continue;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = it;
+      }
+    }
+
+    if (best) {
+      if (this.targetedInteractableId !== best.id) {
+        this.targetedInteractableId = best.id;
+        const label = `${this.interactKeyLabel()} — ${best.open ? 'Close door' : 'Open door'}`;
+        this.callbacks.onInteractPrompt?.(label);
+      }
+      if (this.interactQueued && best.id && performance.now() - this.lastDoorToggleAt > 350) {
+        this.lastDoorToggleAt = performance.now();
+        best.open = !best.open;
+        strikeAudio.playDoor(best.open, {
+          sourcePosition: best.mesh.getAbsolutePosition(),
+          listenerPosition: camPos,
+          listenerYaw: this.camera.rotation.y
+        });
+      }
+    } else if (this.targetedInteractableId !== null) {
+      this.targetedInteractableId = null;
+      this.callbacks.onInteractPrompt?.(null);
+    }
+
+    this.interactQueued = false;
+  }
+
+  private interactKeyLabel(): string {
+    const code = this.keybindings.interact;
+    const names: Record<string, string> = { Space: 'Space', KeyE: 'E', KeyF: 'F', Enter: 'Enter' };
+    return names[code] || code.replace(/^Key/, '');
   }
 
   /** Held weapons never bloom: first-person viewmodel + every remote avatar gun */

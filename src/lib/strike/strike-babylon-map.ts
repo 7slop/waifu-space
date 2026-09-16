@@ -283,6 +283,7 @@ export function createKyotoMap(scene: Scene, layout?: MapLayout): BabylonMapData
   return {
     spawnPoints,
     colliders: b.colliders,
+    interactables: b.interactables,
     shadowGenerator: shadowGen,
     sunLight,
     hemiLight,

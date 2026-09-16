@@ -257,6 +257,58 @@ class ProceduralAudioEngine {
     osc.stop(t + 0.05);
   }
 
+  public playDoor(open: boolean, spatial?: SpatialAudioParams) {
+    const ctx = this.getContext();
+    if (!ctx || !this.masterGain || typeof ctx.createBuffer !== 'function') return;
+
+    const t = ctx.currentTime;
+    const dest = this.createSpatialNode(ctx, spatial);
+
+    // Wooden hinge creak: band-passed noise whose cutoff sweeps while opening/closing
+    const creakMs = open ? 0.55 : 0.5;
+    const bufferSize = Math.floor(ctx.sampleRate * creakMs);
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const out = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      // Low-frequency rasp so it reads as wood, not white noise
+      out[i] = (Math.random() * 2 - 1) * (0.6 + 0.4 * Math.sin((i / bufferSize) * Math.PI * 9));
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    const creak = ctx.createBiquadFilter();
+    creak.type = 'bandpass';
+    creak.Q.value = 1.6;
+    creak.frequency.setValueAtTime(open ? 140 : 320, t);
+    creak.frequency.exponentialRampToValueAtTime(open ? 520 : 130, t + creakMs);
+
+    const creakGain = ctx.createGain();
+    creakGain.gain.setValueAtTime(0.0001, t);
+    creakGain.gain.exponentialRampToValueAtTime(0.16, t + 0.12);
+    creakGain.gain.exponentialRampToValueAtTime(0.001, t + creakMs);
+
+    noiseSource.connect(creak);
+    creak.connect(creakGain);
+    creakGain.connect(dest.input);
+    noiseSource.start(t);
+    noiseSource.stop(t + creakMs);
+
+    // Latched timber clunk at the end of the swing
+    const clunkAt = t + creakMs - 0.04;
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(90, clunkAt);
+    osc.frequency.exponentialRampToValueAtTime(40, clunkAt + 0.06);
+    oscGain.gain.setValueAtTime(0.0001, clunkAt);
+    oscGain.gain.exponentialRampToValueAtTime(0.2, clunkAt + 0.012);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, clunkAt + 0.06);
+    osc.connect(oscGain);
+    oscGain.connect(dest.input);
+    osc.start(clunkAt);
+    osc.stop(clunkAt + 0.06);
+  }
+
   public playGunfire(weaponId: WeaponId, spatial?: SpatialAudioParams, isHeavy = false) {
     const ctx = this.getContext();
     if (!ctx || !this.masterGain) return;

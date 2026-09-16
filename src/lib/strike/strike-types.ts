@@ -126,6 +126,7 @@ export interface StrikeKeybindings {
   loadout: string;
   scoreboard: string;
   fullscreen: string;
+  interact: string;
 }
 
 export const DEFAULT_KEYBINDINGS: StrikeKeybindings = {
@@ -145,7 +146,8 @@ export const DEFAULT_KEYBINDINGS: StrikeKeybindings = {
   grenade: 'KeyG',
   loadout: 'KeyB',
   scoreboard: 'Tab',
-  fullscreen: 'KeyF'
+  fullscreen: 'KeyF',
+  interact: 'KeyE'
 };
 
 export type GraphicsPreset = 'low' | 'medium' | 'high' | 'ultra';
