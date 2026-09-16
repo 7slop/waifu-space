@@ -102,7 +102,8 @@ vi.mock('../../src/lib/dm/call', () => ({
     }
     setPaused = vi.fn((_paused: boolean) => {});
   },
-  setAudioSdpSurgery: vi.fn(() => {})
+  setAudioSdpSurgery: vi.fn(() => {}),
+  defaultPeerConfiguration: () => ({ iceServers: [] })
 }));
 
 import {

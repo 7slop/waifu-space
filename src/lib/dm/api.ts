@@ -191,6 +191,13 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
   const res = await fetch(path, { ...init, headers });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
+    // 503s in particular have bitten the call path here (a dropped answer or
+    // ICE signal leaves the caller stuck at have-local-offer with no media
+    // and a later "user disconnected"). Log which endpoint failed so it can
+    // be matched against the browser's "Failed to load resource" line.
+    if (res.status >= 500) {
+      console.warn(`[dm:api] ${res.status} on ${path}`, { body: (body as any)?.error });
+    }
     const err = new Error((body as any)?.error || `Request failed: ${res.status}`);
     (err as any).status = res.status;
     (err as any).body = body;

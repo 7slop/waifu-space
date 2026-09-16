@@ -49,7 +49,7 @@ import {
   fetchCallSignalsRequest
 } from './api';
 import { DmRealtime, RealtimePresencePayload } from './realtime';
-import { CallManager, CallState, setAudioSdpSurgery } from './call';
+import { CallManager, CallState, defaultPeerConfiguration, setAudioSdpSurgery } from './call';
 import { t } from '../i18n';
 
 // ---------------------------------------------------------------------------
@@ -1839,6 +1839,132 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Zero-server ICE self-test: builds two RTCPeerConnections with the app's
+ * EXACT default configuration and has them negotiate on this machine, in this
+ * browser, right now. No Supabase, no signal routes — pure WebRTC.
+ *
+ *   - ok:true  → this browser CAN establish a peer transport; a silent call
+ *                is therefore an app/signaling problem (watch [dm:api] 503s).
+ *   - ok:false → this machine's Chrome cannot do ICE at all, regardless of the
+ *                app. That is environmental (blocked UDP, odd sandbox/VM) and
+ *                explains BOTH the silent calls and the "user disconnected"
+ *                notices (the failed transport trips the 30s peer-gone timer).
+ */
+export interface DmIceSelfTestResult {
+  ok: boolean;
+  aCandidates: number;
+  bCandidates: number;
+  aGatheredTypes: string[];
+  bGatheredTypes: string[];
+  aIceGathering: RTCIceGatheringState | null;
+  bIceGathering: RTCIceGatheringState | null;
+  aConnection: RTCPeerConnectionState | null;
+  bConnection: RTCPeerConnectionState | null;
+  ms: number;
+  error?: string;
+}
+
+export function runDmIceSelfTest(timeoutMs = 12000): Promise<DmIceSelfTestResult> {
+  const ctor = typeof RTCPeerConnection !== 'undefined' ? RTCPeerConnection : null;
+  const empty = (): DmIceSelfTestResult => ({
+    ok: false,
+    aCandidates: 0,
+    bCandidates: 0,
+    aGatheredTypes: [],
+    bGatheredTypes: [],
+    aIceGathering: null,
+    bIceGathering: null,
+    aConnection: null,
+    bConnection: null,
+    ms: 0
+  });
+  if (!ctor) return Promise.resolve({ ...empty(), error: 'RTCPeerConnection unavailable in this browser' });
+
+  const pcA = new ctor(defaultPeerConfiguration());
+  const pcB = new ctor(defaultPeerConfiguration());
+  const aTypes: string[] = [];
+  const bTypes: string[] = [];
+  let aCount = 0;
+  let bCount = 0;
+
+  pcA.onicecandidate = (ev) => {
+    if (!ev.candidate) return;
+    aCount += 1;
+    const type = (ev.candidate as RTCIceCandidate).type;
+    if (type) aTypes.push(type);
+    void pcB.addIceCandidate(ev.candidate).catch(() => {});
+  };
+  pcB.onicecandidate = (ev) => {
+    if (!ev.candidate) return;
+    bCount += 1;
+    const type = (ev.candidate as RTCIceCandidate).type;
+    if (type) bTypes.push(type);
+    void pcA.addIceCandidate(ev.candidate).catch(() => {});
+  };
+
+  const snapshot = (ms: number, error?: string): DmIceSelfTestResult => ({
+    ok: pcA.connectionState === 'connected' && pcB.connectionState === 'connected',
+    aCandidates: aCount,
+    bCandidates: bCount,
+    aGatheredTypes: aTypes,
+    bGatheredTypes: bTypes,
+    aIceGathering: pcA.iceGatheringState,
+    bIceGathering: pcB.iceGatheringState,
+    aConnection: pcA.connectionState,
+    bConnection: pcB.connectionState,
+    ms,
+    error
+  });
+
+  return new Promise((resolve) => {
+    const started = Date.now();
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      try {
+        pcA.close();
+        pcB.close();
+      } catch {}
+    };
+    const settleNow = (error?: string) => {
+      close();
+      resolve(snapshot(Date.now() - started, error));
+    };
+
+    void (async () => {
+      try {
+        const offer = await pcA.createOffer();
+        await pcA.setLocalDescription(offer);
+        await pcB.setRemoteDescription(offer);
+        const answer = await pcB.createAnswer();
+        await pcB.setLocalDescription(answer);
+        await pcA.setRemoteDescription(answer);
+      } catch (err) {
+        settleNow(err instanceof Error ? err.message : String(err));
+        return;
+      }
+      const timer = setTimeout(() => settleNow(`timeout after ${timeoutMs}ms`), timeoutMs);
+      const check = () => {
+        const st = snapshot(Date.now() - started);
+        if (st.aConnection === 'connected' && st.bConnection === 'connected') {
+          clearTimeout(timer);
+          settleNow();
+        } else if (st.aConnection === 'failed' || st.bConnection === 'failed') {
+          clearTimeout(timer);
+          settleNow(`connection failed (A=${st.aConnection}, B=${st.bConnection})`);
+        }
+      };
+      pcA.onconnectionstatechange = check;
+      pcB.onconnectionstatechange = check;
+      pcA.oniceconnectionstatechange = check;
+      pcB.oniceconnectionstatechange = check;
+      check();
+    })();
+  });
+}
+
+/**
  * Console debug hook — call `JSON.stringify(__dmDebug(), null, 1)` in the
  * browser console during an active call to dump the connection state for both
  * peers.
@@ -1860,6 +1986,7 @@ export function dmCallDebug(): Record<string, unknown> {
 if (typeof window !== 'undefined') {
   (window as any).__dmDebug = Object.assign(dmCallDebug, {
     setSurgery: setAudioSdpSurgery,
-    setPaused: (p: boolean) => runtime.call?.setPaused(p)
+    setPaused: (p: boolean) => runtime.call?.setPaused(p),
+    selfTest: () => runDmIceSelfTest()
   });
 }
