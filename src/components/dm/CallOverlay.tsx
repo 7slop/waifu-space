@@ -204,15 +204,33 @@ function ActiveCallBar() {
 
   // Dedicated low-latency audio output for remote participant stream
   let audioRef: HTMLAudioElement | undefined;
+  const [audioEl, setAudioEl] = createSignal<HTMLAudioElement | null>(null);
   createEffect(() => {
-    const el = audioRef;
+    const el = audioEl();
     const stream = callRemoteStream();
+    const isDeafened = !!call().deafened;
     if (el) {
-      try {
-        el.srcObject = stream as any;
-      } catch {}
-      el.muted = call().deafened;
-      if (stream) void el.play?.().catch(() => {});
+      if (el.srcObject !== stream) {
+        try {
+          el.srcObject = stream as any;
+        } catch {}
+      }
+      el.muted = isDeafened;
+      el.volume = 1.0;
+      if (stream) {
+        const tryPlay = () => {
+          void el.play?.().catch(() => {
+            const unlock = () => {
+              void el.play?.().catch(() => {});
+              window.removeEventListener('pointerdown', unlock);
+              window.removeEventListener('keydown', unlock);
+            };
+            window.addEventListener('pointerdown', unlock, { once: true });
+            window.addEventListener('keydown', unlock, { once: true });
+          });
+        };
+        tryPlay();
+      }
     }
   });
 
@@ -338,7 +356,24 @@ function ActiveCallBar() {
         onPointerUp={onResizeUp}
         onPointerCancel={onResizeUp}
       />
-      <audio ref={audioRef} autoplay playsinline style={{ display: 'none' }} data-testid="dm-call-audio-player" />
+      <audio
+        ref={(el) => {
+          audioRef = el;
+          setAudioEl(el);
+        }}
+        autoplay
+        playsinline
+        style={{
+          position: 'fixed',
+          top: '-9999px',
+          left: '-9999px',
+          width: '1px',
+          height: '1px',
+          opacity: '0.001',
+          'pointer-events': 'none'
+        }}
+        data-testid="dm-call-audio-player"
+      />
     </div>
   );
 }

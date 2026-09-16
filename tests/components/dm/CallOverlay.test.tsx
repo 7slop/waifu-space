@@ -378,6 +378,8 @@ describe('CallOverlay', () => {
     expect(audioEl).toBeInTheDocument();
     expect(audioEl?.autoplay).toBe(true);
     expect(audioEl?.muted).toBe(false);
+    expect(audioEl?.style.display).not.toBe('none');
+    expect(audioEl?.volume).toBe(1);
 
     // Toggle deafen
     fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);

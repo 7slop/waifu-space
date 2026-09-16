@@ -463,7 +463,7 @@ function makeCallManager(): CallManager {
 }
 
 const [localStreamSignal, setLocalStreamSignal] = createSignal<MediaStream | null>(null);
-const [remoteStreamSignal, setRemoteStreamSignal] = createSignal<MediaStream | null>(null);
+const [remoteStreamSignal, setRemoteStreamSignal] = createSignal<MediaStream | null>(null, { equals: false });
 
 function wireCallManager(call: CallSession, manager: CallManager): void {
   manager.deps.onLocalStream = (stream) => {

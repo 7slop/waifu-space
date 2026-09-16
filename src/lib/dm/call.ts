@@ -93,9 +93,13 @@ export class CallManager {
       if (ev.candidate && this.callId) this.deps.onIceCandidate?.(ev.candidate.toJSON(), this.callId);
     };
     this.pc.ontrack = (ev) => {
-      if (!this.remoteStream) this.remoteStream = new MediaStream();
+      const stream = ev.streams && ev.streams[0] ? ev.streams[0] : (this.remoteStream ?? new MediaStream());
+      if (!this.remoteStream) this.remoteStream = stream;
       if (!this.remoteStream.getTracks().includes(ev.track)) {
         this.remoteStream.addTrack(ev.track);
+      }
+      if (ev.track.kind === 'audio') {
+        ev.track.enabled = true;
       }
       ev.track.onended = () => {
         if (this.remoteStream) {
@@ -559,7 +563,7 @@ export function optimizeAudioSdp(sdp: string): string {
   const opusMatch = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000/i);
   if (!opusMatch) return sdp;
   const pt = opusMatch[1];
-  const params = 'minptime=10;useinbandfec=1;usedtx=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000';
+  const params = 'minptime=10;useinbandfec=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=64000';
 
   const fmtpRegex = new RegExp(`(a=fmtp:${pt}\\s+)([^\\r\\n]*)`, 'i');
   if (fmtpRegex.test(sdp)) {

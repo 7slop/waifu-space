@@ -270,7 +270,7 @@ describe('CallManager', () => {
     const optimized = optimizeAudioSdp(sdpWithFmtp);
     expect(optimized).toContain('minptime=10');
     expect(optimized).toContain('useinbandfec=1');
-    expect(optimized).toContain('usedtx=1');
+    expect(optimized).toContain('usedtx=0');
     expect(optimized).toContain('stereo=0');
     expect(optimized).toContain('sprop-stereo=0');
     expect(optimized).toContain('maxaveragebitrate=64000');
@@ -283,7 +283,7 @@ describe('CallManager', () => {
       ''
     ].join('\r\n');
     const optimized2 = optimizeAudioSdp(sdpWithoutFmtp);
-    expect(optimized2).toContain('a=fmtp:111 minptime=10;useinbandfec=1;usedtx=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000');
+    expect(optimized2).toContain('a=fmtp:111 minptime=10;useinbandfec=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=64000');
 
     // Case 3: SDP with no opus
     const sdpNoOpus = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 0\r\na=rtpmap:0 PCMU/8000\r\n';
