@@ -40,8 +40,10 @@ export async function POST(event: { request: Request }) {
     return json({ success: false, error: error.message }, { status: 500 });
   }
 
-  const c = data as any;
-  const joined = !!c.joined;
+  // create_call_session returns { joined: boolean, call: { ... } } from the RPC.
+  const payload = (data as any) ?? {};
+  const joined = !!payload.joined;
+  const c = payload.call ?? payload;
   const call: CallSession = {
     id: c.id,
     conversationId: c.conversationId,
@@ -54,6 +56,10 @@ export async function POST(event: { request: Request }) {
     endedAt: c.endedAt ?? null,
     createdAt: c.createdAt
   };
+
+  if (!call.id) {
+    return json({ success: false, error: 'create_call_session returned no call' }, { status: 500 });
+  }
 
   return json({ success: true, joined, call }, { status: 201 });
 }

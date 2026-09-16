@@ -91,36 +91,29 @@ function buildFakeClient() {
         return { data: null, error: { message: 'both users must be part of the conversation' } };
       }
       // Mirrors the live RPC: a ringing/active call in the same conversation
-      // involving either side is returned as a `joined` join instead of a new call.
+      // involving either side is returned as a `joined` join instead of a new
+      // call. Returns the documented nested shape { joined, call }.
       const existing = db.call_sessions.find(
         c =>
           c.conversation_id === p_conversation_id &&
           (c.status === 'ringing' || c.status === 'active') &&
           (c.caller_id === p_user_id || c.callee_id === p_user_id || c.callee_id === p_callee_id)
       );
+      const toNestedCall = (call: any) => ({
+        id: call.id, conversationId: call.conversation_id, callerId: call.caller_id,
+        calleeId: call.callee_id, callType: call.call_type, status: call.status,
+        startedAt: call.started_at, answeredAt: call.answered_at, endedAt: call.ended_at,
+        createdAt: call.created_at
+      });
       if (existing) {
-        return {
-          data: {
-            id: existing.id, conversationId: existing.conversation_id, callerId: existing.caller_id,
-            calleeId: existing.callee_id, callType: existing.call_type, status: existing.status,
-            startedAt: existing.started_at, answeredAt: existing.answered_at, endedAt: existing.ended_at,
-            createdAt: existing.created_at, joined: true
-          },
-          error: null
-        };
+        return { data: { joined: true, call: toNestedCall(existing) }, error: null };
       }
       const call = {
         id: nextId('call'), conversation_id: p_conversation_id, caller_id: p_user_id, callee_id: p_callee_id,
         call_type: p_call_type, status: 'ringing', started_at: nowIso(), answered_at: null, ended_at: null, created_at: nowIso()
       };
       db.call_sessions.push(call);
-      return {
-        data: {
-          id: call.id, conversationId: call.conversation_id, callerId: call.caller_id, calleeId: call.callee_id,
-          callType: call.call_type, status: call.status, startedAt: call.started_at, answeredAt: null, endedAt: null, createdAt: call.created_at
-        },
-        error: null
-      };
+      return { data: { joined: false, call: toNestedCall(call) }, error: null };
     },
     get_pending_call_for_user: ({ p_user_id }: any) => {
       const pending = db.call_sessions
