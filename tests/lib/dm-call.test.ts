@@ -40,6 +40,7 @@ const streamObj = (s: FakeStream): MediaStream =>
 class FakePeerConnection {
   localDescription: { type: string; sdp: string } | null = null;
   remoteDescription: { type: string; sdp: string } | null = null;
+  signalingState: RTCSignalingState = 'stable';
   ontrack: ((ev: { track: unknown }) => void) | null = null;
   onicecandidate: ((ev: { candidate: { toJSON: () => object } | null }) => void) | null = null;
   addTrack = vi.fn((track: any) => ({
@@ -52,9 +53,11 @@ class FakePeerConnection {
   createAnswer = vi.fn(async () => ({ type: 'answer', sdp: 'answer-sdp' }));
   setLocalDescription = vi.fn(async (d: { type: string; sdp: string }) => {
     this.localDescription = d;
+    this.signalingState = d.type === 'offer' ? 'have-local-offer' : 'stable';
   });
   setRemoteDescription = vi.fn(async (d: { type: string; sdp: string }) => {
     this.remoteDescription = d;
+    this.signalingState = d.type === 'offer' ? 'have-remote-offer' : 'stable';
   });
   addIceCandidate = vi.fn(async () => undefined as any);
 }
@@ -418,5 +421,34 @@ describe('CallManager', () => {
     // Remote track ends
     remoteVideoTrack.onended?.();
     expect((remoteStreamRef as any).getVideoTracks().length).toBe(0);
+  });
+
+  it('queues a camera/screen track change made while ringing and signals it once connected', async () => {
+    installMedia();
+    const peers = setupPeers(1);
+    const reneg: any[] = [];
+    const manager = new CallManager({
+      getUserMedia: async () => streamObj(makeStream('audio', 'video')),
+      onRenegotiation: (offer, callId) => reneg.push({ offer, callId })
+    });
+    await manager.startLocal({ type: 'video', audio: true, video: true, screen: false });
+    await manager.createOffer('call-q1', 'peer-q1');
+
+    // Still ringing with the initial offer in flight -> signalingState is
+    // 'have-local-offer', so a track change must be queued, not dropped.
+    manager.toggleVideo();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reneg).toHaveLength(0);
+    expect((manager as any).needsRenegotiation).toBe(true);
+
+    // Caller answer arrives -> connection goes stable+connected; the queued
+    // renegotiation offer is now flushed to the peer.
+    await manager.adoptAnswer({ type: 'answer', sdp: 'answer-sdp' });
+    expect(manager.isConnected()).toBe(true);
+    expect((manager as any).needsRenegotiation).toBe(false);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reneg).toHaveLength(1);
+    expect(reneg[0].callId).toBe('call-q1');
+    expect(reneg[0].offer.sdp).toBe('offer-sdp');
   });
 });

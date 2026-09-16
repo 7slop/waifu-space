@@ -64,6 +64,9 @@ export class CallManager {
   private screenActive = false;
   private cameraTrack: MediaStreamTrack | null = null;
   private renegotiating = false;
+  /** Set when a track change could not be signaled yet (ringing / unstable /
+   *  already renegotiating); flushed once the call is connected and stable. */
+  private needsRenegotiation = false;
 
   constructor(deps: CallManagerDeps = {}) {
     this.deps = deps;
@@ -134,8 +137,15 @@ export class CallManager {
   }
 
   private renegotiate(): void {
-    if (this.state !== 'connected' || !this.pc || this.renegotiating || !this.callId) return;
-    if (this.pc.signalingState !== 'stable') return;
+    if (!this.pc || !this.callId) return;
+    if (this.state !== 'connected' || this.renegotiating || this.pc.signalingState !== 'stable') {
+      // The connection is not ready to accept a new description (ringing,
+      // mid-renegotiation, or a negotiation in flight): remember the request
+      // and flush it once the call becomes stable instead of dropping it.
+      this.needsRenegotiation = true;
+      return;
+    }
+    this.needsRenegotiation = false;
     this.renegotiating = true;
     void (async () => {
       try {
@@ -151,8 +161,14 @@ export class CallManager {
         // renegotiation is best-effort
       } finally {
         this.renegotiating = false;
+        this.flushPendingRenegotiation();
       }
     })();
+  }
+
+  /** Sends a queued renegotiation offer once the call is stable/connected. */
+  private flushPendingRenegotiation(): void {
+    if (this.needsRenegotiation) this.renegotiate();
   }
 
   private async applyVideoTrack(track: MediaStreamTrack | null): Promise<void> {
@@ -291,6 +307,7 @@ export class CallManager {
       const optimized = { type: answer.type, sdp: optimizeAudioSdp(answer.sdp ?? '') };
       await this.pc!.setLocalDescription(optimized);
       this.setState('connected');
+      this.flushPendingRenegotiation();
       return optimized;
     } catch {
       this.setState('failed');
@@ -305,6 +322,7 @@ export class CallManager {
   markConnected(): void {
     if (this.state === 'ringing' || this.state === 'active') {
       this.setState('connected');
+      this.flushPendingRenegotiation();
     }
   }
 
@@ -329,6 +347,7 @@ export class CallManager {
         }
       }
       this.setState('connected');
+      this.flushPendingRenegotiation();
     } catch {
       if (this.pc.signalingState !== 'stable') {
         this.setState('failed');
@@ -540,6 +559,7 @@ export class CallManager {
     this.videoSender = null;
     this.screenActive = false;
     this.renegotiating = false;
+    this.needsRenegotiation = false;
     this.setState(reason === 'canceled' ? 'idle' : reason === 'declined' ? 'ended' : 'ended');
   }
 }
