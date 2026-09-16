@@ -50,7 +50,12 @@ export function startPresenceAutoDetect(opts?: { idleMs?: number; heartbeatMs?: 
   const evalMs = opts?.evalMs ?? EVAL_MS;
   const hiddenMs = opts?.hiddenMs ?? HIDDEN_MS;
 
-  const poke = () => { lastActivity = Date.now(); };
+  const poke = () => {
+    lastActivity = Date.now();
+    // Re-flush right away so an auto 'idle' clears to 'online' as soon as the
+    // user is active again, instead of waiting for the next eval tick.
+    void flush();
+  };
 
   const isAutoManaged = (): boolean => {
     const s = dmState.myPresence?.status;
@@ -116,6 +121,10 @@ export function startPresenceAutoDetect(opts?: { idleMs?: number; heartbeatMs?: 
       // treat the return as activity, so the restored status is an online one.
       navigating = false;
       poke();
+      // The heartbeat interval counts from setInterval creation, not from the
+      // last fire —— after a long hidden spell the next tick may be up to a
+      // full interval away, leaving the stored row stale. Heartbeat now.
+      void runHeartbeat();
     } else {
       cancelHiddenTimer();
     }
@@ -128,6 +137,18 @@ export function startPresenceAutoDetect(opts?: { idleMs?: number; heartbeatMs?: 
     // otherwise the refreshed page rehydrates the stored presence as offline.
     navigating = true;
     cancelHiddenTimer();
+  };
+
+  const onPageShow = (e: PageTransitionEvent) => {
+    if (stopped || !e.persisted) return;
+    // Back-forward cache restore (or same-tab back): the document was NOT
+    // reloaded, so the monitor must re-arm — pagehide set navigating=true and
+    // the hidden offline write would otherwise never be cleared, or worse the
+    // deferred write would fire on a tab the user has returned to.
+    navigating = false;
+    cancelHiddenTimer();
+    poke();
+    void runHeartbeat();
   };
 
   const onActivity = () => { if (!stopped) poke(); };
@@ -144,6 +165,7 @@ export function startPresenceAutoDetect(opts?: { idleMs?: number; heartbeatMs?: 
   document.addEventListener('pointermove', onThrottledMove, { passive: true });
   document.addEventListener('visibilitychange', onVisibilityChange);
   window.addEventListener('pagehide', onPageHide);
+  window.addEventListener('pageshow', onPageShow);
 
   const evalInterval = setInterval(() => { void flush(); }, evalMs);
   const heartbeatInterval = setInterval(() => { void runHeartbeat(); }, heartbeatMs);
@@ -157,6 +179,7 @@ export function startPresenceAutoDetect(opts?: { idleMs?: number; heartbeatMs?: 
     document.removeEventListener('pointermove', onThrottledMove as EventListener);
     document.removeEventListener('visibilitychange', onVisibilityChange);
     window.removeEventListener('pagehide', onPageHide);
+    window.removeEventListener('pageshow', onPageShow);
     clearInterval(evalInterval);
     clearInterval(heartbeatInterval);
     cancelHiddenTimer();
