@@ -1085,8 +1085,13 @@ export async function startCall(type: CallType): Promise<boolean> {
     }
     return true;
   } catch (err) {
-    console.error('DEBUG startCall error:', err);
-    setDmState('error', 'Call could not be started');
+    const anyErr = err as any;
+    if (anyErr?.status === 409) {
+      setDmState('error', anyErr?.body?.error || (typeof anyErr?.message === 'string' ? anyErr.message : 'Callee is busy on another call'));
+    } else {
+      console.error('DEBUG startCall error:', err);
+      setDmState('error', 'Call could not be started');
+    }
     return false;
   }
 }

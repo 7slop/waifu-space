@@ -972,9 +972,9 @@ BEGIN
     RAISE EXCEPTION 'both users must be part of the conversation';
   END IF;
 
-  -- Issue 4: if the callee is already ringing/active on a call in THIS
-  -- conversation (or the caller already has an ongoing call here), join that
-  -- existing session instead of starting a second ringing session.
+  -- If the callee is already ringing/active on a call in THIS conversation
+  -- (or the caller already has an ongoing call here), join that existing
+  -- session instead of starting a second ringing session.
   SELECT * INTO v_join
     FROM public.call_sessions
    WHERE conversation_id = p_conversation_id
@@ -999,6 +999,24 @@ BEGIN
         'createdAt', v_join.created_at
       )
     );
+  END IF;
+
+  -- No live call in this conversation; make sure neither party is pinned to a
+  -- live call in another conversation before inserting a fresh session.
+  IF EXISTS (
+    SELECT 1 FROM public.call_sessions
+    WHERE status IN ('ringing', 'active')
+      AND (caller_id = p_user_id OR callee_id = p_user_id)
+  ) THEN
+    RAISE EXCEPTION 'caller is already in a call';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.call_sessions
+    WHERE status IN ('ringing', 'active')
+      AND (caller_id = p_callee_id OR callee_id = p_callee_id)
+  ) THEN
+    RAISE EXCEPTION 'callee is busy on another call';
   END IF;
 
   INSERT INTO public.call_sessions (conversation_id, caller_id, callee_id, call_type, status)

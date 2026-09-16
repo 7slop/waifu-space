@@ -108,6 +108,17 @@ function buildFakeClient() {
       if (existing) {
         return { data: { joined: true, call: toNestedCall(existing) }, error: null };
       }
+      // Mirrors migration reject_overlapping_call_sessions: no live call in this
+      // conversation, but a party pinned to a live call elsewhere rejects.
+      const liveElsewhere = (userId: string) =>
+        db.call_sessions.some(
+          c =>
+            (c.status === 'ringing' || c.status === 'active') &&
+            c.conversation_id !== p_conversation_id &&
+            (c.caller_id === userId || c.callee_id === userId)
+        );
+      if (liveElsewhere(p_user_id)) return { data: null, error: { message: 'caller is already in a call' } };
+      if (liveElsewhere(p_callee_id)) return { data: null, error: { message: 'callee is busy on another call' } };
       const call = {
         id: nextId('call'), conversation_id: p_conversation_id, caller_id: p_user_id, callee_id: p_callee_id,
         call_type: p_call_type, status: 'ringing', started_at: nowIso(), answered_at: null, ended_at: null, created_at: nowIso()
@@ -393,6 +404,68 @@ describe('DM call routes', () => {
     const body = await pending.json();
     expect(body.success).toBe(true);
     expect(body.call).toMatchObject({ id: call.id, status: 'ringing', callerId: A, calleeId: B });
+  });
+
+  it('rejects a caller already pinned to a live call in another conversation with 409', async () => {
+    // A rings B in CONV, then A tries to start a second call in OTHER.
+    await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    );
+
+    const OTHER = '22222222-2222-2222-2222-222288888888';
+    mocks.state.db.conversations.push({ id: OTHER, type: 'dm', created_at: nowIso(), updated_at: nowIso() });
+    mocks.state.db.conversation_participants.push(
+      { conversation_id: OTHER, user_id: A, joined_at: nowIso(), last_read_at: nowIso() },
+      { conversation_id: OTHER, user_id: B, joined_at: nowIso(), last_read_at: nowIso() }
+    );
+
+    const res = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: OTHER, calleeId: B, callType: 'voice' })
+      })
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('You are already in a call');
+  });
+
+  it('rejects a callee already busy on a live call elsewhere with 409', async () => {
+    const C = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    mocks.state.db.profiles.push({ id: C, username: 'carol', avatar_url: '', bio: 'hi' });
+
+    // A rings B in CONV; B (the callee) is now pinned to a live call there.
+    await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(A, 'alice')}` },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    );
+
+    const OTHER = '22222222-2222-2222-2222-222288888888';
+    mocks.state.db.conversations.push({ id: OTHER, type: 'dm', created_at: nowIso(), updated_at: nowIso() });
+    mocks.state.db.conversation_participants.push(
+      { conversation_id: OTHER, user_id: C, joined_at: nowIso(), last_read_at: nowIso() },
+      { conversation_id: OTHER, user_id: B, joined_at: nowIso(), last_read_at: nowIso() }
+    );
+
+    // C tries to call the already-busy B in a different conversation.
+    const res = await callsPOST(
+      req('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ticket(C, 'carol')}` },
+        body: JSON.stringify({ conversationId: OTHER, calleeId: B, callType: 'video' })
+      })
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('Callee is busy on another call');
   });
 
   it('returns call:null from pending when the user has no live call', async () => {

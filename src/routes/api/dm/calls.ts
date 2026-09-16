@@ -37,6 +37,12 @@ export async function POST(event: { request: Request }) {
     if (error.message.includes('both users must be part')) {
       return badRequestResponse('Both users must be part of the conversation');
     }
+    if (error.message.includes('caller is already in a call')) {
+      return json({ success: false, error: 'You are already in a call' }, { status: 409 });
+    }
+    if (error.message.includes('callee is busy on another call')) {
+      return json({ success: false, error: 'Callee is busy on another call' }, { status: 409 });
+    }
     return json({ success: false, error: error.message }, { status: 500 });
   }
 
