@@ -54,6 +54,7 @@ export function WaifuSweeperGame() {
   const [seconds, setSeconds] = createSignal(0);
   const [result, setResult] = createSignal<Result | null>(null);
   const [lbRefreshKey, setLbRefreshKey] = createSignal(0);
+  const [flagMode, setFlagMode] = createSignal(false);
 
   let tickerId: ReturnType<typeof setInterval> | null = null;
 
@@ -188,7 +189,7 @@ export function WaifuSweeperGame() {
           class={`ws-cell ${cell?.flagged ? 'ws-flagged' : ''}`}
           data-testid={`cell-${r}-${c}`}
           aria-label={cell?.flagged ? t('sweeper.flagLabel') : t('sweeper.hiddenLabel')}
-          onClick={() => onReveal(r, c)}
+          onClick={() => (flagMode() ? onFlag(r, c) : onReveal(r, c))}
           onContextMenu={e => {
             e.preventDefault();
             onFlag(r, c);
@@ -245,6 +246,17 @@ export function WaifuSweeperGame() {
             : started()
               ? '🙂'
               : '😌'}
+        </button>
+        <button
+          type="button"
+          class={`ws-face ${flagMode() ? 'ws-face-active' : ''}`}
+          data-testid="ws-flag-toggle"
+          onClick={() => setFlagMode(m => !m)}
+          aria-pressed={flagMode()}
+          aria-label={t('sweeper.flagMode')}
+          title={t('sweeper.flagMode')}
+        >
+          🚩
         </button>
         <div class="ws-stat">
           <span class="ws-stat-label"><PhTimer /> {t('sweeper.time')}</span>

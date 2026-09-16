@@ -167,6 +167,14 @@ export class StrikeBabylonEngine {
   public keybindings: StrikeKeybindings = { ...DEFAULT_KEYBINDINGS };
   private keysDown: Record<string, boolean> = {};
   private mouseButtons: Record<number, boolean> = {};
+  // Synthetic touch-sourced input (mobile joystick / drag-look / on-screen buttons)
+  private touchMoveX = 0;
+  private touchMoveY = 0;
+  private touchLookX = 0;
+  private touchLookY = 0;
+  private touchFiring = false;
+  private touchSecondary = false;
+  private touchCrouch = false;
   public mouseSensitivity = 0.0012; // Default 1.2 sensitivity
   public defaultFov = 1.25; // ~72 deg vertical in radians (standard 85 deg horizontal)
   public graphicsSettings: StrikeGraphicsSettings = { ...DEFAULT_GRAPHICS_SETTINGS };
@@ -432,6 +440,7 @@ export class StrikeBabylonEngine {
     this.isPlaying = false;
     this.keysDown = {};
     this.mouseButtons = {};
+    this.clearTouchInput();
   }
 
   public setPaused(paused: boolean) {
@@ -439,6 +448,7 @@ export class StrikeBabylonEngine {
     if (paused) {
       this.keysDown = {};
       this.mouseButtons = {};
+      this.clearTouchInput();
       this.grenadeCharging = false;
       this.hideGrenadeTrajectory();
       this.velocity.x = 0;
@@ -1609,7 +1619,7 @@ export class StrikeBabylonEngine {
     this.refreshGlowExclusions();
 
     // Grenade aim trajectory preview while holding LMB to charge the throw
-    if (this.grenadeArmed && this.grenadeCharging && this.mouseButtons[0]) {
+    if (this.grenadeArmed && this.grenadeCharging && (this.mouseButtons[0] || this.touchFiring)) {
       this.updateGrenadeTrajectory();
     } else if (this.grenadeTrajectoryPreview && !this.grenadeCharging) {
       this.hideGrenadeTrajectory();
@@ -1629,6 +1639,17 @@ export class StrikeBabylonEngine {
     if (this.isInvulnerable && performance.now() >= this.invulnerableUntil) {
       this.isInvulnerable = false;
       this.callbacks.onInvulnerableChange?.(false);
+    }
+
+    // Touch look pad: raw pixel deltas scaled by the same sensitivity as the mouse
+    if (this.touchLookX !== 0 || this.touchLookY !== 0) {
+      const sens = this.isScoped ? this.mouseSensitivity * 0.4 : this.mouseSensitivity;
+      this.camera.rotation.y += this.touchLookX * sens;
+      this.camera.rotation.x += this.touchLookY * sens;
+      this.touchLookX = 0;
+      this.touchLookY = 0;
+      const maxPitch = (89 * Math.PI) / 180;
+      this.camera.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, this.camera.rotation.x));
     }
 
     // Trauma screen shake that decays smoothly back to neutral (pitch only, zero camera roll).
@@ -1714,7 +1735,7 @@ export class StrikeBabylonEngine {
     }
 
     // Crouch and Walk states (disabled while paused in ESC menu)
-    this.isCrouching = !this.isPaused && (!!this.keysDown[this.keybindings.crouch] || !!this.keysDown['KeyC'] || !!this.keysDown['ControlLeft']);
+    this.isCrouching = !this.isPaused && (!!this.keysDown[this.keybindings.crouch] || !!this.keysDown['KeyC'] || !!this.keysDown['ControlLeft'] || this.touchCrouch);
     this.isWalking = !this.isPaused && (!!this.keysDown[this.keybindings.walk] || !!this.keysDown['ShiftLeft'] || !!this.keysDown['ShiftRight']);
 
     // Speeds in m/s (CS-accurate competitive scale: ~250 units/s ≈ 6.5 m/s)
@@ -1744,6 +1765,9 @@ export class StrikeBabylonEngine {
       if (this.keysDown[this.keybindings.backward]) forward -= 1;
       if (this.keysDown[this.keybindings.left]) strafe -= 1;
       if (this.keysDown[this.keybindings.right]) strafe += 1;
+      // Virtual joystick axes add on top of keyboard input.
+      if (Math.abs(this.touchMoveX) > 0.02) strafe += this.touchMoveX;
+      if (Math.abs(this.touchMoveY) > 0.02) forward += this.touchMoveY;
     }
 
     // Transform movement direction by camera yaw
@@ -1953,12 +1977,12 @@ export class StrikeBabylonEngine {
     }
 
     // Full-auto continuous shooting / knife holding (blocked while a grenade is armed)
-    if (this.mouseButtons[0] && !this.grenadeArmed) {
+    if ((this.mouseButtons[0] || this.touchFiring) && !this.grenadeArmed) {
       if (def.isAutomatic || this.activeWeaponId === 'knife') {
         this.shoot(false);
       }
     }
-    if (this.mouseButtons[2] && this.activeWeaponId === 'knife') {
+    if ((this.mouseButtons[2] || this.touchSecondary) && this.activeWeaponId === 'knife') {
       this.shoot(true);
     }
 
@@ -1980,6 +2004,94 @@ export class StrikeBabylonEngine {
 
   public setSensitivity(sens: number) {
     this.mouseSensitivity = Math.max(0.0005, Math.min(0.01, sens * 0.001));
+  }
+
+  /**
+   * Touch controls (mobile). The on-screen joystick/look-pad/buttons feed a
+   * synthetic input stream that merges into the same player update path as
+   * keyboard + mouse input.
+   */
+  public clearTouchInput() {
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
+    this.touchLookX = 0;
+    this.touchLookY = 0;
+    this.touchFiring = false;
+    this.touchSecondary = false;
+    this.touchCrouch = false;
+  }
+
+  /** Virtual stick axes, each in [-1, 1]. x = strafe, y = forward (positive = toward view). */
+  public setTouchMove(x: number, y: number) {
+    this.touchMoveX = x;
+    this.touchMoveY = y;
+  }
+
+  /** Pixel deltas from the look pad, consumed (and zeroed) each update tick. */
+  public addTouchLook(dx: number, dy: number) {
+    this.touchLookX += dx;
+    this.touchLookY += dy;
+  }
+
+  /** Mirrors LMB press/release (fires, or charges/releases armed grenades). */
+  public setTouchFire(pressed: boolean) {
+    if (pressed && !this.touchFiring) {
+      if (this.grenadeArmed) {
+        if (this.grenadeCount <= 0) {
+          this.toggleGrenadeArmed();
+        } else {
+          this.grenadeCharging = true;
+        }
+      } else {
+        this.shoot(false);
+      }
+    }
+    if (!pressed && this.touchFiring && this.grenadeArmed && this.grenadeCharging) {
+      this.grenadeCharging = false;
+      this.throwGrenade();
+    }
+    this.touchFiring = pressed;
+  }
+
+  /** Mirrors RMB press/release (melee heavy attack, or scope toggle). */
+  public setTouchSecondary(pressed: boolean) {
+    if (pressed && !this.touchSecondary) {
+      const def = WEAPON_CATALOG[this.activeWeaponId];
+      if (def.category === 'melee' || this.activeWeaponId === 'knife' || this.activeWeaponId === 'katana') {
+        this.shoot(true);
+      } else {
+        this.toggleScope();
+      }
+    }
+    this.touchSecondary = pressed;
+  }
+
+  public setTouchCrouch(pressed: boolean) {
+    this.touchCrouch = pressed;
+  }
+
+  /** Edge-triggered jump request (consumed on next landing/update). */
+  public queueTouchJump() {
+    this.jumpQueued = true;
+  }
+
+  /** Next/previous weapon in the loadout (joystick-free alternative to the mouse wheel). */
+  public cycleWeapon(dir: 1 | -1) {
+    if (!this.isPlaying || this.isPaused) return;
+    const cycle: WeaponId[] = [];
+    const seen = new Set<WeaponId>();
+    for (const id of [this.loadout.primary, this.loadout.secondary, this.loadout.melee] as WeaponId[]) {
+      if (!seen.has(id)) {
+        cycle.push(id);
+        seen.add(id);
+      }
+    }
+    const curIdx = cycle.indexOf(this.activeWeaponId);
+    if (curIdx === -1) return;
+    const nextIdx = dir > 0
+      ? (curIdx + 1) % cycle.length
+      : (curIdx - 1 + cycle.length) % cycle.length;
+    this.switchWeapon(cycle[nextIdx]);
   }
 
   public setFov(fovDeg: number) {

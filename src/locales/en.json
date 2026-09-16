@@ -871,6 +871,7 @@
   "sweeper": {
     "title": "WaifuSweeper",
     "minesLeft": "Mines",
+    "flagMode": "Flag mode: tap a cell to place/remove a flag",
     "time": "Time",
     "easy": "Easy",
     "medium": "Medium",

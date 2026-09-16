@@ -871,6 +871,7 @@
   "sweeper": {
     "title": "ワイフスイーパー",
     "minesLeft": "地雷",
+    "flagMode": "旗モード：セルをタップして旗を置く/外す",
     "time": "時間",
     "easy": "かんたん",
     "medium": "ふつう",

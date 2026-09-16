@@ -104,7 +104,7 @@ src/app.tsx            Root shell: nav, theme, modals, notification scheduler
 src/entry-client.tsx   Client entry
 src/entry-server.tsx   Server entry
 src/routes/            Route definitions + server API routes (see below)
-src/components/        ~36 .tsx UI components (WaifuAvatar, WaifuDefenseGame, WaifuStrikeGame, WaifuSweeperGame, WaifuBirdsGame, MinigameLeaderboard, Calendar*, Editor*, RPG, etc.)
+src/components/        ~36 .tsx UI components (WaifuAvatar, WaifuDefenseGame, WaifuStrikeGame, WaifuSweeperGame, WaifuBirdsGame, MinigameLeaderboard, StrikeTouchControls, Calendar*, Editor*, RPG, etc.)
 src/lib/               Shared + client logic
   store.ts              Central reactive Solid store (~2600 lines) + all cloud sync + localStorage persistence (waifu_space_data_v1_acct_<userId>)
   personality.ts        5 archetypes + dialogue engine (Tsundere/Kuudere/Yandere/Deredere/Dandere)
@@ -117,6 +117,7 @@ src/lib/               Shared + client logic
   requirements/, llm.ts, intents.ts
   server/               Server-only logic
   strike/               Babylon.js Strike game engine
+    strike-babylon-engine.ts  Contains the touch-input API for mobile (setTouchMove/virtual stick, addTouchLook, setTouchFire, queueTouchJump, cycleWeapon, etc.) — synthetic input merges into the same update path as keyboard/mouse.
 src/locales/           en.json + ja.json (keep both in sync when adding keys)
 src/styles/            themes.css, style.css, waifu.css, calendar.css, settings.css, rpg.css, timebudget.css, strike.css, editor.css
 tests/                 setup.ts + components/ + lib/ + server/ test suites

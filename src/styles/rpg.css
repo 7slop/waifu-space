@@ -2401,3 +2401,79 @@
   color: var(--text-secondary);
 }
 
+
+/* ─── Mobile-only game layout tweaks ────────────────────────────────────────── */
+
+.ws-face-active {
+  border-color: rgba(255, 117, 151, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 92, 138, 0.35);
+}
+
+@media (max-width: 560px) {
+  .waifu-defense-wrapper,
+  .ws-game {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .defense-hud {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .defense-hud .btn-sakura-nova,
+  .defense-hud .btn-start-wave,
+  .defense-hud .btn-retry {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  .defense-canvas {
+    touch-action: manipulation;
+  }
+
+  /* Tighter grid so the full board fits comfortably on small phones */
+  .ws-grid {
+    gap: 2px;
+  }
+
+  .ws-cell {
+    border-radius: 5px;
+  }
+
+  .ws-header {
+    max-width: 100%;
+  }
+
+  .ws-board-wrap {
+    max-width: 100%;
+  }
+
+  /* Flappy birds: scale the 400x600 stage down to fit narrow screens.
+     transform: scale preserves all inline px layout; the negative bottom margin
+     reclaims the leftover flow height so the footnote/leaderboard stay tight. */
+  .wfb-game {
+    padding: 14px;
+  }
+
+  .wfb-stage {
+    transform: scale(0.82);
+    transform-origin: top center;
+    margin-bottom: calc(600px * (1 - 0.82) * -1);
+  }
+}
+
+@media (max-width: 380px) {
+  .wfb-stage {
+    transform: scale(0.72);
+    transform-origin: top center;
+    margin-bottom: calc(600px * (1 - 0.72) * -1);
+  }
+}
+
+/* Allow wide boards to center rather than overflow when the pane is small */
+@media (max-width: 900px) {
+  .minigame-lazy-wrap {
+    padding: 0;
+  }
+}
