@@ -4,7 +4,8 @@ import { DmProfilePopover } from '../../../src/components/dm/DmProfilePopover';
 import { resetForDmTests, stubFetch } from '../../dm-helpers';
 
 vi.mock('../../../src/lib/dm/call', () => ({
-  CallManager: class {}
+  CallManager: class {},
+  setAudioSdpSurgery: vi.fn(() => {})
 }));
 
 const rect = (left: number, top: number, height = 40): DOMRect =>

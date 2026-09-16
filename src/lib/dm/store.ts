@@ -49,7 +49,7 @@ import {
   fetchCallSignalsRequest
 } from './api';
 import { DmRealtime, RealtimePresencePayload } from './realtime';
-import { CallManager, CallState } from './call';
+import { CallManager, CallState, setAudioSdpSurgery } from './call';
 import { t } from '../i18n';
 
 // ---------------------------------------------------------------------------
@@ -1852,10 +1852,14 @@ export function dmCallDebug(): Record<string, unknown> {
     pendingIceCount: dmState.pendingIce.length,
     manager: manager ? manager.debugSnapshot() : null,
     hasLocalStream: !!localStreamSignal() || !!runtime.call?.localMedia,
-    hasRemoteStream: !!remoteStreamSignal() || !!runtime.call?.remoteMedia
+    hasRemoteStream: !!remoteStreamSignal() || !!runtime.call?.remoteMedia,
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null
   };
 }
 
 if (typeof window !== 'undefined') {
-  (window as any).__dmDebug = dmCallDebug;
+  (window as any).__dmDebug = Object.assign(dmCallDebug, {
+    setSurgery: setAudioSdpSurgery,
+    setPaused: (p: boolean) => runtime.call?.setPaused(p)
+  });
 }

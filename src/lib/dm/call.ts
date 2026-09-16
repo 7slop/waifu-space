@@ -73,6 +73,7 @@ export class CallManager {
   private candidateEventsSent = 0;
   private candidatesReceived = 0;
   private candidatesApplied = 0;
+  private debugErrors: string[] = [];
   private screenTrack: MediaStreamTrack | null = null;
   private screenStream: MediaStream | null = null;
   private screenActive = false;
@@ -385,7 +386,8 @@ export class CallManager {
       const optimized = { type: offer.type, sdp: optimizeAudioSdp(offer.sdp ?? '') };
       await this.pc!.setLocalDescription(optimized);
       return optimized;
-    } catch {
+    } catch (err) {
+      this.debugErrors.push(`createOffer: ${err instanceof Error ? err.message : String(err)}`);
       this.setState('failed');
       return null;
     }
@@ -416,13 +418,25 @@ export class CallManager {
           // stale/unusable candidate - ignore
         }
       }
-      const answer = await this.pc!.createAnswer();
+      let answer: RTCSessionDescription;
+      try {
+        answer = await this.pc!.createAnswer();
+      } catch (err) {
+        this.debugErrors.push(`acceptOffer.createAnswer: ${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      }
       const optimized = { type: answer.type, sdp: optimizeAudioSdp(answer.sdp ?? '') };
-      await this.pc!.setLocalDescription(optimized);
+      try {
+        await this.pc!.setLocalDescription(optimized);
+      } catch (err) {
+        this.debugErrors.push(`acceptOffer.setLocalDescription: ${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      }
       this.setState('connected');
       this.flushPendingRenegotiation();
       return optimized;
-    } catch {
+    } catch (err) {
+      this.debugErrors.push(`acceptOffer: ${err instanceof Error ? err.message : String(err)}`);
       this.setState('failed');
       return null;
     }
@@ -469,7 +483,8 @@ export class CallManager {
       }
       this.setState('connected');
       this.flushPendingRenegotiation();
-    } catch {
+    } catch (err) {
+      this.debugErrors.push(`adoptAnswer: ${err instanceof Error ? err.message : String(err)}`);
       if (this.pc.signalingState !== 'stable') {
         this.setState('failed');
       }
@@ -667,7 +682,11 @@ export class CallManager {
       localTracks: local,
       remoteTracks: remote,
       localMediaTracks: this.localMedia?.getTracks().map((t) => t.kind) ?? [],
-      remoteMediaTracks: this.remoteMedia?.getTracks().map((t) => t.kind) ?? []
+      remoteMediaTracks: this.remoteMedia?.getTracks().map((t) => t.kind) ?? [],
+      audioSdpSurgeryEnabled,
+      localSdp: pc?.localDescription?.sdp ?? null,
+      remoteSdp: pc?.remoteDescription?.sdp ?? null,
+      lastErrors: this.debugErrors.slice(-10)
     };
   }
 
@@ -759,8 +778,18 @@ export function applyAudioSenderOptimizations(sender: RTCRtpSender | null | unde
   }
 }
 
+/**
+ * Runtime toggle for the SDP audio-param surgery below. Debugging aid: when
+ * disabled, offers/answers are sent verbatim from the browser. Exposed on
+ * `window.__dmDebug.setSurgery(false)`.
+ */
+export let audioSdpSurgeryEnabled = true;
+export function setAudioSdpSurgery(enabled: boolean): void {
+  audioSdpSurgeryEnabled = enabled;
+}
+
 export function optimizeAudioSdp(sdp: string): string {
-  if (!sdp || typeof sdp !== 'string') return sdp;
+  if (!sdp || typeof sdp !== 'string' || !audioSdpSurgeryEnabled) return sdp;
   const opusMatch = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000/i);
   if (!opusMatch) return sdp;
   const pt = opusMatch[1];

@@ -101,7 +101,8 @@ vi.mock('../../src/lib/dm/call', () => ({
       this.deps.onStateChange?.();
     }
     setPaused = vi.fn((_paused: boolean) => {});
-  }
+  },
+  setAudioSdpSurgery: vi.fn(() => {})
 }));
 
 import {

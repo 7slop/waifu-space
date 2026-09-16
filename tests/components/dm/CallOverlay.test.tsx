@@ -74,7 +74,8 @@ vi.mock('../../../src/lib/dm/call', () => ({
     hangUp(): void {
       this.currentState = 'ended';
     }
-  }
+  },
+  setAudioSdpSurgery: vi.fn(() => {})
 }));
 
 const callSession = (over: Partial<CallSession> = {}): CallSession => ({

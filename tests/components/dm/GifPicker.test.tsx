@@ -5,7 +5,8 @@ import { dmState, gifLoadFavorites, gifSearch, setDmState } from '../../../src/l
 import { resetForDmTests, stubFetch, flush } from '../../dm-helpers';
 
 vi.mock('../../../src/lib/dm/call', () => ({
-  CallManager: class {}
+  CallManager: class {},
+  setAudioSdpSurgery: vi.fn(() => {})
 }));
 
 function seedConv() {
