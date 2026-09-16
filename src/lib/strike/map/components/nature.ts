@@ -199,7 +199,7 @@ export function createOakFence(b: MapBuilder, prefix: string, pos: Vector3, leng
   const len = Math.max(1.5, Math.min(8, length));
   b.beginComponent('oakFence', prefix, pos, { length: len, alongZ });
 
-  const x = (v: number, zOffset: number): Vector3 => (alongZ ? new Vector3(pos.x + zOffset, v, pos.z) : new Vector3(pos.x, v, pos.z + zOffset));
+  const x = (v: number, o: number): Vector3 => (alongZ ? new Vector3(pos.x, v, pos.z + o) : new Vector3(pos.x + o, v, pos.z));
 
   // Posts at both ends
   const postD = 0.14;
@@ -209,15 +209,17 @@ export function createOakFence(b: MapBuilder, prefix: string, pos: Vector3, leng
 
   // Rails
   const railTh = 0.07;
-  meshes.push(b.addBox(`${prefix}_RailA`, postD, railTh, len, x(pos.y + 1.15, len / 2), mats.darkWood, true, false));
-  meshes.push(b.addBox(`${prefix}_RailB`, postD, railTh, len, x(pos.y + 0.7, len / 2), mats.darkWood, true, false));
+  const railDims = (): [number, number, number] => (alongZ ? [postD, railTh, len] : [len, railTh, postD]);
+  meshes.push(b.addBox(`${prefix}_RailA`, ...railDims(), x(pos.y + 1.15, len / 2), mats.darkWood, true, false));
+  meshes.push(b.addBox(`${prefix}_RailB`, ...railDims(), x(pos.y + 0.7, len / 2), mats.darkWood, true, false));
 
   // Pickets with air between wood
   const picketW = 0.1;
   const picketGap = 0.12;
   const step = picketW + picketGap;
+  const picketDims = (): [number, number, number] => (alongZ ? [picketW, postH - 0.12, 0.05] : [0.05, postH - 0.12, picketW]);
   for (let o = step / 2; o < len; o += step) {
-    const picket = b.addBox(`${prefix}_Pk${o.toFixed(2)}`, picketW, postH - 0.12, 0.05, x(pos.y + postH / 2 - 0.06, o), mats.timber, false, true);
+    const picket = b.addBox(`${prefix}_Pk${o.toFixed(2)}`, ...picketDims(), x(pos.y + postH / 2 - 0.06, o), mats.timber, false, true);
     meshes.push(picket);
   }
 

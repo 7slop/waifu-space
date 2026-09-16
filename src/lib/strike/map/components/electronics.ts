@@ -69,6 +69,12 @@ export function createServerRack(
   meshes.push(b.addBox(`${prefix}_Base`, w + 0.08, 0.08, d + 0.08, new Vector3(pos.x, pos.y + 0.04, pos.z), mats.metal, true, true));
   meshes.push(b.addBox(`${prefix}_Top`, w + 0.08, 0.08, d + 0.08, new Vector3(pos.x, pos.y + rackH - 0.04, pos.z), mats.metal, false, true));
 
+  // Full-height invisible collision body so players can't walk through the rack
+  const body = b.addBox(`${prefix}_Collider`, w + 0.05, rackH - 0.02, d + 0.05, new Vector3(pos.x, pos.y + rackH / 2 - 0.03, pos.z), mats.metal, true, false);
+  body.visibility = 0;
+  body.isPickable = false;
+  meshes.push(body);
+
   // Vent strips on the sides
   for (const side of [-1, 1]) {
     meshes.push(b.addBox(`${prefix}_Vent${side}`, 0.04, rackH - 0.3, d * 0.7, new Vector3(pos.x + side * w / 2, pos.y + rackH / 2, pos.z), mats.darkWood, false, false));

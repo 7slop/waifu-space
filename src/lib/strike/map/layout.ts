@@ -99,6 +99,11 @@ export function buildMapObject(b: MapBuilder, o: MapObject, editor = false): voi
 
       const meshes = buildComponent(b, o.component, o.name, Vector3.Zero(), o.params);
       for (const m of meshes) {
+        // Meshes already parented (component-internal hierarchies like doors,
+        // bamboo culms, tree branches) must NOT be re-parented — that would
+        // detach them from their animated parent. Only scene-level meshes get
+        // attached to the component root.
+        if (m.parent) continue;
         m.parent = root;
         if (editor) m.metadata = { editorId: o.id };
       }

@@ -74,9 +74,11 @@ export function createJapanFlag(b: MapBuilder, prefix: string, pos: Vector3, siz
     ctx.fill();
   });
   flagMat.diffuseTexture = tex;
+  flagMat.backFaceCulling = false;
   flag.material = flagMat;
-  flag.position = new Vector3(pos.x + 1.25 * s, pos.y + poleH - 1.1 * s, pos.z);
-  flag.rotation.y = -Math.PI / 2 + 0.2;
+  flag.parent = pole;
+  flag.position = new Vector3(1.2 * s, poleH / 2 - 1.1 * s, 0.02 * s);
+  flag.rotation.y = 0.15;
   flag.isPickable = false;
   flag.receiveShadows = true;
   meshes.push(flag);
