@@ -58,3 +58,54 @@ export async function POST(event: { request: Request; params: Record<string, str
 
   return json({ success: true, call, systemMessage });
 }
+
+export async function GET(event: { request: Request; params: Record<string, string> }) {
+  const ctx = resolveDmContext(event.request);
+  if (ctx instanceof Response) return ctx;
+
+  const callId = event.params.id;
+  if (!callId) return badRequestResponse('call id is required');
+
+  let { data, error } = await ctx.supabase.rpc('get_call_session', {
+    p_user_id: ctx.session.userId,
+    p_call_id: callId
+  });
+
+  if (error && (error.message.includes('function') || error.message.includes('Unknown RPC'))) {
+    // Fallback: check get_pending_call_for_user
+    const fallback = await ctx.supabase.rpc('get_pending_call_for_user', {
+      p_user_id: ctx.session.userId
+    });
+    if (!fallback.error && fallback.data && (fallback.data as any).id === callId) {
+      data = fallback.data;
+      error = null;
+    }
+  }
+
+  if (error) {
+    if (error.message.includes('not a participant')) {
+      return json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+    return json({ success: false, error: error.message }, { status: 500 });
+  }
+
+  if (!data) {
+    return json({ success: true, call: null });
+  }
+
+  const c = data as any;
+  const call: CallSession = {
+    id: c.id,
+    conversationId: c.conversationId,
+    callerId: c.callerId,
+    calleeId: c.calleeId,
+    callType: c.callType,
+    status: c.status,
+    startedAt: c.startedAt,
+    answeredAt: c.answeredAt ?? null,
+    endedAt: c.endedAt ?? null,
+    createdAt: c.createdAt
+  };
+
+  return json({ success: true, call });
+}

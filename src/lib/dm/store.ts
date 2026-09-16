@@ -35,6 +35,7 @@ import {
   sendMessageRequest,
   setMyPresenceRequest,
   toDmMessage,
+  fetchCallStatus,
   updateCallStatusRequest,
   updateMessageRequest,
   deleteMessageRequest,
@@ -131,6 +132,7 @@ interface DmRuntime {
   /** Whether the last presence write came from the auto monitor. */
   presenceOrigin: 'auto' | 'manual';
   pendingPollTimer: ReturnType<typeof setInterval> | null;
+  callStatusPollTimer: ReturnType<typeof setInterval> | null;
 }
 
 const runtime: DmRuntime = {
@@ -141,7 +143,8 @@ const runtime: DmRuntime = {
   mutedBeforeDeafen: false,
   lastTypingEmit: 0,
   presenceOrigin: 'manual',
-  pendingPollTimer: null
+  pendingPollTimer: null,
+  callStatusPollTimer: null
 };
 
 /** How often the store re-polls the DB for a pending (ringing/active) call. */
@@ -334,6 +337,7 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
       runtime.pendingAccept = null;
     }
     if (call?.call.id === signal.callId) {
+      stopCallStatusPolling();
       runtime.call?.hangUp(signal.type === 'decline' ? 'declined' : 'ended');
       setDmState('call', null);
     }
@@ -991,6 +995,7 @@ export async function startCall(type: CallType): Promise<boolean> {
       deafened: false
     });
     void runtime.realtime?.subscribeConversation(conv.id);
+    startCallStatusPolling();
     const offer = await manager.createOffer(call.id, otherId);
     if (offer) {
       sendSignal('offer', call.id, conv.id, { sdp: offer });
@@ -1035,9 +1040,72 @@ async function joinExistingCall(call: CallSession, conv: DmConversationSummary, 
     deafened: false
   });
   void runtime.realtime?.subscribeConversation(call.conversationId);
+  startCallStatusPolling();
   const offer = await manager.createOffer(call.id, call.calleeId === auth.id ? call.callerId : call.calleeId);
   if (offer) sendSignal('offer', call.id, call.conversationId, { sdp: offer });
   return true;
+}
+
+/**
+ * Actively polls the server for status updates on an in-progress or ringing call.
+ * Detects when the remote callee accepts (transitioning ringing -> connected),
+ * declines, or terminates the call, guaranteeing peer synchronization even if
+ * realtime WebRTC signaling packets are delayed or lost.
+ */
+export async function pollActiveCallStatus(): Promise<void> {
+  const auth = currentAuth();
+  const current = dmState.call;
+  if (!auth || !current) {
+    stopCallStatusPolling();
+    return;
+  }
+
+  const callId = current.call.id;
+  try {
+    const latest = await fetchCallStatus(auth.token, callId);
+    if (!dmState.call || dmState.call.call.id !== callId) return;
+
+    if (!latest) return;
+
+    if (latest.status === 'active') {
+      // Remote accepted the call
+      if (dmState.call.callState === 'ringing') {
+        setDmState('call', 'callState', 'connected');
+        if (runtime.call && runtime.call.currentState === 'ringing') {
+          const peerId = current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId;
+          const offer = await runtime.call.createOffer(callId, peerId);
+          if (offer) {
+            sendSignal('offer', callId, current.call.conversationId, { sdp: offer });
+          }
+        }
+      }
+      setDmState('call', 'call', latest);
+    } else if (['declined', 'busy', 'canceled', 'ended', 'missed'].includes(latest.status)) {
+      stopCallStatusPolling();
+      runtime.call?.hangUp(latest.status === 'declined' ? 'declined' : 'ended');
+      setDmState('call', null);
+      setDmState('incomingCall', null);
+      setLocalStreamSignal(null);
+      setRemoteStreamSignal(null);
+      runtime.call = null;
+    }
+  } catch {
+    // Poll failures are transient; will retry on next tick
+  }
+}
+
+export function startCallStatusPolling(): void {
+  stopCallStatusPolling();
+  runtime.callStatusPollTimer = setInterval(() => {
+    void pollActiveCallStatus();
+  }, 1200);
+}
+
+export function stopCallStatusPolling(): void {
+  if (runtime.callStatusPollTimer) {
+    clearInterval(runtime.callStatusPollTimer);
+    runtime.callStatusPollTimer = null;
+  }
 }
 
 /**
@@ -1111,6 +1179,7 @@ export async function acceptIncomingCall(): Promise<boolean> {
     }
   });
   void runtime.realtime?.subscribeConversation(call.conversationId);
+  startCallStatusPolling();
   // Mark the call as answered on the server so both timelines get the
   // "call started" system message and the call session reflects the state.
   const result = await updateCallStatusRequest(auth.token, call.id, 'active').catch(() => null);
@@ -1128,6 +1197,7 @@ export async function acceptIncomingCall(): Promise<boolean> {
 }
 
 export async function declineIncomingCall(): Promise<void> {
+  stopCallStatusPolling();
   const auth = currentAuth();
   const offer = dmState.incomingCall;
   setDmState('incomingCall', null);
@@ -1140,6 +1210,7 @@ export async function declineIncomingCall(): Promise<void> {
 }
 
 export async function hangUpCall(): Promise<void> {
+  stopCallStatusPolling();
   const auth = currentAuth();
   const call = dmState.call;
 
@@ -1182,9 +1253,12 @@ function announceCallCancel(call: DmCallUi, auth: DmAuth | null): void {
 }
 
 export async function markCallBusyAndReject(): Promise<void> {
+  stopCallStatusPolling();
   const auth = currentAuth();
   const offer = dmState.incomingCall;
   if (!auth || !offer) return;
+  sendSignal('decline', offer.call.id, offer.call.conversationId, { reason: 'busy' });
+  void runtime.realtime?.sendCallCancel(offer.call.callerId, offer);
   const result = await updateCallStatusRequest(auth.token, offer.call.id, 'busy').catch(() => null);
   if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
   setDmState('incomingCall', null);
@@ -1260,6 +1334,7 @@ export function toggleDeafen(): boolean {
 }
 
 export function resetDmStore(): void {
+  stopCallStatusPolling();
   setLocalStreamSignal(null);
   setRemoteStreamSignal(null);
   if (runtime.call) {
@@ -1275,6 +1350,7 @@ export function resetDmStore(): void {
 }
 
 export async function disconnectDm(): Promise<void> {
+  stopCallStatusPolling();
   runtime.call?.hangUp('ended');
   runtime.call = null;
   runtime.pendingAccept = null;

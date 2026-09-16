@@ -117,7 +117,8 @@ import {
   toggleMute,
   toggleVideo,
   toggleReaction,
-  refreshPendingCall
+  refreshPendingCall,
+  pollActiveCallStatus
 } from '../../src/lib/dm/store';
 
 const AUTH = { token: 't1', id: 'u-me', username: 'alice', avatarUrl: 'https://x/a.png' };
@@ -757,5 +758,126 @@ describe('dm store reactions', () => {
       reactions: [{ emoji: '😂', count: 1, userIds: ['u-bob'] }]
     });
     expect(dmState.messages.c1?.[0]?.reactions).toEqual([{ emoji: '😂', count: 1, userIds: ['u-bob'] }]);
+  });
+});
+
+describe('dm store call status polling and callee acceptance sync', () => {
+  beforeEach(() => {
+    resetDmStore();
+    configureDmRuntime({ getAuth: () => AUTH });
+  });
+
+  afterEach(() => {
+    resetDmStore();
+  });
+
+  it('detects when callee accepts call and transitions ringing state to connected', async () => {
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    stubFetch({
+      '/api/dm/calls/call-active-1/status': () =>
+        JSON_RESP({
+          success: true,
+          call: {
+            id: 'call-active-1',
+            conversationId: 'c1',
+            callerId: 'u-me',
+            calleeId: 'u-bob',
+            callType: 'voice',
+            status: 'active',
+            startedAt: '2025-01-01',
+            answeredAt: '2025-01-01',
+            endedAt: null,
+            createdAt: '2025-01-01'
+          }
+        })
+    });
+
+    // Caller initiates call (currently in ringing state)
+    setDmState('call', {
+      call: {
+        id: 'call-active-1',
+        conversationId: 'c1',
+        callerId: 'u-me',
+        calleeId: 'u-bob',
+        callType: 'voice',
+        status: 'ringing',
+        startedAt: '2025-01-01',
+        answeredAt: null,
+        endedAt: null,
+        createdAt: '2025-01-01'
+      },
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'ringing',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+
+    expect(dmState.call?.callState).toBe('ringing');
+
+    // Poller runs
+    await pollActiveCallStatus();
+
+    // Call state should be transitioned to connected and call session updated
+    expect(dmState.call?.callState).toBe('connected');
+    expect(dmState.call?.call.status).toBe('active');
+  });
+
+  it('detects when callee declines call and cleans up caller ringing session', async () => {
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    stubFetch({
+      '/api/dm/calls/call-declined-1/status': () =>
+        JSON_RESP({
+          success: true,
+          call: {
+            id: 'call-declined-1',
+            conversationId: 'c1',
+            callerId: 'u-me',
+            calleeId: 'u-bob',
+            callType: 'voice',
+            status: 'declined',
+            startedAt: '2025-01-01',
+            answeredAt: null,
+            endedAt: '2025-01-01',
+            createdAt: '2025-01-01'
+          }
+        })
+    });
+
+    setDmState('call', {
+      call: {
+        id: 'call-declined-1',
+        conversationId: 'c1',
+        callerId: 'u-me',
+        calleeId: 'u-bob',
+        callType: 'voice',
+        status: 'ringing',
+        startedAt: '2025-01-01',
+        answeredAt: null,
+        endedAt: null,
+        createdAt: '2025-01-01'
+      },
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'ringing',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+
+    expect(dmState.call).not.toBeNull();
+
+    // Poller runs
+    await pollActiveCallStatus();
+
+    // Caller session must be cleaned up because the call was declined
+    expect(dmState.call).toBeNull();
   });
 });

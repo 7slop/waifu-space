@@ -381,6 +381,15 @@ export async function updateCallStatusRequest(token: string, callId: string, sta
   return result;
 }
 
+export async function fetchCallStatus(token: string, callId: string): Promise<CallSession | null> {
+  const data = await request<{ success: boolean; call: CallSession | null }>(
+    `/api/dm/calls/${callId}/status`,
+    { method: 'GET' },
+    token
+  );
+  return data.call ?? null;
+}
+
 export async function fetchUserProfileRequest(token: string, userId: string): Promise<DmUserProfile> {
   const data = await request<{ success: boolean; profile: DmUserProfile }>(
     `/api/dm/users/${userId}/profile`,

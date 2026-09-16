@@ -818,6 +818,50 @@ BEGIN
 END;
 $$;
 
+-- Returns a specific call session by id for participants (status sync / decline polling).
+CREATE OR REPLACE FUNCTION public.get_call_session(p_user_id uuid, p_call_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_call public.call_sessions%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  SELECT * INTO v_call
+    FROM public.call_sessions
+   WHERE id = p_call_id;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.conversation_participants
+     WHERE conversation_id = v_call.conversation_id AND user_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'not a participant of this call';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'id', v_call.id,
+    'conversationId', v_call.conversation_id,
+    'callerId', v_call.caller_id,
+    'calleeId', v_call.callee_id,
+    'callType', v_call.call_type,
+    'status', v_call.status,
+    'startedAt', v_call.started_at,
+    'answeredAt', v_call.answered_at,
+    'endedAt', v_call.ended_at,
+    'createdAt', v_call.created_at
+  );
+END;
+$$;
+
 -- Public profile + waifu appearance snapshot for the DM profile panel.
 CREATE OR REPLACE FUNCTION public.get_user_profile_public(p_user_id uuid)
 RETURNS jsonb

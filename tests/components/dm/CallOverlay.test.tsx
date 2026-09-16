@@ -447,4 +447,31 @@ describe('CallOverlay', () => {
     expect(container.querySelector('[data-testid="dm-call-accept"]')).toBeInTheDocument();
     expect(container.querySelector('[data-testid="dm-call-decline"]')).toBeInTheDocument();
   });
+
+  it('updates UI from calling to in-call when callState transitions from ringing to connected', async () => {
+    seedConv();
+    setDmState('call', {
+      call: callSession({ id: 'call-trans-1', status: 'ringing' }),
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'ringing',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+
+    const { container } = render(() => <CallOverlay />);
+    const subText = () => container.querySelector('.dm-call-sub')?.textContent ?? '';
+
+    // While ringing, shows calling text
+    expect(subText()).toContain('Calling Bob');
+
+    // Callee accepts: callState flips to connected
+    setDmState('call', 'callState', 'connected');
+    await flush();
+
+    // Now shows in call status
+    expect(subText()).toContain('In call');
+  });
 });

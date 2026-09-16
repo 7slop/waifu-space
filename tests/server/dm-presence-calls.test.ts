@@ -26,7 +26,7 @@ import { GET as presenceGET, POST as presencePOST } from '../../src/routes/api/d
 import { GET as presenceBatchGET } from '../../src/routes/api/dm/presence/batch';
 import { POST as callsPOST } from '../../src/routes/api/dm/calls';
 import { GET as pendingCallGET } from '../../src/routes/api/dm/calls/pending';
-import { POST as callStatusPOST } from '../../src/routes/api/dm/calls/[id]/status';
+import { POST as callStatusPOST, GET as callStatusGET } from '../../src/routes/api/dm/calls/[id]/status';
 import { GET as userProfileGET } from '../../src/routes/api/dm/users/[id]/profile';
 import { createSessionToken } from '../../src/lib/server/auth';
 
@@ -149,6 +149,20 @@ function buildFakeClient() {
       call.status = p_status;
       if (p_status === 'active') call.answered_at = nowIso();
       if (['ended', 'declined', 'missed', 'canceled', 'busy'].includes(p_status)) call.ended_at = nowIso();
+      return {
+        data: {
+          id: call.id, conversationId: call.conversation_id, callerId: call.caller_id, calleeId: call.callee_id,
+          callType: call.call_type, status: call.status, startedAt: call.started_at, answeredAt: call.answered_at, endedAt: call.ended_at, createdAt: call.created_at
+        },
+        error: null
+      };
+    },
+    get_call_session: ({ p_user_id, p_call_id }: any) => {
+      const call = db.call_sessions.find(c => c.id === p_call_id);
+      if (!call) return { data: null, error: null };
+      if (!memberIds(call.conversation_id).includes(p_user_id)) {
+        return { data: null, error: { message: 'not a participant of this call' } };
+      }
       return {
         data: {
           id: call.id, conversationId: call.conversation_id, callerId: call.caller_id, calleeId: call.callee_id,
@@ -423,5 +437,85 @@ describe('DM user profile route', () => {
   it('returns 404 for a missing user', async () => {
     const res = await userProfileGET(req('http://localhost/api/dm/users/11111111-1111-1111-1111-111111111111/profile', { headers: { Authorization: `Bearer ${ticket(A, 'alice')}` } }));
     expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /api/dm/calls/:id/status', () => {
+  beforeEach(() => {
+    mocks.state.configured = true;
+    for (const key of Object.keys(mocks.state.db)) mocks.state.db[key] = [];
+    mocks.state.client = buildFakeClient();
+    seed();
+  });
+
+  it('allows participant to fetch current call status', async () => {
+    const callRes = await callsPOST({
+      request: new Request('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ticket(A, 'alice')}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    });
+    const { call } = await callRes.json();
+
+    const statusRes = await callStatusGET(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        headers: { Authorization: `Bearer ${ticket(A, 'alice')}` }
+      })
+    );
+    expect(statusRes.status).toBe(200);
+    const body = await statusRes.json();
+    expect(body.success).toBe(true);
+    expect(body.call).toMatchObject({ id: call.id, status: 'ringing', callerId: A, calleeId: B });
+  });
+
+  it('reflects status transition when callee accepts (active) or declines', async () => {
+    const callRes = await callsPOST({
+      request: new Request('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ticket(A, 'alice')}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    });
+    const { call } = await callRes.json();
+
+    // Callee accepts
+    await callStatusPOST({
+      request: new Request(`http://localhost/api/dm/calls/${call.id}/status`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ticket(B, 'bob')}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' })
+      }),
+      params: { id: call.id }
+    });
+
+    // Caller checks status
+    const statusRes = await callStatusGET(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        headers: { Authorization: `Bearer ${ticket(A, 'alice')}` }
+      })
+    );
+    const body = await statusRes.json();
+    expect(body.success).toBe(true);
+    expect(body.call.status).toBe('active');
+  });
+
+  it('returns 403 for non-participant user', async () => {
+    const callRes = await callsPOST({
+      request: new Request('http://localhost/api/dm/calls', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${ticket(A, 'alice')}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: CONV, calleeId: B, callType: 'voice' })
+      })
+    });
+    const { call } = await callRes.json();
+
+    const strangerTicket = createSessionToken({ id: '99999999-9999-9999-9999-999999999999', username: 'eve', email: 'e@t.dev' });
+    const statusRes = await callStatusGET(
+      req(`http://localhost/api/dm/calls/${call.id}/status`, {
+        headers: { Authorization: `Bearer ${strangerTicket}` }
+      })
+    );
+    expect(statusRes.status).toBe(403);
   });
 });
