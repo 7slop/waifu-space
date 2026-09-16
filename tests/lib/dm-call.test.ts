@@ -245,7 +245,10 @@ describe('CallManager', () => {
 
   it('provides low-latency default peer configuration and audio constraints', () => {
     const config = defaultPeerConfiguration();
-    expect(config.iceCandidatePoolSize).toBe(2);
+    // No iceCandidatePoolSize: pooled candidates were observed to leave the
+    // answer side with ZERO emitted candidates when the local answer SDP is
+    // rewritten before setLocalDescription.
+    expect(config.iceCandidatePoolSize).toBeUndefined();
     expect(config.bundlePolicy).toBe('max-bundle');
     expect(config.rtcpMuxPolicy).toBe('require');
     expect(config.iceServers).toEqual(defaultIceServers());

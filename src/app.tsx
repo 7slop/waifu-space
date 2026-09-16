@@ -38,6 +38,33 @@ import {
 
 // Global Styles
 import './styles/themes.css';
+
+/**
+ * ICE servers for WebRTC calls. Defaults to public STUN only. Add a TURN
+ * server via VITE_TURN_URL / VITE_TURN_USERNAME / VITE_TURN_CREDENTIAL when
+ * peers are behind symmetric NAT or a network that blocks UDP (Chrome's
+ * "ICE failed, add a TURN server" warning) — a LAN without internet reach has
+ * no usable STUN and mDNS-only host candidates may not resolve across
+ * separate browser profiles.
+ */
+function buildIceServers(): RTCConfiguration['iceServers'] {
+  const env = (import.meta as any)?.env ?? {};
+  const turnUrl = env.VITE_TURN_URL as string | undefined;
+  const turnUsername = env.VITE_TURN_USERNAME as string | undefined;
+  const turnCredential = env.VITE_TURN_CREDENTIAL as string | undefined;
+  const servers: RTCConfiguration['iceServers'] = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ];
+  if (turnUrl) {
+    servers.push({
+      urls: turnUrl,
+      username: turnUsername ?? '',
+      credential: turnCredential ?? ''
+    });
+  }
+  return servers;
+}
 import './styles/style.css';
 import './styles/waifu.css';
 import './styles/calendar.css';
@@ -218,7 +245,8 @@ function AppLayout(props: { children: any }) {
           const user = state.user;
           if (!user?.token || !user.id) return null;
           return { token: user.token, id: user.id, username: user.username, avatarUrl: user.avatarUrl };
-        }
+        },
+        iceServers: buildIceServers()
       });
       void initDm();
     } else {

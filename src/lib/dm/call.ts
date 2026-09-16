@@ -588,6 +588,15 @@ export class CallManager {
     }
     const track = stream.getVideoTracks()[0];
     if (!track) return false;
+    // The picker is async — the call may have been torn down (ICE failure,
+    // peer-left timeout, hang-up) while it was open, which nulls localStream.
+    // Attaching a stale track to a dead call would throw; release and bail.
+    if (!this.localStream || !this.callId || this.state === 'idle' || this.state === 'ended' || this.state === 'failed') {
+      try {
+        track.stop();
+      } catch {}
+      return false;
+    }
     this.screenStream = stream;
     this.screenTrack = track;
     this.screenActive = true;
@@ -745,7 +754,11 @@ export function defaultIceServers(): RTCIceServer[] {
 export function defaultPeerConfiguration(iceServers?: RTCConfiguration['iceServers']): RTCConfiguration {
   return {
     iceServers: iceServers ?? defaultIceServers(),
-    iceCandidatePoolSize: 2,
+    // No iceCandidatePoolSize: pooled candidates are pre-gathered against a
+    // description whose ufrag can disagree with the rewritten local answer,
+    // and the answer side then emits ZERO ice candidates (gathering reports
+    // 'complete'). On LAN/DB-queue signaling the pool buys nothing — trickle
+    // candidates arrive in ms.
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require'
   };
