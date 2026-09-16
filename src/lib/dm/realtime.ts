@@ -18,10 +18,16 @@ import { isVisiblePresence } from './presence';
 // JWTs. The database (via RPCs) remains the source of truth; realtime only
 // delivers the "edge" events so the UI can update instantly.
 //
+// Because the channels are anonymous, they must NEVER carry sensitive data:
+// `sendMessage` strips every message down to a metadata-only snapshot and
+// `sendReaction` drops the reaction buckets before broadcasting. Recipients
+// of those events refetch the authoritative payload over the authenticated
+// REST API (see syncConversationAfterEvent in the store).
+//
 // Channel layout:
 //   - presence        : shared channel, every visible user tracks one entry.
-//   - dm-<convId>     : one per conversation, joined while it is open (messages,
-//                       typing, and call signalling ride this channel).
+//   - dm-<convId>     : one per conversation, joined while it is open (message
+//                       metadata, typing, and call signalling ride this channel).
 //   - dm-calls-<uid>  : per-user channel that always stays subscribed, so a
 //                       user receives incoming call offers even when they are
 //                       not looking at that conversation.
@@ -280,7 +286,16 @@ export class DmRealtime {
   }
 
   async sendMessage(broadcast: DmMessageBroadcast): Promise<void> {
-    await this.broadcast(`dm-${broadcast.conversationId}`, 'dm-message', broadcast);
+    // Strip to a metadata-only snapshot: the conversation channels are open to
+    // anonymous subscribers, so message content/media must never cross them.
+    const message = {
+      id: broadcast.message.id,
+      conversationId: broadcast.message.conversationId,
+      senderId: broadcast.message.senderId,
+      messageType: broadcast.message.messageType,
+      createdAt: broadcast.message.createdAt
+    };
+    await this.broadcast(`dm-${broadcast.conversationId}`, 'dm-message', { ...broadcast, message });
   }
 
   async sendTyping(payload: TypingBroadcast): Promise<void> {
@@ -288,7 +303,8 @@ export class DmRealtime {
   }
 
   async sendReaction(payload: ReactionBroadcast): Promise<void> {
-    await this.broadcast(`dm-${payload.conversationId}`, 'dm-reaction', payload);
+    const { reactions: _dropped, ...safe } = payload as ReactionBroadcast & { reactions?: unknown };
+    await this.broadcast(`dm-${payload.conversationId}`, 'dm-reaction', safe);
   }
 
   async sendCallSignal(signal: CallSignalPayload): Promise<void> {

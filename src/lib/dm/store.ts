@@ -34,7 +34,6 @@ import {
   searchUsers,
   sendMessageRequest,
   setMyPresenceRequest,
-  toDmMessage,
   fetchCallStatus,
   updateCallStatusRequest,
   updateMessageRequest,
@@ -218,36 +217,20 @@ function defaultNotify({ title, body }: { title: string; body: string }): void {
 
 function onRealtimeMessage(broadcast: DmMessageBroadcast): void {
   const auth = currentAuth();
-  const msg = toDmMessage(broadcast.message);
+  const meta = broadcast.message;
   const convId = broadcast.conversationId;
-  const active = dmState.activeConversationId === convId;
-  const isMine = !!auth && msg.senderId === auth.id;
-  const wasUnread = dmState.conversations.find(c => c.id === convId)?.unreadCount ?? 0;
-  const isSystem = msg.messageType === 'system';
+  const isSystem = meta.messageType === 'system';
+  const isMine = !!auth && meta.senderId === auth.id;
 
-  setDmState('messages', convId, (prev = []) => mergeMessageLists([prev, [msg]]));
-  setDmState('conversations', (convs) =>
-    convs
-      .map((c) => {
-        if (c.id !== convId) return c;
-        const unreadCount = isSystem || isMine || active ? c.unreadCount ?? 0 : (c.unreadCount ?? 0) + 1;
-        return { ...c, lastMessage: msg, updatedAt: msg.createdAt, unreadCount };
-      })
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-  );
-
-  const wasIncoming = !isMine;
-  if (wasIncoming && !active && wasUnread === 0 && !isSystem) {
-    // Don't double-count: the server unaware increments; this store keeps the
-    // local total roughly in sync with the badge while a conversation is open.
-    setDmState('totalUnread', (n) => n + 1);
-  }
+  // The broadcast carries only metadata (channels are anonymous); refetch the
+  // authoritative message list + unread counters so the UI reflects reality.
+  syncConversationAfterEvent(convId, meta);
 
   if (!isMine && !isSystem) {
-    const dnd = dmState.presence[msg.senderId]?.status === 'dnd';
+    const dnd = dmState.presence[meta.senderId]?.status === 'dnd';
     const sender = broadcast.senderName || dmState.conversations.find(c => c.id === convId)?.otherUser?.username || 'Someone';
-    const attachment = msg.messageType === 'gif' ? 'Sent a GIF' : msg.messageType === 'image' ? 'Sent an image' : msg.messageType === 'video' ? 'Sent a video' : '';
-    if (!dnd) notify(broadcast.senderName || sender, attachment || msg.content || '(attachment)');
+    const attachment = meta.messageType === 'gif' ? 'Sent a GIF' : meta.messageType === 'image' ? 'Sent an image' : meta.messageType === 'video' ? 'Sent a video' : 'sent a message';
+    if (!dnd) notify(sender, attachment);
   }
 }
 
@@ -278,6 +261,67 @@ function applyReactionReactions(msgs: DmMessage[], messageId: string, reactions:
   return msgs.map(m => (m.id === messageId ? { ...m, reactions } : m));
 }
 
+const inFlightConversationSyncs = new Map<string, Promise<void>>();
+
+/**
+ * Merges a freshly-fetched authoritative message page into loaded state:
+ * matching ids are replaced (so reactions/edits/deletes land), new ids are
+ * appended, and messages from older pages we've already scrolled fetch remain.
+ */
+function mergeAuthoritativeMessages(prev: DmMessage[], authoritative: DmMessage[]): DmMessage[] {
+  const byId = new Map(prev.map(m => [m.id, m]));
+  for (const m of authoritative) {
+    if (m?.id) byId.set(m.id, m);
+  }
+  return Array.from(byId.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+/**
+ * Refetches the authoritative conversations + unread counters (and the open
+ * message page, when loaded) after a realtime event whose broadcast payload
+ * deliberately carries no content. Coalesces bursts: events while a sync is
+ * in flight are dropped, the next event picks up the latest state.
+ */
+function syncConversationAfterEvent(conversationId: string): void {
+  if (inFlightConversationSyncs.has(conversationId)) return;
+  const run = (async () => {
+    const auth = currentAuth();
+    if (!auth) return;
+    try {
+      const [convs, unread] = await Promise.all([
+        listConversations(auth.token),
+        fetchUnread(auth.token)
+      ]);
+      setDmState('conversations', convs);
+      setDmState('totalUnread', unread);
+      if (Array.isArray(dmState.messages[conversationId])) {
+        const msgs = await fetchMessages(auth.token, conversationId, { limit: 50 });
+        setDmState('messages', conversationId, (prev = []) => mergeAuthoritativeMessages(prev, msgs));
+      }
+    } catch {
+      // Best-effort sync; the DB is the source of truth and the next event or
+      // open/refresh action re-syncs.
+    }
+  })();
+  inFlightConversationSyncs.set(conversationId, run.finally(() => inFlightConversationSyncs.delete(conversationId)));
+}
+
+/** Waits for all in-flight post-event conversation syncs to settle (tests). */
+export async function flushConversationSyncs(): Promise<void> {
+  while (inFlightConversationSyncs.size > 0) {
+    const pending = Array.from(inFlightConversationSyncs.values());
+    await Promise.all(pending);
+  }
+}
+
+function onRealtimeReaction(broadcast: ReactionBroadcast): void {
+  if (broadcast.userId === currentAuth()?.id) return;
+  const convId = broadcast.conversationId;
+  if (!Array.isArray(dmState.messages[convId])) return;
+  // No reaction buckets ride the anonymous channel; refetch to get them.
+  syncConversationAfterEvent(convId);
+}
+
 /** Optimistically toggles the reacting user in/out of a bucket (pure). */
 function optimisticToggleReaction(msgs: DmMessage[], messageId: string, emoji: string, userId: string): DmMessage[] {
   return msgs.map(m => {
@@ -295,13 +339,6 @@ function optimisticToggleReaction(msgs: DmMessage[], messageId: string, emoji: s
       : [...list, { emoji, count: 1, userIds: [userId] }];
     return { ...m, reactions: next };
   });
-}
-
-function onRealtimeReaction(broadcast: ReactionBroadcast): void {
-  if (broadcast.userId === currentAuth()?.id) return;
-  const convId = broadcast.conversationId;
-  if (!Array.isArray(dmState.messages[convId])) return;
-  setDmState('messages', convId, (prev = []) => applyReactionReactions(prev, broadcast.messageId, broadcast.reactions));
 }
 
 function onRealtimePresence(map: Record<string, RealtimePresencePayload>): void {
@@ -957,8 +994,7 @@ export async function toggleReaction(messageId: string, emoji: string): Promise<
       emoji,
       action: result.action,
       userId: uid,
-      userName: auth.username,
-      reactions: result.reactions
+      userName: auth.username
     };
     void runtime.realtime?.sendReaction(broadcast);
   } catch {
@@ -1481,6 +1517,8 @@ export function resetDmStore(): void {
     runtime.call = null;
   }
   runtime.pendingAccept = null;
+  inFlightConversationSyncs.forEach((sync) => sync.catch(() => undefined));
+  inFlightConversationSyncs.clear();
   if (runtime.pendingPollTimer) {
     clearInterval(runtime.pendingPollTimer);
     runtime.pendingPollTimer = null;

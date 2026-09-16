@@ -204,5 +204,60 @@ describe('DmRealtime instant call delivery and subscription synchronization', ()
     expect(convChannel._sentPayloads.some((p: any) => p.event === 'call-signal' && p.payload.type === 'answer')).toBe(true);
     expect(userChannel._sentPayloads.some((p: any) => p.event === 'call-signal' && p.payload.type === 'answer')).toBe(true);
   });
+
+  it('sendMessage strips message content and media from the broadcast', async () => {
+    await rt.connect({ id: 'user-sender', username: 'Sender' });
+    await rt.sendMessage({
+      kind: 'dm-message',
+      conversationId: 'c-2',
+      message: {
+        id: 'm-1',
+        conversationId: 'c-2',
+        senderId: 'user-sender',
+        content: 'secret content',
+        messageType: 'gif',
+        mediaUrl: 'https://media.tenor.com/secret.gif',
+        createdAt: '2025-01-02T00:00:00.000Z',
+        reactions: [{ emoji: '👍', count: 1, userIds: ['user-sender'] }]
+      },
+      senderName: 'Sender'
+    });
+
+    const convChannel = fakeChannels.get('dm-c-2');
+    expect(convChannel).toBeDefined();
+    const payload = convChannel._sentPayloads.find((p: any) => p.event === 'dm-message')?.payload;
+    expect(payload).toBeDefined();
+    expect(payload.message).toEqual({
+      id: 'm-1',
+      conversationId: 'c-2',
+      senderId: 'user-sender',
+      messageType: 'gif',
+      createdAt: '2025-01-02T00:00:00.000Z'
+    });
+    expect(payload.message.content).toBeUndefined();
+    expect(payload.message.mediaUrl).toBeUndefined();
+    expect(payload.message.reactions).toBeUndefined();
+  });
+
+  it('sendReaction drops reaction user-id buckets from the broadcast', async () => {
+    await rt.connect({ id: 'user-reactor', username: 'Reactor' });
+    await rt.sendReaction({
+      kind: 'dm-reaction',
+      conversationId: 'c-2',
+      messageId: 'm-1',
+      emoji: '😂',
+      action: 'add',
+      userId: 'user-reactor',
+      userName: 'Reactor',
+      reactions: [{ emoji: '😂', count: 1, userIds: ['user-reactor', 'user-other'] }]
+    } as any);
+
+    const convChannel = fakeChannels.get('dm-c-2');
+    const payload = convChannel._sentPayloads.find((p: any) => p.event === 'dm-reaction')?.payload;
+    expect(payload).toBeDefined();
+    expect(payload.messageId).toBe('m-1');
+    expect(payload.userId).toBe('user-reactor');
+    expect(payload.reactions).toBeUndefined();
+  });
 });
 

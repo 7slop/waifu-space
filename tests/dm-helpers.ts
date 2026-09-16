@@ -1,5 +1,5 @@
 import { state, setState, DEFAULT_STATE } from '../src/lib/store';
-import { configureDmRuntime, resetDmStore, dmState } from '../src/lib/dm/store';
+import { configureDmRuntime, resetDmStore, dmState, flushConversationSyncs } from '../src/lib/dm/store';
 
 /** Reset dm + main stores back to a pristine logged-in state for each test. */
 export function resetForDmTests() {
@@ -54,10 +54,11 @@ export function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 /** Lets all pending microtasks + timers run (fetch stub -> res.json() -> store). */
-export function flush(times = 3): Promise<void> {
+export async function flush(times = 3): Promise<void> {
+  await flushConversationSyncs();
   let p: Promise<void> = Promise.resolve();
   for (let i = 0; i < times; i++) p = p.then(() => new Promise((r) => setTimeout(r, 0)));
-  return p;
+  await p;
 }
 
 export function resetState() {

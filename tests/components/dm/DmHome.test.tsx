@@ -78,17 +78,33 @@ describe('DmHome', () => {
     fireEvent.click(container.querySelector('[data-testid="dm-conv-c1"]')!);
     await waitFor(() => expect(container.querySelector('.dm-msg-content')).toHaveTextContent('first'));
 
+    // The realtime event carries only metadata; the client refetches the
+    // authoritative list over the authenticated API to pick up the content.
     const rt = FakeRealtime.instances[0];
     expect(rt).toBeDefined();
+    const messagesRestore = stubFetch({
+      '/api/dm/conversations/c1/messages': () => ({
+        body: {
+          success: true,
+          messages: [
+            { id: 'm1', conversationId: 'c1', senderId: 'u-bob', content: 'first', messageType: 'text', createdAt: '2025-01-02T00:00:00.000Z' },
+            { id: 'm2', conversationId: 'c1', senderId: 'u-bob', content: 'newest', messageType: 'text', createdAt: '2025-01-02T00:01:00.000Z' }
+          ]
+        }
+      }),
+      '/api/dm/conversations': () => ({ body: { success: true, conversations: [CONV] } }),
+      '/api/dm/unread': () => ({ body: { success: true, totalUnread: 1 } })
+    });
     const broadcast: DmMessageBroadcast = {
       kind: 'dm-message',
       conversationId: 'c1',
-      message: { id: 'm2', conversationId: 'c1', senderId: 'u-bob', content: 'newest', messageType: 'text', createdAt: '2025-01-02T00:01:00.000Z' },
+      message: { id: 'm2', conversationId: 'c1', senderId: 'u-bob', messageType: 'text', createdAt: '2025-01-02T00:01:00.000Z' },
       senderName: 'Bob'
     };
     rt.handlers.onMessage(broadcast);
     await flush();
     expect(container.textContent).toContain('newest');
+    messagesRestore();
     restore();
   });
 

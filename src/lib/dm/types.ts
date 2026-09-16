@@ -117,11 +117,29 @@ export interface GifFavorite {
   createdAt: string;
 }
 
-/** Payload broadcast over Supabase Realtime when a new message lands. */
+/** Metadata snapshot of a message, broadcast over Supabase Realtime.
+ *
+ * It intentionally does NOT carry message content, media URLs or reactions:
+ * the realtime channels are anonymous (no RLS), so anything sensitive would
+ * be readable by any subscriber. Recipients react to the event by refetching
+ * the authoritative message list from the authenticated API.
+ */
+export interface DmMessageBroadcastMeta {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  messageType: MessageType;
+  createdAt: string;
+}
+
+/**
+ * Payload broadcast over Supabase Realtime when a new message lands. The
+ * embedded `message` is deliberately a metadata-only snapshot — never content.
+ */
 export interface DmMessageBroadcast {
   kind: 'dm-message';
   conversationId: string;
-  message: DmMessage;
+  message: DmMessageBroadcastMeta;
   senderName: string;
   senderAvatar?: string;
 }
@@ -156,7 +174,11 @@ export interface TypingBroadcast {
   at: number;
 }
 
-/** Payload broadcast over Supabase Realtime when someone toggles a reaction. */
+/**
+ * Payload broadcast over Supabase Realtime when someone toggles a reaction.
+ * No reaction buckets (user ids) or message content rides the anonymous
+ * channel; recipients refetch the message via the authenticated API.
+ */
 export interface ReactionBroadcast {
   kind: 'dm-reaction';
   conversationId: string;
@@ -165,7 +187,6 @@ export interface ReactionBroadcast {
   action: 'add' | 'remove';
   userId: string;
   userName: string;
-  reactions: DmReaction[];
 }
 
 /** Result of the react toggle RPC. */

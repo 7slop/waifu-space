@@ -118,6 +118,7 @@ import {
   dmSearch,
   resetDmStore,
   startCall,
+  flushConversationSyncs,
   acceptIncomingCall,
   declineIncomingCall,
   hangUpCall,
@@ -331,20 +332,35 @@ async function boot() {
     return rt.instances[0];
   }
 
-  it('incoming realtime message is stored, unread increments and notify fires', async () => {
+  it('incoming realtime message triggers an API sync and notifies', async () => {
     const notifySpy = vi.fn();
     configureDmRuntime({ getAuth: () => ({ ...AUTH }), notify: notifySpy });
     await boot();
+    await selectConversation('c1');
+    stubFetch({
+      '/api/dm/conversations/c1/messages': () =>
+        JSON_RESP({
+          success: true,
+          messages: [{ id: 'm-live', conversationId: 'c1', senderId: 'u-bob', content: 'ping', messageType: 'text', createdAt: '2025-01-04T00:00:00.000Z' }]
+        }),
+      '/api/dm/conversations': () =>
+        JSON_RESP({
+          success: true,
+          conversations: [{ ...makeConv('c1', 'u-bob'), unreadCount: 1, lastMessage: { id: 'm-live', conversationId: 'c1', senderId: 'u-bob', content: 'ping', messageType: 'text', createdAt: '2025-01-04T00:00:00.000Z' } }]
+        }),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 1 })
+    });
     rt.handlers.onMessage({
       kind: 'dm-message',
       conversationId: 'c1',
       senderName: 'bob',
-      message: { id: 'm-live', conversationId: 'c1', senderId: 'u-bob', content: 'ping', messageType: 'text', createdAt: '2025-01-04T00:00:00.000Z' }
+      message: { id: 'm-live', conversationId: 'c1', senderId: 'u-bob', messageType: 'text', createdAt: '2025-01-04T00:00:00.000Z' }
     });
-    expect(dmState.messages.c1[0].content).toBe('ping');
+    await flushConversationSyncs();
+    expect(dmState.messages.c1?.some(m => m.content === 'ping')).toBe(true);
     expect(dmState.totalUnread).toBe(1);
-    expect(dmState.conversations[0].lastMessage?.content).toBe('ping');
-    expect(notifySpy).toHaveBeenCalledWith({ title: 'bob', body: 'ping' });
+    expect(dmState.conversations.find(c => c.id === 'c1')?.lastMessage?.content).toBe('ping');
+    expect(notifySpy).toHaveBeenCalledWith({ title: 'bob', body: 'sent a message' });
   });
 
   it('typing broadcasts track per-conversation user activity', async () => {
@@ -519,13 +535,23 @@ async function boot() {
     const notifySpy = vi.fn();
     configureDmRuntime({ getAuth: () => ({ ...AUTH }), notify: notifySpy });
     await boot();
-    setDmState('activeConversationId', 'c1');
+    await selectConversation('c1');
+    stubFetch({
+      '/api/dm/conversations/c1/messages': () =>
+        JSON_RESP({
+          success: true,
+          messages: [{ id: 'sys-x', conversationId: 'c1', senderId: 'u-bob', content: '{"kind":"call-missed","callType":"voice"}', messageType: 'system', createdAt: '2025-01-05T00:00:00.000Z' }]
+        }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 })
+    });
     rt.handlers.onMessage({
       kind: 'dm-message',
       conversationId: 'c1',
       senderName: 'bob',
-      message: { id: 'sys-x', conversationId: 'c1', senderId: 'u-bob', content: '{"kind":"call-missed","callType":"voice"}', messageType: 'system', createdAt: '2025-01-05T00:00:00.000Z' }
+      message: { id: 'sys-x', conversationId: 'c1', senderId: 'u-bob', messageType: 'system', createdAt: '2025-01-05T00:00:00.000Z' }
     });
+    await flushConversationSyncs();
     expect(dmState.messages.c1?.some((m) => m.id === 'sys-x')).toBe(true);
     expect(notifySpy).not.toHaveBeenCalled();
   });
@@ -818,11 +844,22 @@ describe('dm store reactions', () => {
     expect(rtInst.sendReaction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dm-reaction', messageId: 'm1', emoji: '👍', action: 'add' }));
   });
 
-  it('incoming reaction broadcasts replace the local reactions buckets', async () => {
+  it('incoming reaction broadcasts refetch authoritative reaction buckets', async () => {
     await boot();
     setDmState('messages', 'c1', [
       { id: 'm1', conversationId: 'c1', senderId: 'u-me', content: 'mine', messageType: 'text', createdAt: '2025-01-01T00:00:00.000Z' }
     ]);
+    stubFetch({
+      '/api/dm/conversations/c1/messages': () =>
+        JSON_RESP({
+          success: true,
+          messages: [
+            { id: 'm1', conversationId: 'c1', senderId: 'u-me', content: 'mine', messageType: 'text', createdAt: '2025-01-01T00:00:00.000Z', reactions: [{ emoji: '😂', count: 1, userIds: ['u-bob'] }] }
+          ]
+        }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 })
+    });
     rt.handlers.onReaction({
       kind: 'dm-reaction',
       conversationId: 'c1',
@@ -830,9 +867,9 @@ describe('dm store reactions', () => {
       emoji: '😂',
       action: 'add',
       userId: 'u-bob',
-      userName: 'bob',
-      reactions: [{ emoji: '😂', count: 1, userIds: ['u-bob'] }]
+      userName: 'bob'
     });
+    await flushConversationSyncs();
     expect(dmState.messages.c1?.[0]?.reactions).toEqual([{ emoji: '😂', count: 1, userIds: ['u-bob'] }]);
   });
 });
