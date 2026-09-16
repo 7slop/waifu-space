@@ -43,6 +43,7 @@ import {
   addGifFavorite,
   removeGifFavorite,
   gifKeyOfUrl,
+  fetchUserProfileRequest,
   heartbeatPresenceRequest
 } from './api';
 import { DmRealtime, RealtimePresencePayload } from './realtime';
@@ -144,7 +145,7 @@ const runtime: DmRuntime = {
 };
 
 /** How often the store re-polls the DB for a pending (ringing/active) call. */
-const PENDING_CALL_POLL_MS = 45_000;
+const PENDING_CALL_POLL_MS = 2_500;
 
 const INITIAL: DmStoreState = {
   ready: false,
@@ -1058,15 +1059,24 @@ export async function refreshPendingCall(): Promise<void> {
     // outgoing panel; only surface the rejoin/incoming affordance otherwise.
     if (call.status === 'ringing' && call.callerId === auth.id) return;
     const conv = dmState.conversations.find((c) => c.id === call.conversationId);
-    const callerName =
+    let callerName =
       conv && call.callerId === conv.otherUser?.id
         ? conv.otherUser.username
         : call.callerId === auth.id ? auth.username : '';
-    const callerAvatar =
+    let callerAvatar =
       conv && call.callerId === conv.otherUser?.id
         ? conv.otherUser.avatarUrl
         : call.callerId === auth.id ? auth.avatarUrl : null;
-    setDmState('incomingCall', { call, callerName, callerAvatar });
+
+    if (!callerName && call.callerId !== auth.id) {
+      try {
+        const prof = await fetchUserProfileRequest(auth.token, call.callerId);
+        if (prof?.username) callerName = prof.username;
+        if (prof?.avatarUrl) callerAvatar = prof.avatarUrl;
+      } catch {}
+    }
+
+    setDmState('incomingCall', { call, callerName: callerName || 'Unknown User', callerAvatar });
   } catch {
     // Poll failures are transient; the realtime channel remains the fast path.
   }

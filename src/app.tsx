@@ -21,6 +21,7 @@ import { ToastNotification } from './components/ToastNotification';
 import { AuthModal } from './components/AuthModal';
 import { LeaderboardModal } from './components/LeaderboardModal';
 import { AvatarFrameOverlay } from './components/AvatarFrame';
+import { CallOverlay } from './components/dm/CallOverlay';
 import {
   PhFlowerLotus,
   PhCalendar,
@@ -317,6 +318,9 @@ function AppLayout(props: { children: any }) {
           </Show>
         </div>
       </header>
+
+      {/* GLOBAL CALL DOCK OVERLAY */}
+      <CallOverlay />
 
       {/* MAIN CONTENT ROUTE */}
       <main class="app-content">

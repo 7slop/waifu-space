@@ -7,7 +7,6 @@ import { DmAvatar } from './DmAvatar';
 import { DmMessageList } from './DmMessageList';
 import { DmInputBar } from './DmInputBar';
 import { DmProfilePopover } from './DmProfilePopover';
-import { CallOverlay } from './CallOverlay';
 
 /**
  * The right-hand chat region: conversation header (identity + single call
@@ -37,8 +36,6 @@ export function DmChatPanel() {
   return (
     <section class="dm-chat" data-testid="dm-chat">
       <Show when={conv()} fallback={<DmChatEmpty />}>
-        <CallOverlay />
-
         <header class="dm-chat-header">
           <button class="dm-chat-identity" data-testid="dm-chat-identity" ref={identityBtnRef} onClick={openHeaderProfile}>
             <DmAvatar

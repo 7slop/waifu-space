@@ -426,4 +426,25 @@ describe('CallOverlay', () => {
 
     restore();
   });
+
+  it('renders incoming call bar even when no conversation is active in state (global overlay behavior)', async () => {
+    // No active conversation selected (user is on home page, calendar, minigames, etc.)
+    setDmState('activeConversationId', null);
+    setDmState('conversations', []);
+
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession({ id: 'call-global-1', conversationId: 'c-global', callerId: 'u-charlie', callType: 'voice' }),
+      callerName: 'Charlie',
+      callerAvatar: 'https://example.com/charlie.png',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
+    expect(container.textContent).toContain('Charlie');
+    expect(container.querySelector('[data-testid="dm-call-accept"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="dm-call-decline"]')).toBeInTheDocument();
+  });
 });
