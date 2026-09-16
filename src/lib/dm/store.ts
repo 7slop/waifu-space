@@ -967,6 +967,7 @@ export async function startCall(type: CallType): Promise<boolean> {
   const conv = dmState.conversations.find((c) => c.id === dmState.activeConversationId);
   const otherId = conv?.otherUser?.id;
   if (!auth || !conv || !otherId) return false;
+  if (dmState.call) return false;
   try {
     const result = await createCallRequest(auth.token, conv.id, otherId, type);
     if (result.joined) {
@@ -994,21 +995,26 @@ export async function startCall(type: CallType): Promise<boolean> {
       screenSharing: false,
       deafened: false
     });
-    void runtime.realtime?.subscribeConversation(conv.id);
+    if (runtime.realtime) {
+      await runtime.realtime.subscribeConversation(conv.id);
+    }
     startCallStatusPolling();
     const offer = await manager.createOffer(call.id, otherId);
     if (offer) {
       sendSignal('offer', call.id, conv.id, { sdp: offer });
-      void runtime.realtime?.sendIncomingCallOffer({
-        kind: 'call-offer',
-        call,
-        callerName: auth.username,
-        callerAvatar: auth.avatarUrl,
-        offer
-      });
+      if (runtime.realtime) {
+        await runtime.realtime.sendIncomingCallOffer({
+          kind: 'call-offer',
+          call,
+          callerName: auth.username,
+          callerAvatar: auth.avatarUrl,
+          offer
+        });
+      }
     }
     return true;
-  } catch {
+  } catch (err) {
+    console.error('DEBUG startCall error:', err);
     setDmState('error', 'Call could not be started');
     return false;
   }
@@ -1028,6 +1034,7 @@ async function joinExistingCall(call: CallSession, conv: DmConversationSummary, 
   const ok = await manager.startLocal({ type: call.callType, audio: true, video: call.callType === 'video', screen: call.callType === 'screen' });
   if (!ok) return false;
   wireCallManager(call, manager);
+  setDmState('incomingCall', null);
   setDmState('call', {
     call,
     direction: 'outgoing',
@@ -1071,11 +1078,15 @@ export async function pollActiveCallStatus(): Promise<void> {
       // Remote accepted the call
       if (dmState.call.callState === 'ringing') {
         setDmState('call', 'callState', 'connected');
-        if (runtime.call && runtime.call.currentState === 'ringing') {
-          const peerId = current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId;
-          const offer = await runtime.call.createOffer(callId, peerId);
-          if (offer) {
-            sendSignal('offer', callId, current.call.conversationId, { sdp: offer });
+        if (runtime.call) {
+          drainInboundIce(callId, runtime.call);
+          flushPendingIce(current.call.conversationId, callId);
+          if (runtime.call.currentState === 'ringing') {
+            const peerId = current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId;
+            const offer = await runtime.call.createOffer(callId, peerId);
+            if (offer) {
+              sendSignal('offer', callId, current.call.conversationId, { sdp: offer });
+            }
           }
         }
       }
@@ -1112,13 +1123,31 @@ export function stopCallStatusPolling(): void {
  * Recovery/fallback path for the lossy realtime call-offer channel: asks the
  * DB for the newest ringing/active call the current user is a party to and
  * hydrates the incoming-call state so a missed broadcast or a refresh never
- * hides an in-progress call. Real-time remains the fast path; this poll never
- * clobbers a call the user is already actively managing.
+ * hides an in-progress call. Constantly verifies whether ringing calls have been
+ * canceled or declined by the peer so stale incoming banners are cleared.
  */
 export async function refreshPendingCall(): Promise<void> {
   const auth = currentAuth();
   if (!auth) return;
-  if (dmState.call || dmState.incomingCall) return;
+  if (dmState.call) return;
+
+  // If an incoming call offer is currently ringing on screen, verify if it was declined, busy or canceled
+  if (dmState.incomingCall) {
+    const callId = dmState.incomingCall.call.id;
+    try {
+      const status = await fetchCallStatus(auth.token, callId);
+      if (!status || status.status !== 'ringing') {
+        if (dmState.incomingCall?.call.id === callId) {
+          setDmState('incomingCall', null);
+          runtime.pendingAccept = null;
+        }
+      }
+    } catch {
+      // Non-fatal
+    }
+    return;
+  }
+
   try {
     const call = await fetchPendingCall(auth.token);
     if (!call || (call.status !== 'ringing' && call.status !== 'active')) return;
@@ -1154,6 +1183,7 @@ export async function acceptIncomingCall(): Promise<boolean> {
   const auth = currentAuth();
   const offer = dmState.incomingCall;
   if (!auth || !offer) return false;
+  if (dmState.call) return false;
   const { call, callerName } = offer;
   const conv = dmState.conversations.find((c) => c.id === call.conversationId);
   const remoteAvatar = offer.callerAvatar ?? conv?.otherUser?.avatarUrl ?? null;
@@ -1178,7 +1208,9 @@ export async function acceptIncomingCall(): Promise<boolean> {
       deafened: false
     }
   });
-  void runtime.realtime?.subscribeConversation(call.conversationId);
+  if (runtime.realtime) {
+    await runtime.realtime.subscribeConversation(call.conversationId);
+  }
   startCallStatusPolling();
   // Mark the call as answered on the server so both timelines get the
   // "call started" system message and the call session reflects the state.

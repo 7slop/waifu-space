@@ -880,4 +880,83 @@ describe('dm store call status polling and callee acceptance sync', () => {
     // Caller session must be cleaned up because the call was declined
     expect(dmState.call).toBeNull();
   });
+
+  it('refreshPendingCall clears ringing incoming call if caller canceled or declined on the server', async () => {
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    setDmState('incomingCall', {
+      call: {
+        id: 'call-canceled-1',
+        conversationId: 'c1',
+        callerId: 'u-bob',
+        calleeId: 'u-me',
+        callType: 'voice',
+        status: 'ringing',
+        startedAt: '2025-01-01',
+        answeredAt: null,
+        endedAt: null,
+        createdAt: '2025-01-01'
+      },
+      callerName: 'Bob'
+    });
+
+    expect(dmState.incomingCall).not.toBeNull();
+
+    // Server says call has been canceled
+    stubFetch({
+      '/api/dm/calls/call-canceled-1/status': () =>
+        JSON_RESP({
+          success: true,
+          call: {
+            id: 'call-canceled-1',
+            conversationId: 'c1',
+            callerId: 'u-bob',
+            calleeId: 'u-me',
+            callType: 'voice',
+            status: 'canceled',
+            startedAt: '2025-01-01',
+            answeredAt: null,
+            endedAt: '2025-01-01',
+            createdAt: '2025-01-01'
+          }
+        })
+    });
+
+    await refreshPendingCall();
+
+    // Incoming banner must be cleared immediately
+    expect(dmState.incomingCall).toBeNull();
+  });
+
+  it('startCall guards against concurrent calls if call or incomingCall is already present', async () => {
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    // Already in call
+    setDmState('call', {
+      call: {
+        id: 'c-busy',
+        conversationId: 'c1',
+        callerId: 'u-me',
+        calleeId: 'u-bob',
+        callType: 'voice',
+        status: 'active',
+        startedAt: '',
+        answeredAt: '',
+        endedAt: null,
+        createdAt: ''
+      },
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'connected',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+
+    const result = await startCall('voice');
+    expect(result).toBe(false);
+  });
 });
