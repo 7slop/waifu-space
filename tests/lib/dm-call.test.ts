@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { CallManager } from '../../src/lib/dm/call';
+import {
+  CallManager,
+  defaultPeerConfiguration,
+  defaultIceServers,
+  getOptimizedAudioConstraints,
+  applyAudioSenderOptimizations,
+  optimizeAudioSdp
+} from '../../src/lib/dm/call';
 
 interface FakeTrack {
   kind: 'audio' | 'video';
@@ -221,5 +228,70 @@ describe('CallManager', () => {
     expect(tracks[1].stop).toHaveBeenCalled();
     expect(manager.currentState).toBe('ended');
     expect(manager.localMedia).toBeNull();
+  });
+
+  it('provides low-latency default peer configuration and audio constraints', () => {
+    const config = defaultPeerConfiguration();
+    expect(config.iceCandidatePoolSize).toBe(2);
+    expect(config.bundlePolicy).toBe('max-bundle');
+    expect(config.rtcpMuxPolicy).toBe('require');
+    expect(config.iceServers).toEqual(defaultIceServers());
+
+    const constraints = getOptimizedAudioConstraints();
+    expect(constraints).toMatchObject({
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      channelCount: 1,
+      sampleRate: 48000,
+      latency: 0
+    });
+  });
+
+  it('optimizes audio SDP for Opus with low-latency parameters', () => {
+    // Case 1: SDP with existing fmtp line
+    const sdpWithFmtp = [
+      'v=0',
+      'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+      'a=rtpmap:111 opus/48000/2',
+      'a=fmtp:111 minptime=20;useinbandfec=0',
+      ''
+    ].join('\r\n');
+    const optimized = optimizeAudioSdp(sdpWithFmtp);
+    expect(optimized).toContain('minptime=10');
+    expect(optimized).toContain('useinbandfec=1');
+    expect(optimized).toContain('usedtx=1');
+    expect(optimized).toContain('stereo=0');
+    expect(optimized).toContain('sprop-stereo=0');
+    expect(optimized).toContain('maxaveragebitrate=64000');
+
+    // Case 2: SDP with no fmtp line
+    const sdpWithoutFmtp = [
+      'v=0',
+      'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+      'a=rtpmap:111 opus/48000/2',
+      ''
+    ].join('\r\n');
+    const optimized2 = optimizeAudioSdp(sdpWithoutFmtp);
+    expect(optimized2).toContain('a=fmtp:111 minptime=10;useinbandfec=1;usedtx=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000');
+
+    // Case 3: SDP with no opus
+    const sdpNoOpus = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 0\r\na=rtpmap:0 PCMU/8000\r\n';
+    expect(optimizeAudioSdp(sdpNoOpus)).toBe(sdpNoOpus);
+  });
+
+  it('applies sender optimizations to audio RTCRtpSender', () => {
+    const encodings = [{ maxBitrate: 0 }];
+    const fakeSender = {
+      getParameters: vi.fn(() => ({ encodings })),
+      setParameters: vi.fn(async () => undefined)
+    } as unknown as RTCRtpSender;
+
+    applyAudioSenderOptimizations(fakeSender);
+    expect(fakeSender.getParameters).toHaveBeenCalled();
+    expect(encodings[0].maxBitrate).toBe(64000);
+    expect((encodings[0] as any).priority).toBe('high');
+    expect((encodings[0] as any).networkPriority).toBe('high');
+    expect(fakeSender.setParameters).toHaveBeenCalledWith({ encodings });
   });
 });

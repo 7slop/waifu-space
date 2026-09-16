@@ -355,4 +355,33 @@ describe('CallOverlay', () => {
     const avatarImg = container.querySelector('.dm-call-avatar.remote img');
     expect(avatarImg?.getAttribute('src')).toBe('https://example.com/charlie.png');
   });
+
+  it('renders dedicated low-latency audio element for remote stream and mutes when deafened', async () => {
+    seedConv();
+    const restore = stubFetch({
+      '/api/dm/calls': () => ({
+        body: {
+          success: true,
+          call: callSession({ id: 'call-4', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice' })
+        },
+        status: 201
+      }),
+      '/api/dm/calls/call-4/status': () => ({ body: { success: true } })
+    });
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    const { container } = render(() => <CallOverlay />);
+    const audioEl = container.querySelector<HTMLAudioElement>('audio[data-testid="dm-call-audio-player"]');
+    expect(audioEl).toBeInTheDocument();
+    expect(audioEl?.autoplay).toBe(true);
+    expect(audioEl?.muted).toBe(false);
+
+    // Toggle deafen
+    fireEvent.click(container.querySelector('[data-testid="dm-call-deafen"]')!);
+    await flush();
+    expect(dmState.call?.deafened).toBe(true);
+    expect(audioEl?.muted).toBe(true);
+
+    restore();
+  });
 });

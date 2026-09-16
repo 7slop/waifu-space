@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import type {
   CallOfferBroadcast,
@@ -448,7 +449,16 @@ function makeCallManager(): CallManager {
   return manager;
 }
 
+const [localStreamSignal, setLocalStreamSignal] = createSignal<MediaStream | null>(null);
+const [remoteStreamSignal, setRemoteStreamSignal] = createSignal<MediaStream | null>(null);
+
 function wireCallManager(call: CallSession, manager: CallManager): void {
+  manager.deps.onLocalStream = (stream) => {
+    setLocalStreamSignal(stream);
+  };
+  manager.deps.onRemoteStream = (stream) => {
+    setRemoteStreamSignal(stream);
+  };
   manager.deps.onStateChange = () => {
     setDmState('call', (prev) =>
       prev
@@ -461,6 +471,10 @@ function wireCallManager(call: CallSession, manager: CallManager): void {
           }
         : prev
     );
+    if (manager.currentState === 'ended' || manager.currentState === 'idle' || manager.currentState === 'failed') {
+      setLocalStreamSignal(null);
+      setRemoteStreamSignal(null);
+    }
   };
   manager.deps.onIceCandidate = (candidate) => {
     const convId = call.conversationId;
@@ -476,8 +490,8 @@ function wireCallManager(call: CallSession, manager: CallManager): void {
   };
 }
 
-export const callLocalStream = (): MediaStream | null => runtime.call?.localMedia ?? null;
-export const callRemoteStream = (): MediaStream | null => runtime.call?.remoteMedia ?? null;
+export const callLocalStream = (): MediaStream | null => localStreamSignal() ?? runtime.call?.localMedia ?? null;
+export const callRemoteStream = (): MediaStream | null => remoteStreamSignal() ?? runtime.call?.remoteMedia ?? null;
 
 // ---------------------------------------------------------------------------
 // Public actions
@@ -1146,6 +1160,8 @@ export async function hangUpCall(): Promise<void> {
   }
   setDmState('call', null);
   setDmState('incomingCall', null);
+  setLocalStreamSignal(null);
+  setRemoteStreamSignal(null);
 }
 
 function announceCallCancel(call: DmCallUi, auth: DmAuth | null): void {
@@ -1230,6 +1246,8 @@ export function toggleDeafen(): boolean {
 }
 
 export function resetDmStore(): void {
+  setLocalStreamSignal(null);
+  setRemoteStreamSignal(null);
   if (runtime.pendingPollTimer) {
     clearInterval(runtime.pendingPollTimer);
     runtime.pendingPollTimer = null;

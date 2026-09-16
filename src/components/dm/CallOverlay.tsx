@@ -40,7 +40,7 @@ function DmVideoView(props: { stream: () => MediaStream | null; muted?: boolean;
       if (stream) void video.play?.().catch(() => {});
     }
   });
-  return <video class={props.class} ref={ref} autoplay playsinline muted={props.muted} />;
+  return <video class={props.class} ref={ref} autoplay playsinline muted={props.muted ?? true} />;
 }
 
 /** Corner badge over a call avatar (mic muted, headphones deafened, ...). */
@@ -197,6 +197,18 @@ function ActiveCallBar() {
   const mainStream = () => (sharing() || !connected() ? local() : screen());
   const pipStream = () => (sharing() && connected() ? screen() : local());
 
+  // Dedicated low-latency audio output for remote participant stream
+  let audioRef: HTMLAudioElement | undefined;
+  createEffect(() => {
+    const el = audioRef;
+    const stream = callRemoteStream();
+    if (el) {
+      el.srcObject = stream;
+      el.muted = call().deafened;
+      if (stream) void el.play?.().catch(() => {});
+    }
+  });
+
   // Drag handle at the bottom resizes the dock height (clamped 96px..60vh).
   const [dockH, setDockH] = createSignal<number | null>(null);
   let dockRef: HTMLDivElement | undefined;
@@ -317,6 +329,7 @@ function ActiveCallBar() {
         onPointerUp={onResizeUp}
         onPointerCancel={onResizeUp}
       />
+      <audio ref={audioRef} autoplay playsinline style={{ display: 'none' }} data-testid="dm-call-audio-player" />
     </div>
   );
 }

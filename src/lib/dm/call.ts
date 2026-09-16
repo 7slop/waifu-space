@@ -87,7 +87,7 @@ export class CallManager {
   private setPeer(peerId: string): void {
     this.peerId = peerId;
     if (this.pc) return;
-    const createPeer = this.deps.createPeer ?? (() => new RTCPeerConnection({ iceServers: this.deps.iceServers ?? defaultIceServers() }));
+    const createPeer = this.deps.createPeer ?? (() => new RTCPeerConnection(defaultPeerConfiguration(this.deps.iceServers)));
     this.pc = createPeer();
     this.pc.onicecandidate = (ev) => {
       if (ev.candidate && this.callId) this.deps.onIceCandidate?.(ev.candidate.toJSON(), this.callId);
@@ -101,6 +101,7 @@ export class CallManager {
       for (const track of this.localStream.getTracks()) {
         const sender = this.pc.addTrack(track, this.localStream);
         if (track.kind === 'video') this.videoSender = sender;
+        if (track.kind === 'audio') applyAudioSenderOptimizations(sender);
       }
     }
   }
@@ -111,8 +112,12 @@ export class CallManager {
     void (async () => {
       try {
         const offer = await this.pc!.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-        await this.pc!.setLocalDescription(offer);
-        const desc: RTCSessionDescriptionInit = { type: (this.pc!.localDescription as any)?.type ?? 'offer', sdp: this.pc!.localDescription?.sdp ?? '' };
+        const optimized = { type: offer.type, sdp: optimizeAudioSdp(offer.sdp ?? '') };
+        await this.pc!.setLocalDescription(optimized);
+        const desc: RTCSessionDescriptionInit = {
+          type: (this.pc!.localDescription as any)?.type ?? optimized.type,
+          sdp: this.pc!.localDescription?.sdp ?? optimized.sdp
+        };
         this.deps.onRenegotiation?.(desc, this.callId!);
       } catch {
         // renegotiation is best-effort
@@ -153,12 +158,26 @@ export class CallManager {
       if (options.screen) {
         streams.push(await getDisplayMedia());
       } else if (options.audio || options.video) {
-        streams.push(
-          await getUserMedia({
-            audio: options.audio,
-            video: options.video ? { width: { ideal: 1280 }, height: { ideal: 720 } } : undefined
-          })
-        );
+        const audioConstraints = options.audio ? getOptimizedAudioConstraints() : false;
+        try {
+          streams.push(
+            await getUserMedia({
+              audio: audioConstraints,
+              video: options.video ? { width: { ideal: 1280 }, height: { ideal: 720 } } : undefined
+            })
+          );
+        } catch {
+          if (options.audio) {
+            streams.push(
+              await getUserMedia({
+                audio: true,
+                video: options.video ? { width: { ideal: 1280 }, height: { ideal: 720 } } : undefined
+              })
+            );
+          } else {
+            return null;
+          }
+        }
       }
     } catch {
       return null;
@@ -182,6 +201,7 @@ export class CallManager {
       return false;
     }
     this.localStream = stream;
+    this.deps.onLocalStream?.(stream, options);
     this.setState('ringing');
     return true;
   }
@@ -193,8 +213,9 @@ export class CallManager {
     this.peerId = peerId;
     try {
       const offer = await this.pc!.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: this.options?.video || this.options?.screen || false });
-      await this.pc!.setLocalDescription(offer);
-      return offer;
+      const optimized = { type: offer.type, sdp: optimizeAudioSdp(offer.sdp ?? '') };
+      await this.pc!.setLocalDescription(optimized);
+      return optimized;
     } catch {
       this.setState('failed');
       return null;
@@ -220,9 +241,10 @@ export class CallManager {
         }
       }
       const answer = await this.pc!.createAnswer();
-      await this.pc!.setLocalDescription(answer);
+      const optimized = { type: answer.type, sdp: optimizeAudioSdp(answer.sdp ?? '') };
+      await this.pc!.setLocalDescription(optimized);
       this.setState('connected');
-      return answer;
+      return optimized;
     } catch {
       this.setState('failed');
       return null;
@@ -408,9 +430,69 @@ export class CallManager {
   }
 }
 
-function defaultIceServers(): RTCIceServer[] {
+export function defaultIceServers(): RTCIceServer[] {
   return [
     { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:global.stun.twilio.com:3478' }
   ];
+}
+
+export function defaultPeerConfiguration(iceServers?: RTCConfiguration['iceServers']): RTCConfiguration {
+  return {
+    iceServers: iceServers ?? defaultIceServers(),
+    iceCandidatePoolSize: 2,
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require'
+  };
+}
+
+export function getOptimizedAudioConstraints(): MediaTrackConstraints {
+  return {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    channelCount: 1,
+    sampleRate: 48000,
+    latency: 0
+  };
+}
+
+export function applyAudioSenderOptimizations(sender: RTCRtpSender | null | undefined): void {
+  if (!sender) return;
+  try {
+    if (typeof sender.getParameters === 'function' && typeof sender.setParameters === 'function') {
+      const params = sender.getParameters();
+      if (params.encodings && params.encodings.length > 0) {
+        params.encodings[0].maxBitrate = 64000;
+        (params.encodings[0] as any).networkPriority = 'high';
+        (params.encodings[0] as any).priority = 'high';
+        void sender.setParameters(params).catch(() => {});
+      }
+    }
+  } catch {
+    // Best-effort
+  }
+}
+
+export function optimizeAudioSdp(sdp: string): string {
+  if (!sdp || typeof sdp !== 'string') return sdp;
+  const opusMatch = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000/i);
+  if (!opusMatch) return sdp;
+  const pt = opusMatch[1];
+  const params = 'minptime=10;useinbandfec=1;usedtx=1;stereo=0;sprop-stereo=0;maxaveragebitrate=64000';
+
+  const fmtpRegex = new RegExp(`(a=fmtp:${pt}\\s+)([^\\r\\n]*)`, 'i');
+  if (fmtpRegex.test(sdp)) {
+    return sdp.replace(fmtpRegex, (_match, prefix, existing) => {
+      const currentParts = existing.split(';').map((p: string) => p.trim()).filter(Boolean);
+      const newParts = params.split(';').map((p: string) => p.trim());
+      const keys = new Set(newParts.map((p: string) => p.split('=')[0]));
+      const filteredCurrent = currentParts.filter((p: string) => !keys.has(p.split('=')[0]));
+      return `${prefix}${[...filteredCurrent, ...newParts].join(';')}`;
+    });
+  } else {
+    const rtpmapRegex = new RegExp(`(a=rtpmap:${pt}\\s+opus\\/48000[^\\r\\n]*)`, 'i');
+    return sdp.replace(rtpmapRegex, `$1\r\na=fmtp:${pt} ${params}`);
+  }
 }
