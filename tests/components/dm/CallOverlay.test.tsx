@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, cleanup } from '@solidjs/testing-library';
 import { CallOverlay } from '../../../src/components/dm/CallOverlay';
 import { dmState, setDmState, startCall } from '../../../src/lib/dm/store';
+import { state, setState } from '../../../src/lib/store';
 import { resetForDmTests, stubFetch, flush } from '../../dm-helpers';
 import type { CallOfferBroadcast, CallSession } from '../../../src/lib/dm/types';
 
@@ -494,5 +495,43 @@ describe('CallOverlay', () => {
     const { container } = render(() => <CallOverlay />);
     const subText = container.querySelector('.dm-call-sub')?.textContent ?? '';
     expect(subText).toContain('Bob left the voice chat');
+  });
+
+  it('safely handles null incomingCall without crashing on callerName property access', async () => {
+    seedConv();
+    setDmState('incomingCall', {
+      kind: 'call-offer',
+      call: callSession(),
+      callerName: 'Bob'
+    });
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
+
+    // Clear incomingCall synchronously
+    setDmState('incomingCall', null);
+    await flush();
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).not.toBeInTheDocument();
+  });
+
+  it('guards ActiveCallBar against rendering local user avatar as peer avatar', async () => {
+    seedConv();
+    setState('user', { id: 'u-me', username: 'Alice', avatarUrl: 'http://example.com/alice.png' } as any);
+    // Simulate corrupted state where remoteName mirrors the local user
+    setDmState('call', {
+      call: callSession({ id: 'call-safe-1', status: 'active' }),
+      direction: 'outgoing',
+      remoteName: 'Alice', // Same as local user
+      remoteAvatar: 'http://example.com/alice.png',
+      callState: 'connected',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+
+    const { container } = render(() => <CallOverlay />);
+    const peerNameEl = container.querySelector('.dm-call-name');
+    // It should fall back to the conversation otherUser ('Bob') rather than rendering 'Alice' twice
+    expect(peerNameEl?.textContent).toBe('Bob');
   });
 });

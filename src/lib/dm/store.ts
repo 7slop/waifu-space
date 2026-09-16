@@ -360,10 +360,10 @@ export function handlePeerLeft(callId: string, remoteName?: string): void {
 }
 
 export function handleIncomingCallDismiss(callId: string, callerName?: string): void {
-  if (dmState.incomingCall?.call.id !== callId) return;
-  if (dmState.incomingCall.leftNotice) return;
+  if (dmState.incomingCall?.call?.id !== callId) return;
+  if (dmState.incomingCall?.leftNotice) return;
 
-  const name = callerName || dmState.incomingCall.callerName || 'User';
+  const name = callerName || dmState.incomingCall?.callerName || 'User';
   setDmState('incomingCall', (prev) => (prev ? { ...prev, leftNotice: t('dm.userLeftVoiceChat', { name }) } : null));
 
   if (runtime.peerLeftTimeout) {
@@ -372,7 +372,7 @@ export function handleIncomingCallDismiss(callId: string, callerName?: string): 
 
   runtime.peerLeftTimeout = setTimeout(() => {
     runtime.peerLeftTimeout = null;
-    if (dmState.incomingCall?.call.id === callId) {
+    if (dmState.incomingCall?.call?.id === callId) {
       setDmState('incomingCall', null);
       runtime.pendingAccept = null;
     }
@@ -384,10 +384,10 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
   const call = dmState.call;
 
   if (signal.type === 'hangup' || signal.type === 'decline') {
-    if (dmState.incomingCall?.call.id === signal.callId) {
-      handleIncomingCallDismiss(signal.callId, dmState.incomingCall.callerName);
+    if (dmState.incomingCall?.call?.id === signal.callId) {
+      handleIncomingCallDismiss(signal.callId, dmState.incomingCall?.callerName);
     }
-    if (call?.call.id === signal.callId) {
+    if (call?.call?.id === signal.callId) {
       handlePeerLeft(signal.callId, call.remoteName);
     }
     return;
@@ -1211,27 +1211,24 @@ export async function refreshPendingCall(): Promise<void> {
     if (!call || (call.status !== 'ringing' && call.status !== 'active')) return;
     if (dmState.call || dmState.incomingCall) return;
     // A still-ringing call where we are the caller is covered by our own
-    // outgoing panel; only surface the rejoin/incoming affordance otherwise.
+    // outgoing panel; do not surface incoming call banner for calls we initiated.
     if (call.status === 'ringing' && call.callerId === auth.id) return;
-    const conv = dmState.conversations.find((c) => c.id === call.conversationId);
-    let callerName =
-      conv && call.callerId === conv.otherUser?.id
-        ? conv.otherUser.username
-        : call.callerId === auth.id ? auth.username : '';
-    let callerAvatar =
-      conv && call.callerId === conv.otherUser?.id
-        ? conv.otherUser.avatarUrl
-        : call.callerId === auth.id ? auth.avatarUrl : null;
 
-    if (!callerName && call.callerId !== auth.id) {
+    const conv = dmState.conversations.find((c) => c.id === call.conversationId);
+    const peerId = call.callerId === auth.id ? call.calleeId : call.callerId;
+
+    let peerName = conv && conv.otherUser?.id === peerId ? conv.otherUser.username : '';
+    let peerAvatar = conv && conv.otherUser?.id === peerId ? conv.otherUser.avatarUrl : null;
+
+    if (!peerName) {
       try {
-        const prof = await fetchUserProfileRequest(auth.token, call.callerId);
-        if (prof?.username) callerName = prof.username;
-        if (prof?.avatarUrl) callerAvatar = prof.avatarUrl;
+        const prof = await fetchUserProfileRequest(auth.token, peerId);
+        if (prof?.username) peerName = prof.username;
+        if (prof?.avatarUrl) peerAvatar = prof.avatarUrl;
       } catch {}
     }
 
-    setDmState('incomingCall', { call, callerName: callerName || 'Unknown User', callerAvatar });
+    setDmState('incomingCall', { call, callerName: peerName || 'Unknown User', callerAvatar: peerAvatar });
   } catch {
     // Poll failures are transient; the realtime channel remains the fast path.
   }

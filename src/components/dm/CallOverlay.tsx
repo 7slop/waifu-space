@@ -122,50 +122,58 @@ export function CallOverlay() {
 }
 
 function IncomingCallBar() {
-  const incoming = () => dmState.incomingCall!;
-  const isVideo = () => incoming().call.callType !== 'voice';
-  const conv = () => dmState.conversations.find((c) => c.id === incoming().call.conversationId);
+  const incoming = () => dmState.incomingCall;
+  const isVideo = () => incoming()?.call.callType !== 'voice';
+  const conv = () => {
+    const inc = incoming();
+    return inc ? dmState.conversations.find((c) => c.id === inc.call.conversationId) : undefined;
+  };
   const peer = () => {
+    const inc = incoming();
     const fromConv = conv()?.otherUser;
     return {
-      name: incoming().callerName || fromConv?.username || peerInfo().name,
-      avatar: incoming().callerAvatar ?? fromConv?.avatarUrl ?? peerInfo().avatar
+      name: inc?.callerName || fromConv?.username || peerInfo(inc?.call.conversationId).name || 'Caller',
+      avatar: inc?.callerAvatar ?? fromConv?.avatarUrl ?? peerInfo(inc?.call.conversationId).avatar
     };
   };
   const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
 
   return (
-    <div class="dm-call-dock dm-call-incoming" data-testid="dm-incoming-call">
-      <div class="dm-call-avatars ringing" data-testid="dm-call-avatars">
-        <div class="dm-call-avatar-slot mine">
-          <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
+    <Show when={incoming()}>
+      {(inc) => (
+        <div class="dm-call-dock dm-call-incoming" data-testid="dm-incoming-call">
+          <div class="dm-call-avatars ringing" data-testid="dm-call-avatars">
+            <div class="dm-call-avatar-slot mine">
+              <DmAvatar name={me().name} avatarUrl={me().avatar} size="44px" class="dm-call-avatar mine" />
+            </div>
+            <div class="dm-call-avatar-slot remote">
+              <span class="dm-call-ring" aria-hidden="true" />
+              <DmAvatar
+                name={peer().name}
+                avatarUrl={peer().avatar ?? undefined}
+                size="44px"
+                class="dm-call-avatar remote"
+              />
+            </div>
+          </div>
+          <div class="dm-call-info">
+            <span class="dm-call-name">{inc().callerName || peer().name}</span>
+            <span class="dm-call-sub">{inc().leftNotice ?? `${isVideo() ? t('dm.callVideoLabel') : t('dm.callVoiceLabel')} · ${t('dm.callingLabel')}`}</span>
+          </div>
+          <div class="dm-call-actions">
+            <button class="dm-call-action decline" data-testid="dm-call-decline" title={t('dm.decline')} onClick={() => void declineIncomingCall()}>
+              <PhPhoneDisconnect />
+            </button>
+            <button class="dm-call-action accept" data-testid="dm-call-accept" title={t('dm.accept')} onClick={() => void acceptIncomingCall()}>
+              <PhPhoneCall />
+            </button>
+            <button class="dm-call-action busy" data-testid="dm-call-busy" title={t('dm.busy')} onClick={() => void markCallBusyAndReject()}>
+              <PhPhoneCall />
+            </button>
+          </div>
         </div>
-        <div class="dm-call-avatar-slot remote">
-          <span class="dm-call-ring" aria-hidden="true" />
-          <DmAvatar
-            name={peer().name}
-            avatarUrl={peer().avatar ?? undefined}
-            size="44px"
-            class="dm-call-avatar remote"
-          />
-        </div>
-      </div>
-      <div class="dm-call-info">
-        <span class="dm-call-name">{incoming().callerName}</span>
-        <span class="dm-call-sub">{incoming().leftNotice ?? `${isVideo() ? t('dm.callVideoLabel') : t('dm.callVoiceLabel')} · ${t('dm.callingLabel')}`}</span>
-      </div>
-      <div class="dm-call-actions">
-        <button class="dm-call-action decline" data-testid="dm-call-decline" title={t('dm.decline')} onClick={() => void declineIncomingCall()}>
-          <PhPhoneDisconnect />
-        </button>
-        <button class="dm-call-action accept" data-testid="dm-call-accept" title={t('dm.accept')} onClick={() => void acceptIncomingCall()}>
-          <PhPhoneCall />
-        </button>
-        <button class="dm-call-action busy" data-testid="dm-call-busy" title={t('dm.busy')} onClick={() => void markCallBusyAndReject()}>
-          <PhPhoneCall />
-        </button>
-      </div>
-    </div>
+      )}
+    </Show>
   );
 }
 
@@ -186,14 +194,19 @@ function ActiveCallBar() {
   const screen = createMemo<MediaStream | null>(() => (connected() ? callRemoteStream() : null));
   const local = createMemo<MediaStream | null>(() => callLocalStream());
   const conv = () => dmState.conversations.find((c) => c.id === call().call.conversationId);
+  const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
   const peer = () => {
     const fromConv = conv()?.otherUser;
-    return {
-      name: call().remoteName || fromConv?.username || peerInfo().name,
-      avatar: call().remoteAvatar ?? fromConv?.avatarUrl ?? peerInfo().avatar
-    };
+    const c = call();
+    let name = c.remoteName;
+    let avatar = c.remoteAvatar;
+    // Guard against remote info matching local user so two self avatars never appear
+    if (!name || name === me().name) {
+      name = fromConv?.username || peerInfo(c.call.conversationId).name || 'Peer';
+      avatar = fromConv?.avatarUrl ?? peerInfo(c.call.conversationId).avatar ?? null;
+    }
+    return { name, avatar };
   };
-  const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
 
   // When the local user shares their screen the shared feed (local stream)
   // fills the big stage, so the remote camera becomes a square PiP. Before
