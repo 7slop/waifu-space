@@ -231,11 +231,36 @@ BEGIN
     RAISE EXCEPTION 'message too long';
   END IF;
 
+  IF p_message_type <> 'text' THEN
+    IF p_media_url IS NULL OR p_media_url = '' THEN
+      RAISE EXCEPTION 'media URL required for % message', p_message_type;
+    END IF;
+    IF char_length(p_media_url) > 2048 THEN
+      RAISE EXCEPTION 'media URL too long';
+    END IF;
+    IF p_media_url !~ '^https?://' THEN
+      RAISE EXCEPTION 'media URL must be an absolute http(s) URL';
+    END IF;
+    IF p_message_type = 'gif'
+       AND p_media_url !~* '\.(gif|gifv)(\?.*)?$'
+       AND p_media_url !~* '(tenor\.com|giphy\.com|media\.tenor\.com|media\.giphy\.com|i\.giphy\.media|media\.gif|gph\.is)' THEN
+      RAISE EXCEPTION 'media URL does not match message type';
+    END IF;
+    IF p_message_type = 'video'
+       AND p_media_url !~* '\.(mp4|webm|ogv|mov|m4v)(\?.*)?$' THEN
+      RAISE EXCEPTION 'media URL does not match message type';
+    END IF;
+    IF p_message_type = 'image'
+       AND p_media_url !~* '\.(png|jpe?g|webp|avif|bmp)(\?.*)?$' THEN
+      RAISE EXCEPTION 'media URL does not match message type';
+    END IF;
+  END IF;
+
   IF p_reply_to_id IS NOT NULL THEN
     SELECT EXISTS (
       SELECT 1 FROM public.messages m
-      JOIN public.conversation_participants cp ON cp.conversation_id = m.conversation_id
-      WHERE m.id = p_reply_to_id AND cp.user_id = p_user_id
+      WHERE m.id = p_reply_to_id
+        AND m.conversation_id = p_conversation_id
     ) INTO v_reply_ok;
     IF NOT v_reply_ok THEN
       RAISE EXCEPTION 'reply target not found';

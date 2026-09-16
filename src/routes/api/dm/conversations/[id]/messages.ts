@@ -1,5 +1,6 @@
 import { json } from '@solidjs/router';
 import { resolveDmContext, badRequestResponse } from '../../../../../lib/server/dm-context';
+import { detectMediaUrl } from '../../../../../lib/dm/api';
 import type { DmMessage, DmReaction, MessageType } from '../../../../../lib/dm/types';
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -92,8 +93,14 @@ export async function POST(event: { request: Request; params: Record<string, str
   if (messageType !== 'text' && !mediaUrl) {
     return badRequestResponse(`${messageType} messages require a media URL`);
   }
-  if (mediaUrl && !/^https?:\/\//i.test(mediaUrl) && mediaUrl.length <= 2048) {
+  if (mediaUrl && !/^https?:\/\//i.test(mediaUrl)) {
     return badRequestResponse('mediaUrl must be an absolute http(s) URL');
+  }
+  if (messageType !== 'text') {
+    const detected = detectMediaUrl(mediaUrl || '');
+    if (!detected || detected.kind !== messageType) {
+      return badRequestResponse(`mediaUrl does not match message type ${messageType}`);
+    }
   }
 
   const { data, error } = await ctx.supabase.rpc('send_dm_message', {

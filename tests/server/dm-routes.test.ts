@@ -157,9 +157,15 @@ function buildFakeDmClient() {
       return { data: summaryOf(conv.id, p_user_id), error: null };
     },
 
-    send_dm_message: ({ p_user_id, p_conversation_id, p_content, p_message_type, p_media_url }: any) => {
+    send_dm_message: ({ p_user_id, p_conversation_id, p_content, p_message_type, p_media_url, p_reply_to_id }: any) => {
       if (!memberIdsOf(p_conversation_id).includes(p_user_id)) {
         return { data: null, error: { message: 'not a participant of this conversation' } };
+      }
+      if (p_reply_to_id) {
+        const reply = db.messages.find(m => m.id === p_reply_to_id);
+        if (!reply || reply.conversation_id !== p_conversation_id) {
+          return { data: null, error: { message: 'reply target not found' } };
+        }
       }
       const msg = {
         id: nextId('msg'),
@@ -168,6 +174,7 @@ function buildFakeDmClient() {
         content: p_content,
         message_type: p_message_type,
         media_url: p_media_url,
+        reply_to_id: p_reply_to_id ?? null,
         created_at: nowIso()
       };
       db.messages.push(msg);
@@ -181,6 +188,7 @@ function buildFakeDmClient() {
           content: p_content,
           messageType: p_message_type,
           mediaUrl: p_media_url,
+          replyToId: p_reply_to_id ?? null,
           createdAt: msg.created_at
         },
         error: null
@@ -467,6 +475,89 @@ describe('DM API routes (Supabase-backed)', () => {
     const body = await res.json();
     expect(body.message.messageType).toBe('gif');
     expect(body.message.mediaUrl).toBe('https://media.tenor.com/abc.gif');
+  });
+
+  it('rejects a GIF message whose media URL does not look like a gif', async () => {
+    const { A, conv } = seedWorld();
+    const res = await messagesPOST(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(A, 'alice')}` },
+        body: JSON.stringify({ messageType: 'gif', mediaUrl: 'https://example.com/image.png' })
+      })
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a video message whose media URL is not a direct video file', async () => {
+    const { A, conv } = seedWorld();
+    const res = await messagesPOST(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(A, 'alice')}` },
+        body: JSON.stringify({ messageType: 'video', mediaUrl: 'https://example.com/watch?id=123' })
+      })
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a media URL that is not an absolute http(s) URL even when long', async () => {
+    const { A, conv } = seedWorld();
+    const res = await messagesPOST(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(A, 'alice')}` },
+        body: JSON.stringify({
+          messageType: 'image',
+          mediaUrl: 'javascript:alert(1)'.padEnd(2200, 'a')
+        })
+      })
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects replying to a message in a different conversation', async () => {
+    const { A, conv } = seedWorld();
+    // Seed a second conversation the same user participates in.
+    const otherId = nextId('conv');
+    mocks.state.db.conversations.push({ id: otherId, type: 'dm', created_at: nowIso(), updated_at: nowIso() });
+    mocks.state.db.conversation_participants.push(
+      { conversation_id: otherId, user_id: A, joined_at: nowIso(), last_read_at: nowIso() },
+      { conversation_id: otherId, user_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', joined_at: nowIso(), last_read_at: nowIso() }
+    );
+    const otherMsgId = nextId('msg');
+    mocks.state.db.messages.push({
+      id: otherMsgId, conversation_id: otherId, sender_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      content: 'a message in the other conversation', message_type: 'text', media_url: null, created_at: nowIso()
+    });
+
+    const res = await messagesPOST(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(A, 'alice')}` },
+        body: JSON.stringify({ content: 'replied', replyToId: otherMsgId })
+      })
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toBe('reply target not found');
+  });
+
+  it('accepts replying to a message in the same conversation', async () => {
+    const { A, conv } = seedWorld();
+    const list = mocks.state.db.messages.filter(m => m.conversation_id === conv.id);
+    const target = list[0];
+
+    const res = await messagesPOST(
+      req(`http://localhost/api/dm/conversations/${conv.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${freshTicket(A, 'alice')}` },
+        body: JSON.stringify({ content: 'in reply', replyToId: target.id })
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.message.replyToId).toBe(target.id);
   });
 
   it('rejects an empty text message', async () => {
