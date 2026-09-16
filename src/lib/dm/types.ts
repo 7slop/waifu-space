@@ -178,6 +178,8 @@ export interface CallSignalPayload {
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   reason?: string;
+  /** DB createdAt of the queued row this payload was decoded from (newest-wins glare resolution). */
+  createdAt?: string;
 }
 
 /** A queued WebRTC signal row from `public.call_signals` (via the API). */

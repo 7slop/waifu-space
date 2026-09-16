@@ -3,6 +3,7 @@ import { createStore } from 'solid-js/store';
 import type {
   CallSession,
   CallSignalPayload,
+  CallStoredSignal,
   CallType,
   DmConversationSummary,
   DmMessage,
@@ -151,6 +152,8 @@ interface DmRuntime {
   callSignalPollTimer: ReturnType<typeof setInterval> | null;
   /** Per-call poll watermark: highest `createdAt` of signals already applied. */
   signalCursor: Map<string, string>;
+  /** Per-call DB `createdAt` of the latest offer we sent (newest-wins glare resolution). */
+  lastOfferSent: Map<string, string>;
   peerLeftTimeout: ReturnType<typeof setTimeout> | null;
 }
 
@@ -166,6 +169,7 @@ const runtime: DmRuntime = {
   callStatusPollTimer: null,
   callSignalPollTimer: null,
   signalCursor: new Map<string, string>(),
+  lastOfferSent: new Map<string, string>(),
   peerLeftTimeout: null
 };
 
@@ -374,8 +378,22 @@ function onRealtimePresence(map: Record<string, RealtimePresencePayload>): void 
 function sendSignal(type: CallSignalPayload['type'], callId: string, _conversationId: string, extras: Partial<CallSignalPayload>): void {
   const auth = currentAuth();
   if (!auth || !callId || callId === 'undefined' || callId === 'null') return;
+  // Optimistically mark our offer as the newest so an older peer offer that
+  // races in before the enqueue response cannot be answered (crossed SDPs).
+  if (type === 'offer') runtime.lastOfferSent.set(callId, new Date().toISOString());
   void sendCallSignalRequest(auth.token, callId, type, { sdp: extras.sdp, candidate: extras.candidate, reason: extras.reason })
-    .catch(() => undefined);
+    .then((signal) => {
+      // Replace the optimistic mark with the authoritative DB timestamp; if the
+      // row failed to persist, drop it so the peer's offer is still honored.
+      if (type === 'offer') {
+        if (signal?.createdAt) runtime.lastOfferSent.set(callId, signal.createdAt);
+        else runtime.lastOfferSent.delete(callId);
+      }
+      return signal;
+    })
+    .catch(() => {
+      if (type === 'offer') runtime.lastOfferSent.delete(callId);
+    });
 }
 
 const pendingInboundIce = new Map<string, RTCIceCandidateInit[]>();
@@ -424,6 +442,7 @@ export function handlePeerLeft(callId: string, remoteName?: string): void {
       runtime.call = null;
       runtime.pendingAccept = null;
       runtime.signalCursor.delete(callId);
+      runtime.lastOfferSent.delete(callId);
       pendingInboundIce.delete(callId);
       startPendingCallPoll();
     }
@@ -438,6 +457,14 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
   const call = dmState.call;
 
   if (signal.type === 'offer') {
+    // Newest-wins glare resolution: if we already have an offer in flight for
+    // this call, only an offer NEWER than ours may be answered. Answering an
+    // older peer offer while our own is queued produces crossed SDPs where
+    // both sides are answering each other's descriptions — no media flows.
+    const oursSent = runtime.lastOfferSent.get(signal.callId);
+    if (oursSent && signal.createdAt && new Date(signal.createdAt).getTime() <= new Date(oursSent).getTime()) {
+      return;
+    }
     // Caller's offer for an incoming call the user already accepted.
     if (runtime.pendingAccept && signal.callId === runtime.pendingAccept.call.id && signal.sdp) {
       // Only meaningful while the accepted call is still live: once the call
@@ -1167,12 +1194,15 @@ export async function startCall(type: CallType): Promise<boolean> {
 
 /**
  * Adopts a call the server told us already exists (busy/ringing/active in the
- * same conversation). The caller becomes the joining party: the remote side is
- * already busy, so there is NO ringing and no new incoming-call banner.
- * Instead the call manager is wired to the returned call id, the UI moves
- * straight to the active dock, and a renegotiation offer is queued in the
- * DB-backed signal store so the already-joined participant answers it (the
- * existing accept/answer wiring) and the media links up.
+ * same conversation). The remote side is already busy, so there is NO ringing
+ * and no new incoming-call banner; the UI moves straight to the active dock.
+ *
+ * The handshake is intentionally role-stable: if the caller's SDP offer is
+ * already queued we answer it, and if the call is still ringing and we are the
+ * callee we wait for the caller's offer rather than creating our own. Only a
+ * live/active call (or a ring we originated) makes the joiner produce a fresh
+ * offer. This prevents the crossed-SDP glare that left both parties with no
+ * audio or video after joining.
  */
 async function joinExistingCall(call: CallSession, conv: DmConversationSummary, auth: DmAuth): Promise<boolean> {
   const manager = makeCallManager();
@@ -1195,8 +1225,72 @@ async function joinExistingCall(call: CallSession, conv: DmConversationSummary, 
   stopPendingCallPoll();
   startCallStatusPolling();
   startCallSignalPolling();
-  const offer = await manager.createOffer(call.id, call.calleeId === auth.id ? call.callerId : call.calleeId);
+
+  const remoteId = call.calleeId === auth.id ? call.callerId : call.calleeId;
+
+  // If the caller's offer is already queued and unanswered, adopt it. Creating
+  // a second offer on top would let BOTH peers answer each other's SDPs —
+  // crossed descriptions that never establish, so no audio/video flows.
+  if (await adoptQueuedPeerOffer(call, remoteId, auth, manager)) return true;
+
+  // Joining a still-ringing call we did NOT originate: stay on the accept side.
+  // The caller's offer is either already handled above or hasn't landed yet —
+  // the signal poll answers it the moment it appears. Never reverse roles.
+  if (call.status === 'ringing' && call.callerId !== auth.id) {
+    runtime.pendingAccept = {
+      call,
+      callerName: conv.otherUser.username,
+      callerAvatar: conv.otherUser.avatarUrl
+    };
+    return true;
+  }
+
+  // Active call (or we originated the ring): the peer expects our offer, so
+  // negotiate from the joiner side.
+  const offer = await manager.createOffer(call.id, remoteId);
   if (offer) sendSignal('offer', call.id, call.conversationId, { sdp: offer });
+  return true;
+}
+
+/**
+ * Answers the peer's existing queued offer (if any is still unanswered) so a
+ * party joining an in-progress call adopts the caller's SDP instead of
+ * competing with it. Advances the signal watermark past the fetched rows so
+ * the poll loop does not re-apply them. Returns true when an offer was adopted.
+ */
+async function adoptQueuedPeerOffer(call: CallSession, remoteId: string, auth: DmAuth, manager: CallManager): Promise<boolean> {
+  let signals: CallStoredSignal[];
+  try {
+    signals = await fetchCallSignalsRequest(auth.token, call.id);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(signals) || !signals.length) return false;
+  const lastRow = signals[signals.length - 1];
+  if (lastRow?.createdAt) runtime.signalCursor.set(call.id, lastRow.createdAt);
+
+  let peerOffer: RTCSessionDescriptionInit | null = null;
+  let answeredLatest = true; // pessimistic: assume we already negotiated
+  for (const s of signals) {
+    if (s.senderId === auth.id) {
+      if (s.signalType === 'answer') answeredLatest = true;
+      continue;
+    }
+    if (s.signalType === 'offer' && s.payload?.sdp) {
+      peerOffer = s.payload.sdp;
+      answeredLatest = false;
+    } else if (s.signalType === 'ice' && s.payload?.candidate) {
+      const list = pendingInboundIce.get(call.id) ?? [];
+      list.push(s.payload.candidate);
+      pendingInboundIce.set(call.id, list);
+    }
+  }
+  if (!peerOffer || answeredLatest) return false;
+
+  const answer = await manager.acceptOffer(call.id, remoteId, peerOffer);
+  if (answer) sendSignal('answer', call.id, call.conversationId, { sdp: answer });
+  drainInboundIce(call.id, manager);
+  flushPendingIce(call.conversationId, call.id);
   return true;
 }
 
@@ -1248,6 +1342,7 @@ export async function pollActiveCallStatus(): Promise<void> {
         runtime.call = null;
         runtime.pendingAccept = null;
         runtime.signalCursor.delete(callId);
+        runtime.lastOfferSent.delete(callId);
         pendingInboundIce.delete(callId);
         startPendingCallPoll();
       }
@@ -1327,7 +1422,8 @@ export async function pollCallSignals(): Promise<void> {
       type: s.signalType,
       senderId: s.senderId,
       sdp: s.payload?.sdp,
-      candidate: s.payload?.candidate
+      candidate: s.payload?.candidate,
+      createdAt: s.createdAt
     });
   }
 }
@@ -1500,6 +1596,7 @@ export async function hangUpCall(): Promise<void> {
   runtime.call?.hangUp('ended');
   stopCallSignalPolling();
   runtime.signalCursor.delete(callId);
+  runtime.lastOfferSent.delete(callId);
   pendingInboundIce.delete(callId);
   if (auth) {
     const status = call.callState === 'ringing' ? (call.direction === 'outgoing' ? 'canceled' : 'declined') : 'ended';
@@ -1610,6 +1707,7 @@ export function resetDmStore(): void {
   stopCallStatusPolling();
   stopCallSignalPolling();
   runtime.signalCursor = new Map<string, string>();
+  runtime.lastOfferSent = new Map<string, string>();
   pendingInboundIce.clear();
   if (runtime.peerLeftTimeout) {
     clearTimeout(runtime.peerLeftTimeout);

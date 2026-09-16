@@ -635,6 +635,87 @@ describe('dm store calls', () => {
     expect(signalPosts.find((p) => p.body?.signalType === 'offer' && p.url.includes('call-existing'))).toBeTruthy();
   });
 
+  it('startCall joining a ringing call adopts the caller offer instead of creating a second one', async () => {
+    const signalPosts: { url: string; method: string | undefined; body: any }[] = [];
+    const callerOffer = {
+      id: 'sig-join-offer', callId: 'call-join-1', conversationId: 'c1', senderId: 'u-bob', signalType: 'offer',
+      payload: { sdp: { type: 'offer', sdp: 'caller-offer-sdp' } }, createdAt: '2025-01-01T00:00:00.000Z'
+    };
+    stubFetch({
+      '/signal': (url, init) => {
+        if (init?.method === 'GET') return JSON_RESP({ success: true, signals: [callerOffer], signal: null });
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        signalPosts.push({ url: String(url), method: init?.method, body });
+        return JSON_RESP({ success: true, signals: [], signal: { ...callerOffer, id: 'stored', senderId: 'u-me', signalType: body.signalType, payload: body.payload, createdAt: '2025-01-01T00:00:01.000Z' } });
+      },
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'offline' } })),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 }),
+      '/api/dm/calls': () =>
+        JSON_RESP(
+          {
+            success: true,
+            joined: true,
+            call: { id: 'call-join-1', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'voice', status: 'ringing', startedAt: '', answeredAt: null, endedAt: null, createdAt: '' }
+          },
+          201
+        )
+    });
+    await initDm();
+    await selectConversation('c1');
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    expect(dmState.call?.call.id).toBe('call-join-1');
+    // The joining callee adopts the caller's queued SDP. Emitting a competing
+    // offer here produced crossed descriptions (no audio/video on either side).
+    expect(signalPosts.filter((p) => p.body?.signalType === 'offer')).toHaveLength(0);
+    const answerPost = signalPosts.find((p) => p.url.includes('call-join-1/signal') && p.body?.signalType === 'answer');
+    expect(answerPost).toBeTruthy();
+    expect(answerPost!.body.payload.sdp).toEqual({ type: 'answer', sdp: 'answer-sdp' });
+    expect(dmState.call?.callState).toBe('connected');
+  });
+
+  it('pollCallSignals ignores a peer offer older than our own in-flight offer (newest wins)', async () => {
+    const signalPosts: { url: string; method: string | undefined; body: any }[] = [];
+    const incoming: any[] = [];
+    stubFetch({
+      '/signal': (url, init) => {
+        if (init?.method === 'GET') return JSON_RESP({ success: true, signals: incoming.splice(0), signal: null });
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        signalPosts.push({ url: String(url), method: init?.method, body });
+        return JSON_RESP({ success: true, signals: [], signal: { id: 'stored', callId: 'call-2', conversationId: 'c1', senderId: 'u-me', signalType: body.signalType, payload: body.payload, createdAt: '2025-01-01T00:00:05.000Z' } });
+      },
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'x', supabaseAnonKey: 'k', isConfigured: true }),
+      '/api/dm/conversations/c1/messages': () => JSON_RESP({ success: true, messages: [] }),
+      '/api/dm/conversations': () => JSON_RESP({ success: true, conversations: [makeConv('c1', 'u-bob')] }),
+      '/api/dm/presence': (url) => (url.includes('/batch') ? JSON_RESP({ success: true, presence: {} }) : JSON_RESP({ success: true, presence: { userId: 'u-me', status: 'offline' } })),
+      '/api/dm/unread': () => JSON_RESP({ success: true, totalUnread: 0 }),
+      '/api/dm/calls': () =>
+        JSON_RESP(
+          {
+            success: true,
+            call: { id: 'call-2', conversationId: 'c1', callerId: 'u-me', calleeId: 'u-bob', callType: 'voice', status: 'ringing', startedAt: '', answeredAt: null, endedAt: null, createdAt: '' }
+          },
+          201
+        )
+    });
+    await initDm();
+    await selectConversation('c1');
+    await startCall('voice');
+    // Our offer is queued at 00:00:05; the peer's stale offer predates it.
+    incoming.length = 0;
+    incoming.push({
+      id: 'sig-old', callId: 'call-2', conversationId: 'c1', senderId: 'u-bob', signalType: 'offer',
+      payload: { sdp: { type: 'offer', sdp: 'older-offer-sdp' } }, createdAt: '2025-01-01T00:00:01.000Z'
+    });
+    await pollCallSignals();
+    // Answering the older offer would cross the SDPs; it must be skipped so the
+    // peer answers OUR newer offer instead.
+    expect(signalPosts.filter((p) => p.body?.signalType === 'answer')).toHaveLength(0);
+  });
+
   it('startCall sends callerAvatar and propagates peer info', async () => {
     await boot();
     await selectConversation('c1');

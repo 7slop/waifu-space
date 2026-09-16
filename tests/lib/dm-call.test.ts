@@ -504,4 +504,44 @@ describe('CallManager', () => {
     expect(reneg[0].callId).toBe('call-q1');
     expect(reneg[0].offer.sdp).toBe('offer-sdp');
   });
+
+  it('treats a transient disconnected transport as recoverable, surfacing peer-left only on a sustained drop or failure', async () => {
+    vi.useFakeTimers();
+    try {
+      installMedia();
+      const peers = setupPeers(1);
+      const peerGone = vi.fn();
+      const manager = new CallManager({
+        getUserMedia: async () => streamObj(makeStream('audio')),
+        onPeerDisconnected: peerGone
+      });
+      await manager.startLocal({ type: 'voice', audio: true, video: false, screen: false });
+      await manager.createOffer('call-g1', 'peer-g1');
+
+      const pc = peers[0] as any;
+      // A short ICE blip during renegotiation must not tear the call down...
+      pc.iceConnectionState = 'disconnected';
+      pc.oniceconnectionstatechange?.();
+      expect(peerGone).not.toHaveBeenCalled();
+      // ...and recovery cancels the pending check entirely.
+      pc.iceConnectionState = 'connected';
+      pc.oniceconnectionstatechange?.();
+      vi.advanceTimersByTime(15_000);
+      expect(peerGone).not.toHaveBeenCalled();
+
+      // A sustained drop does surface a peer-left after the grace window.
+      pc.connectionState = 'disconnected';
+      pc.onconnectionstatechange?.();
+      expect(peerGone).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(15_000);
+      expect(peerGone).toHaveBeenCalledTimes(1);
+
+      // A hard failure fires immediately, without waiting for the grace window.
+      pc.connectionState = 'failed';
+      pc.onconnectionstatechange?.();
+      expect(peerGone).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

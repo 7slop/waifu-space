@@ -48,6 +48,15 @@ export interface CallManagerDeps {
 }
 
 export class CallManager {
+  /**
+   * How long a transient `disconnected` WebRTC transport may stay unrecovered
+   * before the peer is treated as gone. ICE frequently drops to
+   * `disconnected` during a renegotiation (track swaps, screen share, camera
+   * toggles) and usually recovers to `connected` within a second, so we only
+   * surface a peer-left after this grace window instead of on the first blip.
+   */
+  private static readonly PEER_GONE_GRACE_MS = 10_000;
+
   deps: CallManagerDeps;
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
@@ -67,6 +76,7 @@ export class CallManager {
   /** Set when a track change could not be signaled yet (ringing / unstable /
    *  already renegotiating); flushed once the call is connected and stable. */
   private needsRenegotiation = false;
+  private peerGoneTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(deps: CallManagerDeps = {}) {
     this.deps = deps;
@@ -90,6 +100,33 @@ export class CallManager {
     this.deps.onStateChange?.(next);
   }
 
+  /** Cancels a pending peer-gone check (recovered or call ended). */
+  private clearPeerGoneCheck(): void {
+    if (this.peerGoneTimer) {
+      clearTimeout(this.peerGoneTimer);
+      this.peerGoneTimer = null;
+    }
+  }
+
+  /** Fires a peer-left only if the transport is still down after the grace window. */
+  private schedulePeerGoneCheck(): void {
+    if (this.peerGoneTimer) return;
+    this.peerGoneTimer = setTimeout(() => {
+      this.peerGoneTimer = null;
+      const conn = this.pc?.connectionState ?? 'stable';
+      const ice = this.pc?.iceConnectionState ?? 'connected';
+      if (conn === 'disconnected' || conn === 'failed' || ice === 'disconnected' || ice === 'failed') {
+        this.deps.onPeerDisconnected?.();
+      }
+    }, CallManager.PEER_GONE_GRACE_MS);
+  }
+
+  /** Fires a peer-left immediately (hard failure — no grace). */
+  private notifyPeerGone(): void {
+    this.clearPeerGoneCheck();
+    this.deps.onPeerDisconnected?.();
+  }
+
   private setPeer(peerId: string): void {
     this.peerId = peerId;
     if (this.pc) return;
@@ -100,14 +137,22 @@ export class CallManager {
     };
     this.pc.onconnectionstatechange = () => {
       const st = this.pc?.connectionState;
-      if (st === 'disconnected' || st === 'failed') {
-        this.deps.onPeerDisconnected?.();
+      if (st === 'failed') {
+        this.notifyPeerGone();
+      } else if (st === 'disconnected') {
+        this.schedulePeerGoneCheck();
+      } else {
+        this.clearPeerGoneCheck();
       }
     };
     this.pc.oniceconnectionstatechange = () => {
       const st = this.pc?.iceConnectionState;
-      if (st === 'disconnected' || st === 'failed') {
-        this.deps.onPeerDisconnected?.();
+      if (st === 'failed') {
+        this.notifyPeerGone();
+      } else if (st === 'disconnected') {
+        this.schedulePeerGoneCheck();
+      } else if (st === 'connected' || st === 'completed') {
+        this.clearPeerGoneCheck();
       }
     };
     this.pc.ontrack = (ev) => {
@@ -540,6 +585,7 @@ export class CallManager {
   }
 
   hangUp(reason: 'ended' | 'declined' | 'canceled' = 'ended'): void {
+    this.clearPeerGoneCheck();
     if (this.pc) {
       try {
         this.pc.close();
