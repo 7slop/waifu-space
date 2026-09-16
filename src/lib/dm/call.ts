@@ -202,6 +202,21 @@ export class CallManager {
     try {
       if (options.screen) {
         streams.push(await getDisplayMedia());
+        if (options.audio) {
+          // Display media only captures the screen (plus optionally shared tab
+          // audio). A screen call must still carry the caller's voice, so grab
+          // the microphone and merge it in. Failing mic acquisition never
+          // kills the call: the screen keeps being shared without audio.
+          try {
+            streams.push(await getUserMedia({ audio: getOptimizedAudioConstraints() }));
+          } catch {
+            try {
+              streams.push(await getUserMedia({ audio: true }));
+            } catch {
+              // No mic available / permission denied — screen only.
+            }
+          }
+        }
       } else if (options.audio || options.video) {
         const audioConstraints = options.audio ? getOptimizedAudioConstraints() : false;
         try {

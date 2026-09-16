@@ -372,6 +372,59 @@ describe('CallManager', () => {
     expect(stateChanges).toBeGreaterThan(0);
   });
 
+  it('a screen call merges the shared screen with the caller microphone audio', async () => {
+    installMedia();
+    setupPeers(1);
+    const screenStream = streamObj(makeStream('video'));
+    const micStream = streamObj(makeStream('audio'));
+    let micConstraints: unknown;
+    const manager = new CallManager({
+      getUserMedia: async (constraints) => {
+        micConstraints = constraints;
+        return micStream;
+      },
+      getDisplayMedia: async () => screenStream,
+      onLocalStream: (s: MediaStream) => {
+        expect(s.getVideoTracks()).toHaveLength(1);
+        expect(s.getAudioTracks()).toHaveLength(1);
+      }
+    });
+
+    const ok = await manager.startLocal({ type: 'screen', audio: true, video: false, screen: true });
+    expect(ok).toBe(true);
+    expect(manager.currentState).toBe('ringing');
+    expect(manager.isScreenSharing()).toBe(true);
+    // The microphone is requested with the optimized constraints.
+    expect(micConstraints).toEqual({ audio: getOptimizedAudioConstraints() });
+
+    const offer = await manager.createOffer('call-s4', 'peer-s4');
+    expect(offer).toMatchObject({ type: 'offer', sdp: 'offer-sdp' });
+  });
+
+  it('a screen call still shares the screen when the microphone is denied', async () => {
+    installMedia();
+    setupPeers(1);
+    const screenStream = streamObj(makeStream('video'));
+    let micAttempts = 0;
+    const manager = new CallManager({
+      getUserMedia: async () => {
+        micAttempts++;
+        throw new Error('mic denied');
+      },
+      getDisplayMedia: async () => screenStream,
+      onLocalStream: (s: MediaStream) => {
+        expect(s.getVideoTracks()).toHaveLength(1);
+        expect(s.getAudioTracks()).toHaveLength(0);
+      }
+    });
+
+    const ok = await manager.startLocal({ type: 'screen', audio: true, video: false, screen: true });
+    expect(ok).toBe(true);
+    expect(manager.isScreenSharing()).toBe(true);
+    // Optimized + plain-audio fallback were both attempted before giving up.
+    expect(micAttempts).toBe(2);
+  });
+
   it('acquires camera while screen sharing without stopping the screen share', async () => {
     installMedia();
     setupPeers(1);
