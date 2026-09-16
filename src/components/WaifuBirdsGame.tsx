@@ -120,81 +120,83 @@ export function WaifuBirdsGame() {
       data-testid="wfb-game"
     >
       <div
-        class="wfb-scene"
+        class="wfb-stage"
         style={{ height: `${FLAPPY_WORLD_HEIGHT}px`, width: `${FLAPPY_WORLD_WIDTH}px` }}
       >
-        {/* Bird */}
-        <div
-          class={`wfb-bird ${started() && gameState().dead ? 'wfb-bird-dead' : ''}`}
-          style={birdStyle()}
-          data-testid="wfb-bird"
-        >
-          <PhBird />
-        </div>
+        <div class="wfb-scene">
+          {/* Bird */}
+          <div
+            class={`wfb-bird ${started() && gameState().dead ? 'wfb-bird-dead' : ''}`}
+            style={birdStyle()}
+            data-testid="wfb-bird"
+          >
+            <PhBird />
+          </div>
 
-        {/* Pipes (torii gates) */}
-        <For each={gameState().pipes}>
-          {pipe => (
-            <div class="wfb-pipe-col" style={{ left: `${pipe.x}px` }}>
-              <div class="wfb-pipe wfb-pipe-top" style={{ height: `${pipe.gapY}px` }} />
-              <div
-                class="wfb-pipe wfb-pipe-bottom"
-                style={{
-                  top: `${pipe.gapY + PIPE_GAP}px`,
-                  height: `${Math.max(0, FLAPPY_WORLD_HEIGHT - GROUND_HEIGHT - pipe.gapY - PIPE_GAP)}px`
-                }}
-              />
-            </div>
-          )}
-        </For>
+          {/* Pipes (torii gates) */}
+          <For each={gameState().pipes}>
+            {pipe => (
+              <div class="wfb-pipe-col" style={{ left: `${pipe.x}px` }}>
+                <div class="wfb-pipe wfb-pipe-top" style={{ height: `${pipe.gapY}px` }} />
+                <div
+                  class="wfb-pipe wfb-pipe-bottom"
+                  style={{
+                    top: `${pipe.gapY + PIPE_GAP}px`,
+                    height: `${Math.max(0, FLAPPY_WORLD_HEIGHT - GROUND_HEIGHT - pipe.gapY - PIPE_GAP)}px`
+                  }}
+                />
+              </div>
+            )}
+          </For>
 
-        <div class="wfb-ground" />
+          <div class="wfb-ground" />
 
-        <Show when={started()}>
-          <div class="wfb-score" data-testid="wfb-score">{gameState().score}</div>
-        </Show>
-      </div>
-
-      {/* Idle overlay */}
-      <Show when={!started()}>
-        <div class="wfb-overlay" data-testid="wfb-overlay">
-          <div class="wfb-overlay-title"><span class="wfb-flying-icon"><PhBird /></span> {t('birds.title')}</div>
-          <div class="wfb-overlay-sub">{t('birds.tapToStart')}</div>
-          <Show when={stats().birds.highScore > 0}>
-            <div class="wfb-best-badge" data-testid="wfb-best-idle">
-              🏆 {t('birds.bestLabel')}: {stats().birds.highScore}
-            </div>
+          <Show when={started()}>
+            <div class="wfb-score" data-testid="wfb-score">{gameState().score}</div>
           </Show>
         </div>
-      </Show>
 
-      {/* Result overlay */}
-      <Show when={result() && started()}>
-        <div class="wfb-result" data-testid="wfb-result">
-          <div class="wfb-result-title">{t('birds.gameOverTitle')}</div>
-          <div class="wfb-result-score">
-            <span class="wfb-score-value" data-testid="wfb-final-score">{result()!.score}</span>
-            <span class="wfb-score-hint">{t('birds.scoreLabel')}</span>
+        {/* Idle overlay */}
+        <Show when={!started()}>
+          <div class="wfb-overlay" data-testid="wfb-overlay">
+            <div class="wfb-overlay-title"><span class="wfb-flying-icon"><PhBird /></span> {t('birds.title')}</div>
+            <div class="wfb-overlay-sub">{t('birds.tapToStart')}</div>
+            <Show when={stats().birds.highScore > 0}>
+              <div class="wfb-best-badge" data-testid="wfb-best-idle">
+                🏆 {t('birds.bestLabel')}: {stats().birds.highScore}
+              </div>
+            </Show>
           </div>
-          <div class="wfb-result-reward" data-testid="wfb-reward">
-            <PhCoins /> +{result()!.coins} · +{result()!.exp} EXP
+        </Show>
+
+        {/* Result overlay */}
+        <Show when={result() && started()}>
+          <div class="wfb-result" data-testid="wfb-result">
+            <div class="wfb-result-title">{t('birds.gameOverTitle')}</div>
+            <div class="wfb-result-score">
+              <span class="wfb-score-value" data-testid="wfb-final-score">{result()!.score}</span>
+              <span class="wfb-score-hint">{t('birds.scoreLabel')}</span>
+            </div>
+            <div class="wfb-result-reward" data-testid="wfb-reward">
+              <PhCoins /> +{result()!.coins} · +{result()!.exp} EXP
+            </div>
+            <div class="wfb-best-badge" data-testid="wfb-best-result">
+              🏆 {t('birds.bestLabel')}: {stats().birds.highScore}
+            </div>
+            <button
+              type="button"
+              class="btn-primary"
+              data-testid="wfb-play-again"
+              onClick={e => {
+                e.stopPropagation();
+                startGame();
+              }}
+            >
+              <PhLightning /> {t('birds.playAgain')}
+            </button>
           </div>
-          <div class="wfb-best-badge" data-testid="wfb-best-result">
-            🏆 {t('birds.bestLabel')}: {stats().birds.highScore}
-          </div>
-          <button
-            type="button"
-            class="btn-primary"
-            data-testid="wfb-play-again"
-            onClick={e => {
-              e.stopPropagation();
-              startGame();
-            }}
-          >
-            <PhLightning /> {t('birds.playAgain')}
-          </button>
-        </div>
-      </Show>
+        </Show>
+      </div>
 
       <div class="wfb-footnote"><PhHeart /> {t('birds.footnote')}</div>
     </div>

@@ -365,6 +365,7 @@
     "gamemodes": {
       "live": "Live",
       "soon": "Soon",
+      "loading": "Loading...",
       "newModesTitle": "New Gamemodes Coming Soon",
       "newModesDesc": "Exciting new minigames including Waifu Card Battles, Rhythm Tap, and Shrine Dungeon Expeditions are in active development!",
       "playDefense": "Play Waifu Defense"
@@ -862,6 +863,39 @@
       "desc": "Unlocks the transcendent Nebula Ethereal avatar frame!",
       "reward": "Nebula Ethereal Frame"
     }
+  },
+  "sweeper": {
+    "title": "WaifuSweeper",
+    "minesLeft": "Mines",
+    "time": "Time",
+    "easy": "Easy",
+    "medium": "Medium",
+    "hard": "Hard",
+    "bestTiles": "Best Clear",
+    "bestTime": "Best Time",
+    "wins": "Wins",
+    "plays": "Rounds",
+    "hiddenLabel": "Hidden tile",
+    "flagLabel": "Flagged tile",
+    "mineLabel": "Mine",
+    "boomLabel": "KABOOM!",
+    "newGame": "New Game",
+    "playAgain": "Play Again",
+    "winTitle": "Minefield Cleared!",
+    "winDesc": "{tiles} safe tiles cleared in {sec}s.",
+    "loseDesc": "You tripped over {tiles} safe tiles before a mine got you!",
+    "winToast": "Minefield cleared! (+{coins} 🪙, +{exp} EXP)",
+    "statHint": "Left-click to reveal a tile, right-click to flag a suspected mine. Avoid the waifu traps!"
+  },
+  "birds": {
+    "title": "Waifu Birds",
+    "tapToStart": "Tap or press Space to fly!",
+    "scoreLabel": "Score",
+    "bestLabel": "Best",
+    "gameOverTitle": "Flap ended!",
+    "playAgain": "Flap Again",
+    "finishToast": "Waifu Birds run finished! (+{coins} 🪙, +{exp} EXP)",
+    "footnote": "Weave through the torii gates!"
   },
   "strike": {
     "title": "Waifu Strike",

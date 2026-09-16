@@ -104,9 +104,12 @@ export function WaifuSweeperGame() {
   const onReveal = (row: number, col: number) => {
     if (result()) return;
     let b = board();
-    if (!started()) {
+    if (!b) {
+      // First reveal defines the mine layout (guarded around this tile).
       b = createBoard(SWEEPER_PRESETS[difficulty()], row, col);
       setBoard(b);
+    }
+    if (!started()) {
       setStarted(true);
       startTimer();
     }

@@ -25,6 +25,8 @@ import {
   PhLock,
   PhWarningCircle,
   PhRunning,
+  PhBomb,
+  PhBird,
   EmojiIcon
 } from './icons';
 
@@ -36,9 +38,17 @@ const StrikeMapEditor = lazy(() =>
   import('./StrikeMapEditor').then((m) => ({ default: m.StrikeMapEditor }))
 );
 
+const WaifuSweeperGame = lazy(() =>
+  import('./WaifuSweeperGame').then((m) => ({ default: m.WaifuSweeperGame }))
+);
+
+const WaifuBirdsGame = lazy(() =>
+  import('./WaifuBirdsGame').then((m) => ({ default: m.WaifuBirdsGame }))
+);
+
 export function RpgHub() {
   const [activeTab, setActiveTab] = createSignal<'games' | 'gacha' | 'affection'>('games');
-  const [selectedGame, setSelectedGame] = createSignal<'defense' | 'strike' | 'future'>('defense');
+  const [selectedGame, setSelectedGame] = createSignal<'defense' | 'strike' | 'sweeper' | 'birds' | 'future'>('defense');
   const [editMode, setEditMode] = createSignal(false);
 
   // The map editor is a launch-time feature: `bun run dev --edit` enables it,
@@ -122,6 +132,22 @@ export function RpgHub() {
               </button>
 
               <button
+                class={`gamemode-chip-btn ${selectedGame() === 'sweeper' ? 'active' : ''}`}
+                onClick={() => setSelectedGame('sweeper')}
+              >
+                <span><PhBomb /></span>
+                <span>{t('sweeper.title')}</span>
+              </button>
+
+              <button
+                class={`gamemode-chip-btn ${selectedGame() === 'birds' ? 'active' : ''}`}
+                onClick={() => setSelectedGame('birds')}
+              >
+                <span><PhBird /></span>
+                <span>{t('birds.title')}</span>
+              </button>
+
+              <button
                 class={`gamemode-chip-btn coming-soon ${selectedGame() === 'future' ? 'active' : ''}`}
                 onClick={() => setSelectedGame('future')}
               >
@@ -183,6 +209,26 @@ export function RpgHub() {
                   <StrikeMapEditor onExit={() => setSelectedGame('defense')} />
                 </Suspense>
               </Show>
+            </Show>
+
+            <Show when={selectedGame() === 'sweeper'}>
+              <div class="minigame-lazy-wrap">
+                <Suspense
+                  fallback={<div class="minigame-lazy-loading">{t('rpg.gamemodes.loading')}</div>}
+                >
+                  <WaifuSweeperGame />
+                </Suspense>
+              </div>
+            </Show>
+
+            <Show when={selectedGame() === 'birds'}>
+              <div class="minigame-lazy-wrap">
+                <Suspense
+                  fallback={<div class="minigame-lazy-loading">{t('rpg.gamemodes.loading')}</div>}
+                >
+                  <WaifuBirdsGame />
+                </Suspense>
+              </div>
             </Show>
 
             <Show when={selectedGame() === 'future'}>

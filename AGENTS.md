@@ -104,13 +104,17 @@ src/app.tsx            Root shell: nav, theme, modals, notification scheduler
 src/entry-client.tsx   Client entry
 src/entry-server.tsx   Server entry
 src/routes/            Route definitions + server API routes (see below)
-src/components/        ~32 .tsx UI components (WaifuAvatar, Calendar*, Editor*, RPG, etc.)
+src/components/        ~36 .tsx UI components (WaifuAvatar, WaifuDefenseGame, WaifuStrikeGame, WaifuSweeperGame, WaifuBirdsGame, Calendar*, Editor*, RPG, etc.)
 src/lib/               Shared + client logic
   store.ts              Central reactive Solid store (~2600 lines) + all cloud sync + localStorage persistence (waifu_space_data_v1_acct_<userId>)
   personality.ts        5 archetypes + dialogue engine (Tsundere/Kuudere/Yandere/Deredere/Dandere)
   i18n.ts, timebudget.ts, ical.ts, calendar-*.ts
   cloudcrypt.ts         AES-256-GCM E2E encryption for time-budget/calendar sync
-  economy.ts, requirements/, llm.ts, intents.ts
+  economy.ts            Shared reward curves (lootbox, defense, sweeper, birds, bond)
+  minigame-stats.ts     Client-side best-score stats for WaifuSweeper/WaifuBirds (localStorage, per-account)
+  minesweeper-logic.ts  Pure WaifuSweeper board rules (create/reveal/flag/flood-fill)
+  flappy-logic.ts       Pure WaifuBirds physics/world logic (gravity, pipes, collisions)
+  requirements/, llm.ts, intents.ts
   server/               Server-only logic
   strike/               Babylon.js Strike game engine
 src/locales/           en.json + ja.json (keep both in sync when adding keys)
@@ -154,9 +158,9 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 
 ### Testing Layout
 - Vitest config in `vitest.config.ts` (happy-dom, globals, `tests/setup.ts`).
-- `tests/lib/` — unit tests for store logic, personality, i18n, crypto, economy.
+- `tests/lib/` — unit tests for store logic, personality, i18n, crypto, economy, minesweeper/flappy logic.
 - `tests/server/` — route/API tests.
-- `tests/components/` — component tests (`.test.tsx`).
+- `tests/components/` — component tests (`.test.tsx`), incl. WaifuSweeperGame / WaifuBirdsGame.
 - `bunfig.toml` points Bun's native `bun test` at `tests/lib` — prefer `bun run test` (Vitest).
 
 ---
