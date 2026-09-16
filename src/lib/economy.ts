@@ -55,6 +55,43 @@ export const DUPLICATE_COMPENSATION: Record<LootRarity, { coins: number; exp: nu
   mystical: { coins: 260, exp: 130 }
 };
 
+// ─── WaifuSweeper rewards ─────────────────────────────────────────────────────
+// Casual reward curve (no server validation): base + per-tile, harder boards
+// pay more. Capped so flooding a giant board can't mint coins.
+
+export type SweeperDifficulty = 'easy' | 'medium' | 'hard';
+
+export const SWEEPER_REWARDS: Record<
+  SweeperDifficulty,
+  { coinsBase: number; coinsPerTile: number; expBase: number; expPerTile: number }
+> = {
+  easy: { coinsBase: 15, coinsPerTile: 1, expBase: 18, expPerTile: 1 },
+  medium: { coinsBase: 30, coinsPerTile: 1, expBase: 30, expPerTile: 2 },
+  hard: { coinsBase: 50, coinsPerTile: 2, expBase: 45, expPerTile: 3 }
+};
+
+export function getSweeperCoinsReward(difficulty: SweeperDifficulty, tilesCleared: number): number {
+  const r = SWEEPER_REWARDS[difficulty] ?? SWEEPER_REWARDS.medium;
+  return r.coinsBase + Math.max(0, Math.floor(tilesCleared || 0)) * r.coinsPerTile;
+}
+
+export function getSweeperExpReward(difficulty: SweeperDifficulty, tilesCleared: number): number {
+  const r = SWEEPER_REWARDS[difficulty] ?? SWEEPER_REWARDS.medium;
+  return r.expBase + Math.max(0, Math.floor(tilesCleared || 0)) * r.expPerTile;
+}
+
+// ─── WaifuBirds rewards ───────────────────────────────────────────────────────
+
+export function getBirdsCoinsReward(score: number): number {
+  const s = Math.max(0, Math.floor(score || 0));
+  return Math.min(5 + s * 2, 500);
+}
+
+export function getBirdsExpReward(score: number): number {
+  const s = Math.max(0, Math.floor(score || 0));
+  return Math.min(8 + s * 3, 600);
+}
+
 // ─── Waifu Defense rewards ────────────────────────────────────────────────────
 
 export const DEFENSE_REWARDS = {

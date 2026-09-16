@@ -1436,3 +1436,127 @@
 
 
 
+
+/* ─── Mobile Touch Controls (visible only on touch via StrikeTouchControls) ──── */
+
+.stc-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stc-look-zone {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 62%;
+  height: 100%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.stc-joystick {
+  position: absolute;
+  left: 18px;
+  bottom: 96px;
+  width: 116px;
+  height: 116px;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.stc-joystick-base {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04));
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stc-joystick-knob {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffd7e2, #ff5c8a 70%, #d93a6b);
+  box-shadow: 0 4px 14px rgba(255, 92, 138, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  will-change: transform;
+}
+
+.stc-buttons {
+  position: absolute;
+  right: 14px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+  pointer-events: auto;
+}
+
+.stc-btn-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.stc-btn {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  background: rgba(12, 16, 23, 0.55);
+  color: #ffffff;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: transform 0.06s ease, background 0.12s ease;
+}
+
+.stc-btn:active {
+  transform: scale(0.92);
+  background: rgba(255, 92, 138, 0.45);
+}
+
+.stc-btn svg {
+  width: 24px;
+  height: 24px;
+
+  pointer-events: none;
+}
+
+.stc-btn-fire {
+  width: 68px;
+  height: 68px;
+  font-size: 26px;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 92, 138, 0.85), rgba(200, 40, 90, 0.7));
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.stc-btn-jump {
+  background: rgba(111, 180, 255, 0.35);
+  border-color: rgba(111, 180, 255, 0.5);
+}
+
+.stc-btn-secondary {
+  background: rgba(255, 200, 90, 0.28);
+  border-color: rgba(255, 200, 90, 0.45);
+}
+
+@media (max-width: 420px) {
+  .stc-btn { width: 44px; height: 44px; font-size: 18px; }
+  .stc-btn-fire { width: 60px; height: 60px; font-size: 24px; }
+  .stc-joystick { width: 104px; height: 104px; left: 12px; bottom: 112px; }
+  .stc-joystick-knob { width: 48px; height: 48px; }
+}

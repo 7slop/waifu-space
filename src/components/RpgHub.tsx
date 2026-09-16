@@ -19,12 +19,13 @@ import {
   PhLightning,
   PhSparkle,
   PhBuildings,
-  PhDiceFive,
   PhCoins,
   PhCheckCircle,
   PhLock,
   PhWarningCircle,
   PhRunning,
+  PhBomb,
+  PhBird,
   EmojiIcon
 } from './icons';
 
@@ -36,9 +37,17 @@ const StrikeMapEditor = lazy(() =>
   import('./StrikeMapEditor').then((m) => ({ default: m.StrikeMapEditor }))
 );
 
+const WaifuSweeperGame = lazy(() =>
+  import('./WaifuSweeperGame').then((m) => ({ default: m.WaifuSweeperGame }))
+);
+
+const WaifuBirdsGame = lazy(() =>
+  import('./WaifuBirdsGame').then((m) => ({ default: m.WaifuBirdsGame }))
+);
+
 export function RpgHub() {
   const [activeTab, setActiveTab] = createSignal<'games' | 'gacha' | 'affection'>('games');
-  const [selectedGame, setSelectedGame] = createSignal<'defense' | 'strike' | 'future'>('defense');
+  const [selectedGame, setSelectedGame] = createSignal<'defense' | 'strike' | 'sweeper' | 'birds'>('defense');
   const [editMode, setEditMode] = createSignal(false);
 
   // The map editor is a launch-time feature: `bun run dev --edit` enables it,
@@ -103,31 +112,55 @@ export function RpgHub() {
         {/* 1. GAMES TAB */}
         <Show when={activeTab() === 'games'}>
           <div class="tab-pane games-mode-pane">
-            {/* Gamemode Submenu Selector */}
-            <div class="gamemode-selector-bar">
-              <button
-                class={`gamemode-chip-btn ${selectedGame() === 'defense' ? 'active' : ''}`}
-                onClick={() => setSelectedGame('defense')}
-              >
-                <span><PhSword /></span>
-                <span>{t('rpg.tabs.defense')}</span>
-              </button>
+            {/* Gamemode Submenu Selector — casual vs flagship games */}
+            <div class="games-sections">
+              <div class="game-section">
+                <div class="game-section-title">
+                  <span><PhGameController /></span>
+                  <span>{t('rpg.sections.casual')}</span>
+                </div>
+                <div class="gamemode-selector-bar">
+                  <button
+                    class={`gamemode-chip-btn ${selectedGame() === 'defense' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('defense')}
+                  >
+                    <span><PhSword /></span>
+                    <span>{t('rpg.tabs.defense')}</span>
+                  </button>
 
-              <button
-                class={`gamemode-chip-btn ${selectedGame() === 'strike' ? 'active' : ''}`}
-                onClick={() => setSelectedGame('strike')}
-              >
-                <span><PhLightning /></span>
-                <span>{t('strike.title') || 'Waifu Strike 3D'}</span>
-              </button>
+                  <button
+                    class={`gamemode-chip-btn ${selectedGame() === 'sweeper' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('sweeper')}
+                  >
+                    <span><PhBomb /></span>
+                    <span>{t('sweeper.title')}</span>
+                  </button>
 
-              <button
-                class={`gamemode-chip-btn coming-soon ${selectedGame() === 'future' ? 'active' : ''}`}
-                onClick={() => setSelectedGame('future')}
-              >
-                <span><PhSparkle /></span>
-                <span>{t('rpg.tabs.moreModes')}</span>
-              </button>
+                  <button
+                    class={`gamemode-chip-btn ${selectedGame() === 'birds' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('birds')}
+                  >
+                    <span><PhBird /></span>
+                    <span>{t('birds.title')}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="game-section">
+                <div class="game-section-title">
+                  <span><PhLightning /></span>
+                  <span>{t('rpg.sections.flagship')}</span>
+                </div>
+                <div class="gamemode-selector-bar">
+                  <button
+                    class={`gamemode-chip-btn ${selectedGame() === 'strike' ? 'active' : ''}`}
+                    onClick={() => setSelectedGame('strike')}
+                  >
+                    <span><PhLightning /></span>
+                    <span>{t('strike.title') || 'Waifu Strike 3D'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Selected Gamemode View */}
@@ -185,14 +218,23 @@ export function RpgHub() {
               </Show>
             </Show>
 
-            <Show when={selectedGame() === 'future'}>
-              <div class="future-games-card">
-                <div class="future-icon"><PhDiceFive /></div>
-                <h3>{t('rpg.gamemodes.newModesTitle')}</h3>
-                <p>{t('rpg.gamemodes.newModesDesc')}</p>
-                <button class="btn-primary" onClick={() => setSelectedGame('defense')}>
-                  <PhSword /> {t('rpg.gamemodes.playDefense')}
-                </button>
+            <Show when={selectedGame() === 'sweeper'}>
+              <div class="minigame-lazy-wrap">
+                <Suspense
+                  fallback={<div class="minigame-lazy-loading">{t('rpg.gamemodes.loading')}</div>}
+                >
+                  <WaifuSweeperGame />
+                </Suspense>
+              </div>
+            </Show>
+
+            <Show when={selectedGame() === 'birds'}>
+              <div class="minigame-lazy-wrap">
+                <Suspense
+                  fallback={<div class="minigame-lazy-loading">{t('rpg.gamemodes.loading')}</div>}
+                >
+                  <WaifuBirdsGame />
+                </Suspense>
               </div>
             </Show>
           </div>

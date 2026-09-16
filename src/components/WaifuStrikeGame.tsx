@@ -24,6 +24,7 @@ import { WEAPON_CATALOG, strikeAudio } from '../lib/strike/strike-weapons';
 import { t } from '../lib/i18n';
 import { state, addCoins, gainBondExp } from '../lib/store';
 import { PhX, PhStar, EmojiIcon } from './icons';
+import { StrikeTouchControls, StrikeTouchSink } from './StrikeTouchControls';
 import '../styles/strike.css';
 
 const ACTION_LABELS: Record<keyof StrikeKeybindings, string> = {
@@ -101,6 +102,34 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
   const [rebindingAction, setRebindingAction] = createSignal<keyof StrikeKeybindings | null>(null);
   const [showEscMenu, setShowEscMenu] = createSignal(false);
 
+  // Touch controls: 'auto' (coarse-pointer / small screen), 'on', or 'off', persisted locally.
+  const loadTouchPref = (): 'auto' | 'on' | 'off' => {
+    try {
+      const saved = localStorage.getItem('waifu_strike_touch_controls');
+      if (saved === 'on' || saved === 'off') return saved;
+    } catch {}
+    return 'auto';
+  };
+  const [touchControlsPref, setTouchControlsPref] = createSignal<'auto' | 'on' | 'off'>(loadTouchPref());
+  const isTouchActive = () => {
+    const pref = touchControlsPref();
+    if (pref === 'on') return true;
+    if (pref === 'off') return false;
+    if (typeof window === 'undefined' || typeof matchMedia !== 'function') return false;
+    return (
+      matchMedia('(pointer: coarse)').matches ||
+      matchMedia('(hover: none)').matches ||
+      window.innerWidth <= 768
+    );
+  };
+  const setTouchPreference = (pref: 'auto' | 'on' | 'off') => {
+    setTouchControlsPref(pref);
+    try {
+      if (pref === 'auto') localStorage.removeItem('waifu_strike_touch_controls');
+      else localStorage.setItem('waifu_strike_touch_controls', pref);
+    } catch {}
+  };
+
   let isClosingEscMenu = false;
   let damageDirTimer: number | undefined;
   const closeEscMenu = () => {
@@ -172,6 +201,20 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
   const [isSpawnProtected, setIsSpawnProtected] = createSignal(false);
   const [emptyGrenadeNudge, setEmptyGrenadeNudge] = createSignal(false);
   let emptyGrenadeTimer: any = null;
+
+  // Mobile touch overlay: visible only while actively playing (never over menus).
+  const touchVisible = () =>
+    isTouchActive() &&
+    !showControlsOverlay() &&
+    !showSummaryModal() &&
+    !isChatOpen() &&
+    !isLoadoutOpen() &&
+    !showEscMenu() &&
+    !focusLost();
+  createEffect(() => {
+    const eng = engine();
+    if (eng && !touchVisible()) eng.clearTouchInput();
+  });
 
   const triggerEmptyGrenadeNudge = () => {
     setEmptyGrenadeNudge(true);
@@ -655,6 +698,11 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
         }}
       />
 
+      {/* Mobile touch controls (joystick + look pad + action buttons) */}
+      <Show when={touchVisible()}>
+        <StrikeTouchControls sink={() => engine() as StrikeTouchSink} />
+      </Show>
+
       {/* Crosshair (hidden while scoped with sniper) */}
       <Show when={!isScoped()}>
         <div class="strike-crosshair">
@@ -913,6 +961,34 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
                       }}
                       style={{ width: '140px', cursor: 'pointer' }}
                     />
+                  </div>
+
+                  {/* Mobile Touch Controls */}
+                  <div class="strike-setting-row">
+                    <div>
+                      <span class="strike-setting-label">Touch Controls</span>
+                      <div class="strike-setting-sub">On-screen joystick, look pad & buttons for mobile play (Auto = coarse-pointer/small screens)</div>
+                    </div>
+                    <div class="strike-segmented-ctrl">
+                      <button
+                        class={`strike-segment-btn ${touchControlsPref() === 'auto' ? 'active' : ''}`}
+                        onClick={() => setTouchPreference('auto')}
+                      >
+                        Auto
+                      </button>
+                      <button
+                        class={`strike-segment-btn ${touchControlsPref() === 'on' ? 'active' : ''}`}
+                        onClick={() => setTouchPreference('on')}
+                      >
+                        On
+                      </button>
+                      <button
+                        class={`strike-segment-btn ${touchControlsPref() === 'off' ? 'active' : ''}`}
+                        onClick={() => setTouchPreference('off')}
+                      >
+                        Off
+                      </button>
+                    </div>
                   </div>
 
                   {/* SFX Volume */}

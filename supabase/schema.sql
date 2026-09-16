@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS public.user_progress (
   defense_high_wave INT DEFAULT 0 NOT NULL,
   defense_victories INT DEFAULT 0 NOT NULL,
   goblins_defeated INT DEFAULT 0 NOT NULL,
+  sweeper_best_tiles INT DEFAULT 0 NOT NULL,
+  sweeper_best_time_sec INT DEFAULT 0 NOT NULL,
+  sweeper_wins INT DEFAULT 0 NOT NULL,
+  birds_best_score INT DEFAULT 0 NOT NULL,
+  birds_wins INT DEFAULT 0 NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
   calendar_overrides JSONB DEFAULT '[]'::jsonb NOT NULL,
   calendar_synced_at TIMESTAMPTZ
@@ -44,6 +49,8 @@ CREATE TABLE IF NOT EXISTS public.user_progress (
 
 CREATE INDEX IF NOT EXISTS idx_progress_defense_wave ON public.user_progress(defense_high_wave DESC);
 CREATE INDEX IF NOT EXISTS idx_progress_bond_level ON public.user_progress(bond_level DESC);
+CREATE INDEX IF NOT EXISTS idx_progress_sweeper_tiles ON public.user_progress(sweeper_best_tiles DESC);
+CREATE INDEX IF NOT EXISTS idx_progress_birds_score ON public.user_progress(birds_best_score DESC);
 
 -- 3. User Inventory Table (all cosmetics unlocked by the player)
 CREATE TABLE IF NOT EXISTS public.user_inventory (
@@ -436,6 +443,11 @@ SELECT
   up.worn_outfit,
   up.worn_accessory,
   up.worn_avatar_frame,
+  up.sweeper_best_tiles,
+  up.sweeper_best_time_sec,
+  up.sweeper_wins,
+  up.birds_best_score,
+  up.birds_wins,
   up.updated_at
 FROM public.profiles p
 JOIN public.user_progress up ON p.id = up.user_id

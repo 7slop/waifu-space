@@ -104,15 +104,20 @@ src/app.tsx            Root shell: nav, theme, modals, notification scheduler
 src/entry-client.tsx   Client entry
 src/entry-server.tsx   Server entry
 src/routes/            Route definitions + server API routes (see below)
-src/components/        ~32 .tsx UI components (WaifuAvatar, Calendar*, Editor*, RPG, etc.)
+src/components/        ~36 .tsx UI components (WaifuAvatar, WaifuDefenseGame, WaifuStrikeGame, WaifuSweeperGame, WaifuBirdsGame, MinigameLeaderboard, StrikeTouchControls, Calendar*, Editor*, RPG, etc.)
 src/lib/               Shared + client logic
   store.ts              Central reactive Solid store (~2600 lines) + all cloud sync + localStorage persistence (waifu_space_data_v1_acct_<userId>)
   personality.ts        5 archetypes + dialogue engine (Tsundere/Kuudere/Yandere/Deredere/Dandere)
   i18n.ts, timebudget.ts, ical.ts, calendar-*.ts
   cloudcrypt.ts         AES-256-GCM E2E encryption for time-budget/calendar sync
-  economy.ts, requirements/, llm.ts, intents.ts
+  economy.ts            Shared reward curves (lootbox, defense, sweeper, birds, bond)
+  minigame-stats.ts     Client-side best-score stats for WaifuSweeper/WaifuBirds (localStorage, per-account)
+  minesweeper-logic.ts  Pure WaifuSweeper board rules (create/reveal/flag/flood-fill)
+  flappy-logic.ts       Pure WaifuBirds physics/world logic (gravity, pipes, collisions)
+  requirements/, llm.ts, intents.ts
   server/               Server-only logic
   strike/               Babylon.js Strike game engine
+    strike-babylon-engine.ts  Contains the touch-input API for mobile (setTouchMove/virtual stick, addTouchLook, setTouchFire, queueTouchJump, cycleWeapon, etc.) — synthetic input merges into the same update path as keyboard/mouse.
 src/locales/           en.json + ja.json (keep both in sync when adding keys)
 src/styles/            themes.css, style.css, waifu.css, calendar.css, settings.css, rpg.css, timebudget.css, strike.css, editor.css
 tests/                 setup.ts + components/ + lib/ + server/ test suites
@@ -137,6 +142,7 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 | `auth/login.ts`, `auth/register.ts`, `auth/me.ts` | Custom HMAC-JWT auth (not Supabase Auth) |
 | `defense/start.ts`, `defense/complete-wave.ts` | Tower-defense server-authoritative scoring |
 | `gacha/roll.ts` | Gacha draws |
+| `minigames/leaderboard.ts`, `minigames/record.ts` | WaifuSweeper/WaifuBirds leaderboards (GET top-20, POST best-score upsert) |
 | `strike/config.ts`, `stats.ts`, `map-save.ts`, `edit-mode.ts` | Strike game config/stats/map editor |
 | `sync/progress.ts` | Plaintext cosmetic + economy sync (server-rejects client reward fields) |
 | `timebudget/sync.ts` | E2E-encrypted blob sync |
@@ -154,9 +160,9 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 
 ### Testing Layout
 - Vitest config in `vitest.config.ts` (happy-dom, globals, `tests/setup.ts`).
-- `tests/lib/` — unit tests for store logic, personality, i18n, crypto, economy.
+- `tests/lib/` — unit tests for store logic, personality, i18n, crypto, economy, minesweeper/flappy logic.
 - `tests/server/` — route/API tests.
-- `tests/components/` — component tests (`.test.tsx`).
+- `tests/components/` — component tests (`.test.tsx`), incl. WaifuSweeperGame / WaifuBirdsGame.
 - `bunfig.toml` points Bun's native `bun test` at `tests/lib` — prefer `bun run test` (Vitest).
 
 ---
@@ -173,7 +179,7 @@ tests/                 setup.ts + components/ + lib/ + server/ test suites
 - **Write migrations** for every schema change. Keep `supabase/schema.sql` in sync with the migrations so it continues to describe the full current schema.
 - Schema highlights you must preserve:
   - `public.profiles` — users (id UUID PK, username unique, email, avatar_url, bio).
-  - `public.user_progress` — coins ≥0, bond_exp, bond_level, waifu config, appearance/settings JSONB, claimed_milestones, defense stats, goblins_defeated, calendar_overrides/synced_at.
+  - `public.user_progress` — coins ≥0, bond_exp, bond_level, waifu config, appearance/settings JSONB, claimed_milestones, defense stats, goblins_defeated, calendar_overrides/synced_at — plus casual-minigame leaderboard stats (`sweeper_best_tiles/_time_sec/_wins`, `birds_best_score/_wins`).
   - `public.user_inventory` — cosmetics, unique `(user_id, item_id)`.
   - `public.user_showcase` — up to 6 featured items, PK `(user_id, slot_index)`.
   - `public.calendar_items` — events/tasks/birthdays, PK `(user_id, item_id)`, recurrence types none/daily/weekly/monthly/weekdays.
