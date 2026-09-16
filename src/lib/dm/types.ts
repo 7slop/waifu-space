@@ -140,6 +140,7 @@ export interface CallSignalPayload {
   callId: string;
   conversationId: string;
   type: 'offer' | 'answer' | 'ice' | 'hangup' | 'decline';
+  targetUserId?: string;
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   reason?: string;

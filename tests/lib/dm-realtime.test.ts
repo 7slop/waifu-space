@@ -167,4 +167,42 @@ describe('DmRealtime instant call delivery and subscription synchronization', ()
     expect(userChannel._sentPayloads.some((p: any) => p.event === 'call-cancel')).toBe(true);
     expect(convChannel._sentPayloads.some((p: any) => p.event === 'call-cancel')).toBe(true);
   });
+
+  it('delivers call-signal on user personal channel directly to onCallSignal handler', async () => {
+    await rt.connect({ id: 'user-caller', username: 'Caller' });
+    const userChannel = fakeChannels.get('dm-calls-user-caller');
+    expect(userChannel).toBeDefined();
+
+    const signalPayload = {
+      kind: 'call-signal' as const,
+      callId: 'call-123',
+      conversationId: 'c-1',
+      type: 'answer' as const,
+      sdp: { type: 'answer' as const, sdp: 'fake-sdp' }
+    };
+
+    userChannel._triggerBroadcast('call-signal', signalPayload);
+    expect(handlers.onCallSignal).toHaveBeenCalledWith(signalPayload);
+  });
+
+  it('broadcasts call-signal to conversation and peer personal channel when targetUserId is specified', async () => {
+    await rt.connect({ id: 'user-callee', username: 'Callee' });
+    const signalPayload = {
+      kind: 'call-signal' as const,
+      callId: 'call-123',
+      conversationId: 'c-1',
+      type: 'answer' as const,
+      targetUserId: 'user-caller',
+      sdp: { type: 'answer' as const, sdp: 'fake-sdp' }
+    };
+
+    await rt.sendCallSignal(signalPayload);
+
+    const convChannel = fakeChannels.get('dm-c-1');
+    const userChannel = fakeChannels.get('dm-calls-user-caller');
+
+    expect(convChannel._sentPayloads.some((p: any) => p.event === 'call-signal' && p.payload.type === 'answer')).toBe(true);
+    expect(userChannel._sentPayloads.some((p: any) => p.event === 'call-signal' && p.payload.type === 'answer')).toBe(true);
+  });
 });
+

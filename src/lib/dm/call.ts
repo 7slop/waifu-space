@@ -275,8 +275,15 @@ export class CallManager {
     return this.acceptOffer(callId, peerId, offer);
   }
 
+  markConnected(): void {
+    if (this.state === 'ringing' || this.state === 'active') {
+      this.setState('connected');
+    }
+  }
+
   async adoptAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
     if (!this.pc) return;
+    if (this.pc.signalingState === 'stable' && this.state === 'connected') return;
     try {
       await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
       for (const c of this.pendingCandidates.splice(0)) {
@@ -288,7 +295,9 @@ export class CallManager {
       }
       this.setState('connected');
     } catch {
-      this.setState('failed');
+      if (this.pc.signalingState !== 'stable') {
+        this.setState('failed');
+      }
     }
   }
 

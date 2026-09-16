@@ -58,6 +58,10 @@ vi.mock('../../src/lib/dm/call', () => ({
       this.currentState = 'connected';
       this.deps.onStateChange?.();
     }
+    markConnected(): void {
+      this.currentState = 'connected';
+      this.deps.onStateChange?.();
+    }
     adoptIce = vi.fn(async (_cand: any) => {});
     toggleMute(): boolean {
       this.muted = true;
@@ -771,6 +775,18 @@ describe('dm store call status polling and callee acceptance sync', () => {
     resetDmStore();
   });
 
+  async function boot() {
+    stubFetch({
+      '/api/dm/config': () => JSON_RESP({ supabaseUrl: 'https://x.supabase.co', supabaseAnonKey: 'anon' }),
+      '/api/dm/conversations': () => JSON_RESP({ conversations: [] }),
+      '/api/dm/presence': () => JSON_RESP({ presence: {} }),
+      '/api/dm/unread': () => JSON_RESP({ unread: {} }),
+      '/api/dm/calls/pending': () => JSON_RESP({ call: null })
+    });
+    await initDm();
+    return rt.instances[rt.instances.length - 1];
+  }
+
   it('detects when callee accepts call and transitions ringing state to connected', async () => {
     setDmState('activeConversationId', 'c1');
     setDmState('conversations', [makeConv('c1', 'u-bob')]);
@@ -958,5 +974,103 @@ describe('dm store call status polling and callee acceptance sync', () => {
 
     const result = await startCall('voice');
     expect(result).toBe(false);
+  });
+
+  it('outgoing call transitions to connected when callee answer signal is received via realtime', async () => {
+    await boot();
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    setDmState('call', {
+      call: {
+        id: 'call-answer-1',
+        conversationId: 'c1',
+        callerId: 'u-me',
+        calleeId: 'u-bob',
+        callType: 'voice',
+        status: 'ringing',
+        startedAt: '',
+        answeredAt: null,
+        endedAt: null,
+        createdAt: ''
+      },
+      direction: 'outgoing',
+      remoteName: 'Bob',
+      callState: 'ringing',
+      muted: false,
+      videoOff: true,
+      screenSharing: false,
+      deafened: false
+    });
+
+    expect(dmState.call?.callState).toBe('ringing');
+
+    // Simulate answer signal arriving from callee
+    await rt.handlers.onCallSignal({
+      kind: 'call-signal',
+      callId: 'call-answer-1',
+      conversationId: 'c1',
+      type: 'answer',
+      sdp: { type: 'answer', sdp: 'remote-answer-sdp' }
+    });
+
+    expect(dmState.call?.callState).toBe('connected');
+  });
+
+  it('callee accepting incoming call sends answer signal with callerId targetUserId', async () => {
+    await boot();
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    stubFetch({
+      '/api/dm/calls/call-accept-1/status': () =>
+        JSON_RESP({
+          success: true,
+          call: {
+            id: 'call-accept-1',
+            conversationId: 'c1',
+            callerId: 'u-bob',
+            calleeId: 'u-me',
+            callType: 'voice',
+            status: 'active',
+            startedAt: '',
+            answeredAt: '2025-01-01',
+            endedAt: null,
+            createdAt: ''
+          }
+        })
+    });
+
+    setDmState('incomingCall', {
+      kind: 'call-offer',
+      call: {
+        id: 'call-accept-1',
+        conversationId: 'c1',
+        callerId: 'u-bob',
+        calleeId: 'u-me',
+        callType: 'voice',
+        status: 'ringing',
+        startedAt: '',
+        answeredAt: null,
+        endedAt: null,
+        createdAt: ''
+      },
+      callerName: 'Bob',
+      offer: { type: 'offer', sdp: 'fake-offer' }
+    });
+
+    const accepted = await acceptIncomingCall();
+    expect(accepted).toBe(true);
+
+    const latestRt = rt.instances[rt.instances.length - 1];
+    expect(latestRt.sendCallSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'call-signal',
+        callId: 'call-accept-1',
+        conversationId: 'c1',
+        type: 'answer',
+        targetUserId: 'u-bob'
+      })
+    );
   });
 });

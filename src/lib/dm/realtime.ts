@@ -168,6 +168,9 @@ export class DmRealtime {
       .on('broadcast', { event: 'call-cancel' }, ({ payload }) => {
         this.handlers.onCallCancel(payload as CallOfferBroadcast);
       })
+      .on('broadcast', { event: 'call-signal' }, ({ payload }) => {
+        this.handlers.onCallSignal(payload as CallSignalPayload);
+      })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           if (status === 'SUBSCRIBED') this.connected = true;
@@ -289,7 +292,11 @@ export class DmRealtime {
   }
 
   async sendCallSignal(signal: CallSignalPayload): Promise<void> {
-    await this.broadcast(`dm-${signal.conversationId}`, 'call-signal', signal);
+    const promises = [this.broadcast(`dm-${signal.conversationId}`, 'call-signal', signal)];
+    if (signal.targetUserId) {
+      promises.push(this.broadcast(`dm-calls-${signal.targetUserId}`, 'call-signal', signal));
+    }
+    await Promise.all(promises);
   }
 
   async sendIncomingCallOffer(broadcast: CallOfferBroadcast): Promise<void> {

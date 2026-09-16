@@ -302,8 +302,10 @@ function onRealtimePresence(map: Record<string, RealtimePresencePayload>): void 
   setDmState('realtimePresence', map);
 }
 
-function sendSignal(type: CallSignalPayload['type'], callId: string, conversationId: string, extras: Partial<CallSignalPayload>): void {
-  void runtime.realtime?.sendCallSignal({ kind: 'call-signal', callId, conversationId, type, ...extras });
+function sendSignal(type: CallSignalPayload['type'], callId: string, conversationId: string, extras: Partial<CallSignalPayload>, targetUserId?: string): void {
+  const current = dmState.call;
+  const peerId = targetUserId ?? (current ? (current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId) : undefined);
+  void runtime.realtime?.sendCallSignal({ kind: 'call-signal', callId, conversationId, type, targetUserId: peerId, ...extras });
 }
 
 const pendingInboundIce = new Map<string, RTCIceCandidateInit[]>();
@@ -357,14 +359,13 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
       }
       return;
     }
-    // A renegotiation offer mid-call (e.g. the remote side added a track).
-    // Only accept once connected — a ringing outgoing call may receive its
-    // own echo-back broadcast, which must not flip the state to 'connected'.
+    // A renegotiation offer mid-call (only once connected — avoids echoing caller's own offer while ringing)
     if (call && manager && signal.callId === call.call.id && signal.sdp && call.callState === 'connected') {
       const remoteId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
       const answer = await manager.acceptOffer(call.call.id, remoteId, signal.sdp);
-      if (answer) sendSignal('answer', call.call.id, call.call.conversationId, { sdp: answer });
+      if (answer) sendSignal('answer', call.call.id, call.call.conversationId, { sdp: answer }, remoteId);
       drainInboundIce(call.call.id, manager);
+      flushPendingIce(call.call.conversationId, call.call.id);
     }
     return;
   }
@@ -384,6 +385,9 @@ async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
       drainInboundIce(call.call.id, manager);
     }
     flushPendingIce(signal.conversationId, call.call.id);
+    if (call.callState === 'ringing') {
+      setDmState('call', 'callState', 'connected');
+    }
   } else if (signal.type === 'ice' && signal.candidate) {
     if ((call.callState === 'connected' || call.callState === 'active') && manager) {
       await manager.adoptIce(signal.candidate);
@@ -449,7 +453,11 @@ function callTypeLabel(type: CallType): string {
 // ---------------------------------------------------------------------------
 
 function makeCallManager(): CallManager {
-  const manager = runtime.call ?? new CallManager({ iceServers: runtime.deps.iceServers });
+  if (runtime.call) {
+    runtime.call.hangUp('ended');
+    runtime.call = null;
+  }
+  const manager = new CallManager({ iceServers: runtime.deps.iceServers });
   runtime.call = manager;
   return manager;
 }
@@ -1078,17 +1086,11 @@ export async function pollActiveCallStatus(): Promise<void> {
       // Remote accepted the call
       if (dmState.call.callState === 'ringing') {
         setDmState('call', 'callState', 'connected');
-        if (runtime.call) {
-          drainInboundIce(callId, runtime.call);
-          flushPendingIce(current.call.conversationId, callId);
-          if (runtime.call.currentState === 'ringing') {
-            const peerId = current.direction === 'outgoing' ? current.call.calleeId : current.call.callerId;
-            const offer = await runtime.call.createOffer(callId, peerId);
-            if (offer) {
-              sendSignal('offer', callId, current.call.conversationId, { sdp: offer });
-            }
-          }
-        }
+      }
+      if (runtime.call) {
+        runtime.call.markConnected();
+        drainInboundIce(callId, runtime.call);
+        flushPendingIce(current.call.conversationId, callId);
       }
       setDmState('call', 'call', latest);
     } else if (['declined', 'busy', 'canceled', 'ended', 'missed'].includes(latest.status)) {
@@ -1218,12 +1220,16 @@ export async function acceptIncomingCall(): Promise<boolean> {
   if (result?.systemMessage) applySystemMessage(call.conversationId, result.systemMessage);
   if (offer.offer) {
     const answer = await manager.acceptOffer(call.id, call.callerId, offer.offer);
-    if (answer) sendSignal('answer', call.id, call.conversationId, { sdp: answer });
+    if (answer) sendSignal('answer', call.id, call.conversationId, { sdp: answer }, call.callerId);
     drainInboundIce(call.id, manager);
     flushPendingIce(call.conversationId, call.id);
     return true;
   }
-  // Offer not yet arrived; it is handled when onCallSignal fires later.
+  // Offer not yet arrived / hydrated via DB poll: generate offer to caller
+  const calleeOffer = await manager.createOffer(call.id, call.callerId);
+  if (calleeOffer) {
+    sendSignal('offer', call.id, call.conversationId, { sdp: calleeOffer }, call.callerId);
+  }
   runtime.pendingAccept = { call, callerName, callerAvatar: offer.callerAvatar };
   return true;
 }
