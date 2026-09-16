@@ -1252,6 +1252,85 @@ describe('dm store call status polling and callee acceptance sync', () => {
     expect(answerPost!.body.payload.sdp).toEqual({ type: 'answer', sdp: 'answer-sdp' });
   });
 
+  it('acceptIncomingCall without a hydrated offer waits for the caller offer instead of reversing roles', async () => {
+    const signalPosts: { url: string; method: string | undefined; body: any }[] = [];
+    await boot();
+    setDmState('activeConversationId', 'c1');
+    setDmState('conversations', [makeConv('c1', 'u-bob')]);
+
+    stubFetch({
+      '/signal': (url, init) => {
+        if (init?.method === 'POST' && String(url).includes('call-wait-1/signal')) {
+          signalPosts.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(String(init.body)) : null });
+        }
+        return JSON_RESP({ success: true, signals: [], signal: null });
+      },
+      '/api/dm/calls/call-wait-1/status': () =>
+        JSON_RESP({
+          success: true,
+          call: {
+            id: 'call-wait-1',
+            conversationId: 'c1',
+            callerId: 'u-bob',
+            calleeId: 'u-me',
+            callType: 'voice',
+            status: 'active',
+            startedAt: '',
+            answeredAt: '2025-01-01',
+            endedAt: null,
+            createdAt: ''
+          }
+        })
+    });
+
+    // Incoming call surfaces with NO SDP offer hydrated yet.
+    setDmState('incomingCall', {
+      call: {
+        id: 'call-wait-1',
+        conversationId: 'c1',
+        callerId: 'u-bob',
+        calleeId: 'u-me',
+        callType: 'voice',
+        status: 'ringing',
+        startedAt: '',
+        answeredAt: null,
+        endedAt: null,
+        createdAt: ''
+      },
+      callerName: 'Bob',
+      offer: null
+    });
+
+    const accepted = await acceptIncomingCall();
+    expect(accepted).toBe(true);
+    // The callee must NOT generate its own offer (no role reversal) so the
+    // caller is never offered two different SDPs.
+    expect(signalPosts.filter((p) => p.body?.signalType === 'offer')).toHaveLength(0);
+    expect(dmState.call?.call.id).toBe('call-wait-1');
+
+    // The caller's offer arrives over the DB signal poll afterwards...
+    stubFetch({
+      '/signal': (url, init) => {
+        if (init?.method === 'POST' && String(url).includes('call-wait-1/signal')) {
+          signalPosts.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(String(init.body)) : null });
+        }
+        return JSON_RESP({
+          success: true,
+          signals: [{
+            id: 'sig-wait-offer', callId: 'call-wait-1', conversationId: 'c1', senderId: 'u-bob', signalType: 'offer',
+            payload: { sdp: { type: 'offer', sdp: 'caller-offer-sdp' } }, createdAt: '2025-01-01T00:00:00.000Z'
+          }]
+        });
+      }
+    });
+    await pollCallSignals();
+
+    // ...the pending accept applies it and answers back.
+    const answerPost = signalPosts.find((p) => p.url.includes('call-wait-1/signal') && p.body?.signalType === 'answer');
+    expect(answerPost).toBeTruthy();
+    expect(answerPost!.body.payload.sdp).toEqual({ type: 'answer', sdp: 'answer-sdp' });
+  });
+
   it('handlePeerLeft sets leftNotice and automatically cancels call after timeout', () => {
     vi.useFakeTimers();
     try {

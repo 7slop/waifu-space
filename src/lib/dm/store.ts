@@ -152,7 +152,6 @@ interface DmRuntime {
   /** Per-call poll watermark: highest `createdAt` of signals already applied. */
   signalCursor: Map<string, string>;
   peerLeftTimeout: ReturnType<typeof setTimeout> | null;
-  lastOffer: RTCSessionDescriptionInit | null;
 }
 
 const runtime: DmRuntime = {
@@ -167,8 +166,7 @@ const runtime: DmRuntime = {
   callStatusPollTimer: null,
   callSignalPollTimer: null,
   signalCursor: new Map<string, string>(),
-  peerLeftTimeout: null,
-  lastOffer: null
+  peerLeftTimeout: null
 };
 
 /** How often the store re-polls the DB for a pending (ringing/active) call. */
@@ -370,8 +368,8 @@ function onRealtimePresence(map: Record<string, RealtimePresencePayload>): void 
 /**
  * Stores a WebRTC signal (offer/answer/ice) in the DB-backed queue. The peer
  * picks it up via its own authenticated signal poll; nothing call-shaped rides
- * the anonymous realtime channels. Failures are fire-and-forget — the signal
- * poll loop plus the caller's lastOffer re-send recover lost writes.
+ * the anonymous realtime channels. Failures are fire-and-forget — transient
+ * losses are absorbed by the peer's signal poll retrying against the DB.
  */
 function sendSignal(type: CallSignalPayload['type'], callId: string, _conversationId: string, extras: Partial<CallSignalPayload>): void {
   const auth = currentAuth();
@@ -1113,7 +1111,6 @@ export async function startCall(type: CallType): Promise<boolean> {
     startCallSignalPolling();
     const offer = await manager.createOffer(call.id, otherId);
     if (offer) {
-      runtime.lastOffer = offer;
       sendSignal('offer', call.id, conv.id, { sdp: offer });
     }
     return true;
@@ -1196,9 +1193,6 @@ export async function pollActiveCallStatus(): Promise<void> {
         runtime.call.markConnected();
         drainInboundIce(callId, runtime.call);
         flushPendingIce(current.call.conversationId, callId);
-        if (runtime.lastOffer && (typeof (runtime.call as any).isConnected === 'function' ? !(runtime.call as any).isConnected() : runtime.call.currentState !== 'connected')) {
-          sendSignal('offer', callId, current.call.conversationId, { sdp: runtime.lastOffer });
-        }
       }
       setDmState('call', 'call', latest);
     } else if (['declined', 'busy', 'canceled', 'ended', 'missed'].includes(latest.status)) {
@@ -1404,11 +1398,10 @@ export async function acceptIncomingCall(): Promise<boolean> {
     flushPendingIce(call.conversationId, call.id);
     return true;
   }
-  // Offer not yet arrived / hydrated via DB poll: generate offer to caller
-  const calleeOffer = await manager.createOffer(call.id, call.callerId);
-  if (calleeOffer) {
-    sendSignal('offer', call.id, call.conversationId, { sdp: calleeOffer });
-  }
+  // Offer not yet arrived / hydrated via DB poll: store pendingAccept so the
+  // signal poll loop processes the caller's offer when it arrives.  Do NOT
+  // generate a fallback offer here — doing so causes both peers to send offers
+  // simultaneously (role-reversal race) and fragile SDP collision recovery.
   runtime.pendingAccept = { call, callerName, callerAvatar: offer.callerAvatar };
   return true;
 }
@@ -1609,6 +1602,9 @@ export async function disconnectDm(): Promise<void> {
 if (typeof window !== 'undefined') {
   const onPageUnload = () => {
     stopCallSignalPolling();
+    // An in-memory pendingAccept never survives a reload; drop it so the
+    // restored page re-hydrates only from the DB-backed call session.
+    runtime.pendingAccept = null;
     const call = dmState.call;
     const auth = currentAuth();
     if (!call || !auth || !runtime.call) return;
