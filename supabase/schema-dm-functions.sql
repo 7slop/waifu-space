@@ -778,6 +778,46 @@ BEGIN
 END;
 $$;
 
+-- Returns the newest ringing or active call session for a user (recovery / sync).
+CREATE OR REPLACE FUNCTION public.get_pending_call_for_user(p_user_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_call public.call_sessions%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NOT NULL AND p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'p_user_id does not match the session user';
+  END IF;
+
+  SELECT * INTO v_call
+    FROM public.call_sessions
+   WHERE (caller_id = p_user_id OR callee_id = p_user_id)
+     AND status IN ('ringing', 'active')
+   ORDER BY created_at DESC
+   LIMIT 1;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'id', v_call.id,
+    'conversationId', v_call.conversation_id,
+    'callerId', v_call.caller_id,
+    'calleeId', v_call.callee_id,
+    'callType', v_call.call_type,
+    'status', v_call.status,
+    'startedAt', v_call.started_at,
+    'answeredAt', v_call.answered_at,
+    'endedAt', v_call.ended_at,
+    'createdAt', v_call.created_at
+  );
+END;
+$$;
+
 -- Public profile + waifu appearance snapshot for the DM profile panel.
 CREATE OR REPLACE FUNCTION public.get_user_profile_public(p_user_id uuid)
 RETURNS jsonb
@@ -884,6 +924,8 @@ REVOKE ALL ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) FROM P
 GRANT EXECUTE ON FUNCTION public.create_call_session(uuid, uuid, uuid, text) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.update_call_session(uuid, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.update_call_session(uuid, uuid, text) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_pending_call_for_user(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_pending_call_for_user(uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.get_user_profile_public(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_user_profile_public(uuid) TO anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.touch_user_presence(uuid) FROM PUBLIC;

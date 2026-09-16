@@ -131,6 +131,7 @@ export interface CallOfferBroadcast {
   kind: 'call-offer';
   call: CallSession;
   callerName: string;
+  callerAvatar?: string | null;
   offer?: RTCSessionDescriptionInit;
 }
 
@@ -138,9 +139,10 @@ export interface CallSignalPayload {
   kind: 'call-signal';
   callId: string;
   conversationId: string;
-  type: 'offer' | 'answer' | 'ice';
+  type: 'offer' | 'answer' | 'ice' | 'hangup' | 'decline';
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
+  reason?: string;
 }
 
 export interface TypingBroadcast {

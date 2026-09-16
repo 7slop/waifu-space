@@ -69,6 +69,7 @@ export class DmRealtime {
   private presenceChannel: RealtimeChannel | null = null;
   private incomingChannel: RealtimeChannel | null = null;
   private convChannels = new Map<string, RealtimeChannel>();
+  private outboundChannels = new Map<string, RealtimeChannel>();
   private handlers: DmRealtimeHandlers;
   private config: DmRealtimeConfig;
   private connected = false;
@@ -197,6 +198,8 @@ export class DmRealtime {
       .on('broadcast', { event: 'typing' }, ({ payload }) => this.handlers.onTyping(payload as TypingBroadcast))
       .on('broadcast', { event: 'dm-reaction' }, ({ payload }) => this.handlers.onReaction(payload as ReactionBroadcast))
       .on('broadcast', { event: 'call-signal' }, ({ payload }) => this.handlers.onCallSignal(payload as CallSignalPayload))
+      .on('broadcast', { event: 'call-offer' }, ({ payload }) => this.handlers.onIncomingCall(payload as CallOfferBroadcast))
+      .on('broadcast', { event: 'call-cancel' }, ({ payload }) => this.handlers.onCallCancel(payload as CallOfferBroadcast))
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // Channel is volatile; the conv channel uses default settings.
@@ -229,21 +232,45 @@ export class DmRealtime {
   }
 
   async sendIncomingCallOffer(broadcast: CallOfferBroadcast): Promise<void> {
-    await this.broadcast(`dm-calls-${broadcast.call.calleeId}`, 'call-offer', broadcast);
+    await Promise.all([
+      this.broadcast(`dm-calls-${broadcast.call.calleeId}`, 'call-offer', broadcast),
+      this.broadcast(`dm-${broadcast.call.conversationId}`, 'call-offer', broadcast)
+    ]);
   }
 
   async sendCallCancel(userId: string, broadcast: CallOfferBroadcast): Promise<void> {
-    await this.broadcast(`dm-calls-${userId}`, 'call-cancel', broadcast);
+    await Promise.all([
+      this.broadcast(`dm-calls-${userId}`, 'call-cancel', broadcast),
+      this.broadcast(`dm-${broadcast.call.conversationId}`, 'call-cancel', broadcast)
+    ]);
   }
 
   private async broadcast(channelName: string, event: string, payload: unknown): Promise<void> {
     const client = this.client;
     if (!client) return;
     try {
-      const chan = client.channel(channelName);
-      await chan.subscribe();
+      let chan: RealtimeChannel;
+      if (channelName.startsWith('dm-') && !channelName.startsWith('dm-calls-')) {
+        const convId = channelName.slice(3);
+        const existing = this.convChannels.get(convId);
+        if (existing) {
+          chan = existing;
+        } else {
+          chan = client.channel(channelName);
+          chan.subscribe();
+          this.convChannels.set(convId, chan);
+        }
+      } else {
+        const existing = this.outboundChannels.get(channelName);
+        if (existing) {
+          chan = existing;
+        } else {
+          chan = client.channel(channelName);
+          chan.subscribe();
+          this.outboundChannels.set(channelName, chan);
+        }
+      }
       await chan.send({ type: 'broadcast', event, payload });
-      await client.removeChannel(chan);
     } catch {
       // Realtime is best-effort for the "edge" notifications; DB is source of truth.
     }
@@ -253,21 +280,27 @@ export class DmRealtime {
     this.connected = false;
     this.myUserId = null;
     this.myPresence = null;
+    const client = this.client;
+    const channels = [
+      this.presenceChannel,
+      this.incomingChannel,
+      ...Array.from(this.convChannels.values()),
+      ...Array.from(this.outboundChannels.values())
+    ].filter(Boolean) as RealtimeChannel[];
     this.convChannels.clear();
+    this.outboundChannels.clear();
     this.presenceMap = {};
-    if (!this.client) return;
-    try {
-      await this.client.removeChannel(this.presenceChannel!);
-    } catch {
-      // ignore
-    }
-    try {
-      await this.client.removeChannel(this.incomingChannel!);
-    } catch {
-      // ignore
-    }
     this.presenceChannel = null;
     this.incomingChannel = null;
     this.client = null;
+    if (client) {
+      for (const ch of channels) {
+        try {
+          await client.removeChannel(ch);
+        } catch {
+          // ignore
+        }
+      }
+    }
   }
 }

@@ -338,4 +338,21 @@ describe('CallOverlay', () => {
     expect(dmState.call?.screenSharing).toBe(false);
     restore();
   });
+
+  it('displays peer avatar and name even when activeConversationId is not set (e.g. DM home)', async () => {
+    setDmState('activeConversationId', null);
+    const offer: CallOfferBroadcast = {
+      kind: 'call-offer',
+      call: callSession(),
+      callerName: 'Charlie',
+      callerAvatar: 'https://example.com/charlie.png',
+      offer: { type: 'offer', sdp: 'offer' }
+    };
+    setDmState('incomingCall', offer);
+    const { container } = render(() => <CallOverlay />);
+    expect(container.querySelector('[data-testid="dm-incoming-call"]')).toBeInTheDocument();
+    expect(container.textContent).toContain('Charlie');
+    const avatarImg = container.querySelector('.dm-call-avatar.remote img');
+    expect(avatarImg?.getAttribute('src')).toBe('https://example.com/charlie.png');
+  });
 });

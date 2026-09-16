@@ -79,8 +79,9 @@ function HeadphonesSlash(props: { class?: string }) {
 }
 
 /** Resolves the other participant's avatar from the conversation list. */
-function peerInfo() {
-  const conv = dmState.conversations.find((c) => c.id === dmState.activeConversationId);
+function peerInfo(convId?: string) {
+  const targetId = convId ?? dmState.activeConversationId;
+  const conv = dmState.conversations.find((c) => c.id === targetId);
   return { name: conv?.otherUser?.username ?? '', avatar: conv?.otherUser?.avatarUrl ?? null };
 }
 
@@ -121,11 +122,15 @@ export function CallOverlay() {
 function IncomingCallBar() {
   const incoming = () => dmState.incomingCall!;
   const isVideo = () => incoming().call.callType !== 'voice';
-  const peer = () => peerInfo();
+  const conv = () => dmState.conversations.find((c) => c.id === incoming().call.conversationId);
+  const peer = () => {
+    const fromConv = conv()?.otherUser;
+    return {
+      name: incoming().callerName || fromConv?.username || peerInfo().name,
+      avatar: incoming().callerAvatar ?? fromConv?.avatarUrl ?? peerInfo().avatar
+    };
+  };
   const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
-  const callerId = () => incoming().call.callerId;
-  const callerIsPeer = () =>
-    dmState.conversations.find((c) => c.id === incoming().call.conversationId)?.otherUser?.id === callerId();
 
   return (
     <div class="dm-call-dock dm-call-incoming" data-testid="dm-incoming-call">
@@ -136,8 +141,8 @@ function IncomingCallBar() {
         <div class="dm-call-avatar-slot remote">
           <span class="dm-call-ring" aria-hidden="true" />
           <DmAvatar
-            name={incoming().callerName || peer().name}
-            avatarUrl={callerIsPeer() ? peer().avatar : undefined}
+            name={peer().name}
+            avatarUrl={peer().avatar ?? undefined}
             size="44px"
             class="dm-call-avatar remote"
           />
@@ -175,7 +180,14 @@ function ActiveCallBar() {
   const videoActive = () => !call().videoOff && (connected() || ringing());
   const screen = createMemo<MediaStream | null>(() => (connected() ? callRemoteStream() : null));
   const local = createMemo<MediaStream | null>(() => callLocalStream());
-  const peer = () => peerInfo();
+  const conv = () => dmState.conversations.find((c) => c.id === call().call.conversationId);
+  const peer = () => {
+    const fromConv = conv()?.otherUser;
+    return {
+      name: call().remoteName || fromConv?.username || peerInfo().name,
+      avatar: call().remoteAvatar ?? fromConv?.avatarUrl ?? peerInfo().avatar
+    };
+  };
   const me = () => ({ name: state.user?.username ?? 'You', avatar: state.user?.avatarUrl ?? null });
 
   // When the local user shares their screen the shared feed (local stream)
@@ -229,15 +241,15 @@ function ActiveCallBar() {
             <Show when={ringing()}>
               <span class="dm-call-ring" aria-hidden="true" />
             </Show>
-            <DmAvatar name={call().remoteName || peer().name} avatarUrl={peer().avatar} size="44px" class="dm-call-avatar remote" />
+            <DmAvatar name={peer().name} avatarUrl={peer().avatar ?? undefined} size="44px" class="dm-call-avatar remote" />
           </div>
         </div>
 
         <div class="dm-call-info">
-          <span class="dm-call-name">{call().remoteName || peer().name}</span>
+          <span class="dm-call-name">{peer().name}</span>
           <span class="dm-call-sub">
             {calling()
-              ? t(call().direction === 'incoming' ? 'dm.incomingCall' : 'dm.outgoingCall', { name: call().remoteName || peer().name })
+              ? t(call().direction === 'incoming' ? 'dm.incomingCall' : 'dm.outgoingCall', { name: peer().name })
               : call().screenSharing ? t('dm.sharingScreenLabel') : t('dm.inCallLabel')}
           </span>
         </div>

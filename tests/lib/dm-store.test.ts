@@ -58,7 +58,7 @@ vi.mock('../../src/lib/dm/call', () => ({
       this.currentState = 'connected';
       this.deps.onStateChange?.();
     }
-    async adoptIce(): Promise<void> {}
+    adoptIce = vi.fn(async (_cand: any) => {});
     toggleMute(): boolean {
       this.muted = true;
       this.deps.onStateChange?.();
@@ -112,6 +112,7 @@ import {
   resetDmStore,
   startCall,
   acceptIncomingCall,
+  declineIncomingCall,
   hangUpCall,
   toggleMute,
   toggleVideo,
@@ -550,6 +551,80 @@ async function boot() {
     // broadcast, but a renegotiation offer is sent so media can link up.
     expect(rtInst.sendIncomingCallOffer).not.toHaveBeenCalled();
     expect(rtInst.sendCallSignal).toHaveBeenCalledWith(expect.objectContaining({ type: 'offer', callId: 'call-existing' }));
+  });
+
+  it('startCall sends callerAvatar and propagates peer info', async () => {
+    const rtInst = await boot();
+    await selectConversation('c1');
+    const ok = await startCall('voice');
+    expect(ok).toBe(true);
+    expect(dmState.call?.remoteName).toBe('bob');
+    expect(rtInst.sendIncomingCallOffer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callerName: 'alice',
+        callerAvatar: 'https://x/a.png',
+        call: expect.objectContaining({ id: 'call-2' })
+      })
+    );
+  });
+
+  it('incoming call buffers ICE candidates before accept and adopts them upon accept', async () => {
+    await boot();
+    const call = {
+      id: 'call-ice-1', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'voice' as const,
+      status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+    };
+    rt.handlers.onIncomingCall({
+      kind: 'call-offer',
+      call,
+      callerName: 'bob',
+      callerAvatar: 'https://bob/avatar.png',
+      offer: { type: 'offer', sdp: 'offer-sdp' }
+    });
+    // Candidate arrives before callee clicks accept
+    rt.handlers.onCallSignal({
+      kind: 'call-signal',
+      callId: 'call-ice-1',
+      conversationId: 'c1',
+      type: 'ice',
+      candidate: { candidate: 'candidate:1 1 UDP 12345 1.2.3.4 5678 typ host' } as any
+    });
+    await acceptIncomingCall();
+    const manager = callRegistry.instances[callRegistry.instances.length - 1];
+    expect(manager.adoptIce).toHaveBeenCalledWith(
+      expect.objectContaining({ candidate: expect.stringContaining('1.2.3.4') })
+    );
+    expect(dmState.call?.remoteName).toBe('bob');
+  });
+
+  it('declineIncomingCall emits decline signal and call-cancel to caller in real time', async () => {
+    const rtInst = await boot();
+    const call = {
+      id: 'call-dec-1', conversationId: 'c1', callerId: 'u-bob', calleeId: 'u-me', callType: 'voice' as const,
+      status: 'ringing' as const, startedAt: '', answeredAt: null, endedAt: null, createdAt: ''
+    };
+    rt.handlers.onIncomingCall({ kind: 'call-offer', call, callerName: 'bob' });
+    expect(dmState.incomingCall).not.toBeNull();
+    await declineIncomingCall();
+    expect(dmState.incomingCall).toBeNull();
+    expect(rtInst.sendCallSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'decline', callId: 'call-dec-1', conversationId: 'c1' })
+    );
+    expect(rtInst.sendCallCancel).toHaveBeenCalledWith('u-bob', expect.objectContaining({ call }));
+  });
+
+  it('receiving hangup signal cleans up active call in real time', async () => {
+    await boot();
+    await selectConversation('c1');
+    await startCall('voice');
+    expect(dmState.call).not.toBeNull();
+    rt.handlers.onCallSignal({
+      kind: 'call-signal',
+      callId: 'call-2',
+      conversationId: 'c1',
+      type: 'hangup'
+    });
+    expect(dmState.call).toBeNull();
   });
 
   it('refreshPendingCall hydrates a missed incoming (ringing) call', async () => {

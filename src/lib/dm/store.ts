@@ -74,6 +74,7 @@ export interface DmCallUi {
   call: CallSession;
   direction: 'incoming' | 'outgoing';
   remoteName: string;
+  remoteAvatar?: string | null;
   callState: CallState;
   muted: boolean;
   videoOff: boolean;
@@ -115,6 +116,7 @@ export interface DmStoreState {
 interface PendingIncomingCall {
   call: CallSession;
   callerName: string;
+  callerAvatar?: string | null;
 }
 
 interface DmRuntime {
@@ -299,55 +301,105 @@ function sendSignal(type: CallSignalPayload['type'], callId: string, conversatio
   void runtime.realtime?.sendCallSignal({ kind: 'call-signal', callId, conversationId, type, ...extras });
 }
 
+const pendingInboundIce = new Map<string, RTCIceCandidateInit[]>();
+
+function drainInboundIce(callId: string, manager: CallManager): void {
+  const buffered = pendingInboundIce.get(callId);
+  if (buffered && buffered.length) {
+    pendingInboundIce.delete(callId);
+    for (const c of buffered) {
+      void manager.adoptIce(c);
+    }
+  }
+}
+
 function flushPendingIce(conversationId: string, callId: string): void {
-  const list = dmState.pendingIce;
+  const list = dmState.pendingIce.filter((s) => s.callId === callId);
   if (!list.length) return;
-  setDmState('pendingIce', []);
-  for (const s of list) sendSignal('ice', callId, conversationId, { candidate: s.candidate });
+  setDmState('pendingIce', (all) => all.filter((s) => s.callId !== callId));
+  for (const s of list) {
+    if (s.candidate) sendSignal('ice', callId, conversationId, { candidate: s.candidate });
+  }
 }
 
 async function handleCallSignal(signal: CallSignalPayload): Promise<void> {
   const manager = runtime.call;
-  if (!manager) return;
   const call = dmState.call;
+
+  if (signal.type === 'hangup' || signal.type === 'decline') {
+    if (dmState.incomingCall?.call.id === signal.callId) {
+      setDmState('incomingCall', null);
+      runtime.pendingAccept = null;
+    }
+    if (call?.call.id === signal.callId) {
+      runtime.call?.hangUp(signal.type === 'decline' ? 'declined' : 'ended');
+      setDmState('call', null);
+    }
+    return;
+  }
 
   if (signal.type === 'offer') {
     // Caller's offer for an incoming call the user already accepted.
     if (runtime.pendingAccept && signal.callId === runtime.pendingAccept.call.id && signal.sdp) {
       const pending = runtime.pendingAccept;
       runtime.pendingAccept = null;
-      const answer = await manager.acceptOffer(pending.call.id, pending.call.callerId, signal.sdp);
-      if (answer) sendSignal('answer', pending.call.id, pending.call.conversationId, { sdp: answer });
-      flushPendingIce(pending.call.conversationId, pending.call.id);
+      if (manager) {
+        const answer = await manager.acceptOffer(pending.call.id, pending.call.callerId, signal.sdp);
+        if (answer) sendSignal('answer', pending.call.id, pending.call.conversationId, { sdp: answer });
+        drainInboundIce(pending.call.id, manager);
+        flushPendingIce(pending.call.conversationId, pending.call.id);
+      }
       return;
     }
     // A renegotiation offer mid-call (e.g. the remote side added a track).
     // Only accept once connected — a ringing outgoing call may receive its
     // own echo-back broadcast, which must not flip the state to 'connected'.
-    if (call && signal.callId === call.call.id && signal.sdp && call.callState === 'connected') {
+    if (call && manager && signal.callId === call.call.id && signal.sdp && call.callState === 'connected') {
       const remoteId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
       const answer = await manager.acceptOffer(call.call.id, remoteId, signal.sdp);
       if (answer) sendSignal('answer', call.call.id, call.call.conversationId, { sdp: answer });
+      drainInboundIce(call.call.id, manager);
     }
     return;
   }
 
-  if (!call || signal.callId !== call.call.id) return;
+  if (!call || signal.callId !== call.call.id) {
+    if (signal.type === 'ice' && signal.candidate) {
+      const list = pendingInboundIce.get(signal.callId) ?? [];
+      list.push(signal.candidate);
+      pendingInboundIce.set(signal.callId, list);
+    }
+    return;
+  }
 
   if (signal.type === 'answer') {
-    if (signal.sdp) await manager.adoptAnswer(signal.sdp);
+    if (signal.sdp && manager) {
+      await manager.adoptAnswer(signal.sdp);
+      drainInboundIce(call.call.id, manager);
+    }
     flushPendingIce(signal.conversationId, call.call.id);
   } else if (signal.type === 'ice' && signal.candidate) {
-    if (call.callState === 'connected') {
+    if ((call.callState === 'connected' || call.callState === 'active') && manager) {
       await manager.adoptIce(signal.candidate);
     } else {
-      setDmState('pendingIce', (list) => [...list, signal]);
+      const list = pendingInboundIce.get(signal.callId) ?? [];
+      list.push(signal.candidate);
+      pendingInboundIce.set(signal.callId, list);
     }
   }
 }
 
 function onIncomingCallOffer(broadcast: CallOfferBroadcast): void {
+  const auth = currentAuth();
+  if (auth && broadcast.call.callerId === auth.id) return;
   if (dmState.incomingCall?.call.id === broadcast.call.id) return;
+  if (dmState.call?.call.id === broadcast.call.id) return;
+
+  void runtime.realtime?.subscribeConversation(broadcast.call.conversationId);
+  if (!dmState.conversations.some((c) => c.id === broadcast.call.conversationId)) {
+    void refreshConversations();
+  }
+
   setDmState('incomingCall', broadcast);
   notify(`${broadcast.callerName} is calling`, callTypeLabel(broadcast.call.callType));
 }
@@ -355,6 +407,11 @@ function onIncomingCallOffer(broadcast: CallOfferBroadcast): void {
 function onIncomingCallCancel(broadcast: CallOfferBroadcast): void {
   if (dmState.incomingCall?.call.id === broadcast.call.id) {
     setDmState('incomingCall', null);
+    runtime.pendingAccept = null;
+  }
+  if (dmState.call?.call.id === broadcast.call.id) {
+    runtime.call?.hangUp('ended');
+    setDmState('call', null);
   }
 }
 
@@ -888,7 +945,7 @@ export async function gifToggleFavoriteByUrl(url: string, title = ''): Promise<v
 
 export async function startCall(type: CallType): Promise<boolean> {
   const auth = currentAuth();
-  const conv = dmState.conversations.find(c => c.id === dmState.activeConversationId);
+  const conv = dmState.conversations.find((c) => c.id === dmState.activeConversationId);
   const otherId = conv?.otherUser?.id;
   if (!auth || !conv || !otherId) return false;
   try {
@@ -907,11 +964,28 @@ export async function startCall(type: CallType): Promise<boolean> {
       return false;
     }
     wireCallManager(call, manager);
-    setDmState('call', { call, direction: 'outgoing', remoteName: conv.otherUser.username, callState: 'ringing', muted: false, videoOff: type !== 'video', screenSharing: false, deafened: false });
+    setDmState('call', {
+      call,
+      direction: 'outgoing',
+      remoteName: conv.otherUser.username,
+      remoteAvatar: conv.otherUser.avatarUrl,
+      callState: 'ringing',
+      muted: false,
+      videoOff: type !== 'video',
+      screenSharing: false,
+      deafened: false
+    });
+    void runtime.realtime?.subscribeConversation(conv.id);
     const offer = await manager.createOffer(call.id, otherId);
     if (offer) {
       sendSignal('offer', call.id, conv.id, { sdp: offer });
-      void runtime.realtime?.sendIncomingCallOffer({ kind: 'call-offer', call, callerName: auth.username, offer });
+      void runtime.realtime?.sendIncomingCallOffer({
+        kind: 'call-offer',
+        call,
+        callerName: auth.username,
+        callerAvatar: auth.avatarUrl,
+        offer
+      });
     }
     return true;
   } catch {
@@ -934,7 +1008,17 @@ async function joinExistingCall(call: CallSession, conv: DmConversationSummary, 
   const ok = await manager.startLocal({ type: call.callType, audio: true, video: call.callType === 'video', screen: call.callType === 'screen' });
   if (!ok) return false;
   wireCallManager(call, manager);
-  setDmState('call', { call, direction: 'outgoing', remoteName: conv.otherUser.username, callState: 'active', muted: false, videoOff: call.callType !== 'video', screenSharing: false, deafened: false });
+  setDmState('call', {
+    call,
+    direction: 'outgoing',
+    remoteName: conv.otherUser.username,
+    remoteAvatar: conv.otherUser.avatarUrl,
+    callState: 'active',
+    muted: false,
+    videoOff: call.callType !== 'video',
+    screenSharing: false,
+    deafened: false
+  });
   void runtime.realtime?.subscribeConversation(call.conversationId);
   const offer = await manager.createOffer(call.id, call.calleeId === auth.id ? call.callerId : call.calleeId);
   if (offer) sendSignal('offer', call.id, call.conversationId, { sdp: offer });
@@ -959,12 +1043,16 @@ export async function refreshPendingCall(): Promise<void> {
     // A still-ringing call where we are the caller is covered by our own
     // outgoing panel; only surface the rejoin/incoming affordance otherwise.
     if (call.status === 'ringing' && call.callerId === auth.id) return;
-    const conv = dmState.conversations.find(c => c.id === call.conversationId);
+    const conv = dmState.conversations.find((c) => c.id === call.conversationId);
     const callerName =
       conv && call.callerId === conv.otherUser?.id
         ? conv.otherUser.username
         : call.callerId === auth.id ? auth.username : '';
-    setDmState('incomingCall', { call, callerName });
+    const callerAvatar =
+      conv && call.callerId === conv.otherUser?.id
+        ? conv.otherUser.avatarUrl
+        : call.callerId === auth.id ? auth.avatarUrl : null;
+    setDmState('incomingCall', { call, callerName, callerAvatar });
   } catch {
     // Poll failures are transient; the realtime channel remains the fast path.
   }
@@ -975,6 +1063,8 @@ export async function acceptIncomingCall(): Promise<boolean> {
   const offer = dmState.incomingCall;
   if (!auth || !offer) return false;
   const { call, callerName } = offer;
+  const conv = dmState.conversations.find((c) => c.id === call.conversationId);
+  const remoteAvatar = offer.callerAvatar ?? conv?.otherUser?.avatarUrl ?? null;
   const manager = makeCallManager();
   const ok = await manager.startLocal({ type: call.callType, audio: true, video: call.callType === 'video', screen: call.callType === 'screen' });
   if (!ok) {
@@ -982,7 +1072,20 @@ export async function acceptIncomingCall(): Promise<boolean> {
     return false;
   }
   wireCallManager(call, manager);
-  setDmState({ incomingCall: null, call: { call, direction: 'incoming', remoteName: callerName, callState: 'ringing', muted: false, videoOff: call.callType !== 'video', screenSharing: false, deafened: false } });
+  setDmState({
+    incomingCall: null,
+    call: {
+      call,
+      direction: 'incoming',
+      remoteName: callerName,
+      remoteAvatar,
+      callState: 'ringing',
+      muted: false,
+      videoOff: call.callType !== 'video',
+      screenSharing: false,
+      deafened: false
+    }
+  });
   void runtime.realtime?.subscribeConversation(call.conversationId);
   // Mark the call as answered on the server so both timelines get the
   // "call started" system message and the call session reflects the state.
@@ -991,11 +1094,12 @@ export async function acceptIncomingCall(): Promise<boolean> {
   if (offer.offer) {
     const answer = await manager.acceptOffer(call.id, call.callerId, offer.offer);
     if (answer) sendSignal('answer', call.id, call.conversationId, { sdp: answer });
+    drainInboundIce(call.id, manager);
     flushPendingIce(call.conversationId, call.id);
     return true;
   }
   // Offer not yet arrived; it is handled when onCallSignal fires later.
-  runtime.pendingAccept = { call, callerName };
+  runtime.pendingAccept = { call, callerName, callerAvatar: offer.callerAvatar };
   return true;
 }
 
@@ -1005,6 +1109,8 @@ export async function declineIncomingCall(): Promise<void> {
   setDmState('incomingCall', null);
   runtime.pendingAccept = null;
   if (!auth || !offer) return;
+  sendSignal('decline', offer.call.id, offer.call.conversationId, { reason: 'declined' });
+  void runtime.realtime?.sendCallCancel(offer.call.callerId, offer);
   const result = await updateCallStatusRequest(auth.token, offer.call.id, 'declined').catch(() => null);
   if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
 }
@@ -1019,28 +1125,33 @@ export async function hangUpCall(): Promise<void> {
     setDmState('incomingCall', null);
     runtime.pendingAccept = null;
     if (auth && offer?.call.status === 'ringing') {
+      sendSignal('decline', offer.call.id, offer.call.conversationId, { reason: 'declined' });
+      void runtime.realtime?.sendCallCancel(offer.call.callerId, { kind: 'call-offer', call: offer.call, callerName: auth.username });
       const result = await updateCallStatusRequest(auth.token, offer.call.id, 'declined').catch(() => null);
       if (result?.systemMessage) applySystemMessage(offer.call.conversationId, result.systemMessage);
-      void runtime.realtime?.sendCallCancel(offer.call.calleeId, { kind: 'call-offer', call: offer.call, callerName: auth.username });
     }
     return;
   }
 
+  const callId = call.call.id;
+  const convId = call.call.conversationId;
+
   runtime.call?.hangUp('ended');
+  sendSignal(call.callState === 'ringing' ? 'decline' : 'hangup', callId, convId, { reason: 'ended' });
   announceCallCancel(call, auth);
   if (auth) {
     const status = call.callState === 'ringing' ? (call.direction === 'outgoing' ? 'canceled' : 'declined') : 'ended';
-    const result = await updateCallStatusRequest(auth.token, call.call.id, status).catch(() => null);
-    if (result?.systemMessage) applySystemMessage(call.call.conversationId, result.systemMessage);
+    const result = await updateCallStatusRequest(auth.token, callId, status).catch(() => null);
+    if (result?.systemMessage) applySystemMessage(convId, result.systemMessage);
   }
   setDmState('call', null);
   setDmState('incomingCall', null);
 }
 
 function announceCallCancel(call: DmCallUi, auth: DmAuth | null): void {
-  if (call.direction === 'outgoing' && auth) {
-    void runtime.realtime?.sendCallCancel(call.call.calleeId, { kind: 'call-offer', call: call.call, callerName: auth.username });
-  }
+  if (!auth) return;
+  const remoteUserId = call.direction === 'outgoing' ? call.call.calleeId : call.call.callerId;
+  void runtime.realtime?.sendCallCancel(remoteUserId, { kind: 'call-offer', call: call.call, callerName: auth.username });
 }
 
 export async function markCallBusyAndReject(): Promise<void> {
