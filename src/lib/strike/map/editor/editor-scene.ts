@@ -128,7 +128,57 @@ export const COMPONENT_PARAM_SPECS: Record<
     color: { type: 'choice', label: 'Banner color', default: 'red', choices: ['red', 'white'] }
   },
   pathMarker: {},
-  ornamentalBridge: { span: { type: 'number', label: 'Span', default: 4 } }
+  ornamentalBridge: { span: { type: 'number', label: 'Span', default: 4 } },
+  door: {
+    width: { type: 'number', label: 'Width', default: 1.2 },
+    height: { type: 'number', label: 'Height', default: 2.4 },
+    swing: { type: 'choice', label: 'Hinge swing', default: 1, choices: ['1', '-1'] }
+  },
+  futon: { width: { type: 'number', label: 'Width', default: 1.9 } },
+  table: {
+    width: { type: 'number', label: 'Width', default: 1.8 },
+    depth: { type: 'number', label: 'Depth', default: 1 }
+  },
+  chair: {},
+  mangaPile: { count: { type: 'number', label: 'Volumes', default: 6 } },
+  serverRack: {
+    rows: { type: 'number', label: 'Bays', default: 3 },
+    blinkSpeed: { type: 'number', label: 'Blink speed', default: 2 }
+  },
+  computerDesk: {
+    rgbOn: { type: 'boolean', label: 'RGB lighting', default: true },
+    monitorSize: { type: 'number', label: 'Monitor size', default: 1 }
+  },
+  bambooPlant: { height: { type: 'number', label: 'Height', default: 4 } },
+  sakuraBig: { scale: { type: 'number', label: 'Scale', default: 1 } },
+  oakFence: {
+    length: { type: 'number', label: 'Length', default: 4 },
+    alongZ: { type: 'boolean', label: 'Along Z', default: true }
+  },
+  fallenWood: {
+    length: { type: 'number', label: 'Length', default: 1.6 },
+    alongZ: { type: 'boolean', label: 'Along Z', default: true }
+  },
+  japanFlag: { size: { type: 'number', label: 'Size', default: 1 } },
+  rock: {
+    variant: { type: 'choice', label: 'Variant', default: 0, choices: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] },
+    scale: { type: 'number', label: 'Scale', default: 1 }
+  },
+  wall: {
+    width: { type: 'number', label: 'Width', default: 4 },
+    height: { type: 'number', label: 'Height', default: 3 },
+    style: { type: 'choice', label: 'Style', default: 'plaster', choices: ['plaster', 'timber', 'stone', 'shoji'] }
+  },
+  floor: {
+    width: { type: 'number', label: 'Width', default: 4 },
+    depth: { type: 'number', label: 'Depth', default: 4 },
+    style: { type: 'choice', label: 'Style', default: 'woodDeck', choices: ['woodDeck', 'tatami', 'stone', 'sand'] }
+  },
+  roof: {
+    width: { type: 'number', label: 'Width', default: 4 },
+    depth: { type: 'number', label: 'Depth', default: 4 },
+    style: { type: 'choice', label: 'Style', default: 'tileRoof', choices: ['tileRoof', 'straw', 'shrineRed', 'metal'] }
+  }
 };
 
 /** Camera fly speed in meters/second (Shift triples it). */

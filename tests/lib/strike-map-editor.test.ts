@@ -94,6 +94,121 @@ describe('editor map builder with editor:true', () => {
   });
 });
 
+describe('new editor components', () => {
+  it('registers a door interactable on the non-editor builder', () => {
+    const { engine, scene } = makeScene();
+    const b = createMapBuilder(scene);
+
+    const meshes = buildComponent(b, 'door', 'test_door', vec3([0, 0, 0]));
+    expect(meshes.length).toBeGreaterThan(0);
+
+    expect(b.interactables.length).toBe(1);
+    const door = b.interactables[0];
+    expect(door.type).toBe('door');
+    expect(door.id).toBe('test_door_Door');
+    expect(door.swing).toBe(1);
+    expect(door.open).toBe(false);
+    expect(door.mesh.isEnabled()).toBe(true);
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it('does not register interactables in editor mode', () => {
+    const { engine, scene } = makeScene();
+    const b = createMapBuilder(scene, undefined, { editor: true });
+
+    buildComponent(b, 'door', 'test_door_edit', vec3([0, 0, 0]));
+    expect(b.interactables).toHaveLength(0);
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it('door honors the swing parameter (-1 counter-clockwise)', () => {
+    const { engine, scene } = makeScene();
+    const b = createMapBuilder(scene);
+
+    buildComponent(b, 'door', 'test_door_ccw', vec3([0, 0, 0]), { swing: '-1' });
+    expect(b.interactables[0].swing).toBe(-1);
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it('rock component builds every variant 0..9', () => {
+    const { engine, scene } = makeScene();
+    const b = createMapBuilder(scene, undefined, { editor: true });
+
+    for (let v = 0; v < 10; v++) {
+      const meshes = buildComponent(b, 'rock', `test_rock_${v}`, vec3([v * 3, 0, 0]), { variant: String(v) });
+      expect(meshes.length).toBeGreaterThan(0, `rock variant ${v} should build meshes`);
+    }
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it('server rack and computer desk build and accept their key params', () => {
+    const { engine, scene } = makeScene();
+    const b = createMapBuilder(scene, undefined, { editor: true });
+
+    const rack = buildComponent(b, 'serverRack', 'test_rack', vec3([0, 0, 0]), { rows: 4, blinkSpeed: 3 });
+    expect(rack.length).toBeGreaterThan(0);
+
+    const desk = buildComponent(b, 'computerDesk', 'test_desk', vec3([0, 0, 0]), { rgbOn: false, monitorSize: 1.2 });
+    expect(desk.length).toBeGreaterThan(0);
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it('wall / floor / roof build with each material style choice', () => {
+    const { engine, scene } = makeScene();
+    const b = createMapBuilder(scene, undefined, { editor: true });
+
+    for (const style of ['plaster', 'timber', 'stone', 'shoji']) {
+      const meshes = buildComponent(b, 'wall', `test_wall_${style}`, vec3([0, 0, 0]), { style });
+      expect(meshes.length).toBeGreaterThan(0);
+    }
+    for (const style of ['woodDeck', 'tatami', 'stone', 'sand']) {
+      const meshes = buildComponent(b, 'floor', `test_floor_${style}`, vec3([0, 0, 0]), { style });
+      expect(meshes.length).toBeGreaterThan(0);
+    }
+    for (const style of ['tileRoof', 'straw', 'shrineRed', 'metal']) {
+      const meshes = buildComponent(b, 'roof', `test_roof_${style}`, vec3([0, 0, 0]), { style });
+      expect(meshes.length).toBeGreaterThan(0);
+    }
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it('nature, structure and interior components build with default params', () => {
+    const { engine, scene } = makeScene();
+    const b = createMapBuilder(scene, undefined, { editor: true });
+
+    for (const id of [
+      'bambooPlant',
+      'sakuraBig',
+      'oakFence',
+      'fallenWood',
+      'mangaPile',
+      'futon',
+      'table',
+      'chair',
+      'japanFlag',
+      'mangaPile'
+    ]) {
+      const meshes = buildComponent(b, id, `test_${id}`, vec3([0, 0, 0]));
+      expect(meshes.length).toBeGreaterThan(0, `${id} should build meshes`);
+    }
+
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
 describe('layout lights', () => {
   it('round-trips lights through serialize → parse', () => {
     const layout = emptyLayout('lights-test');

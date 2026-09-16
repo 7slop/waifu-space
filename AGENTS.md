@@ -117,7 +117,9 @@ src/lib/               Shared + client logic
   requirements/, llm.ts, intents.ts
   server/               Server-only logic
   strike/               Babylon.js Strike game engine
-    strike-babylon-engine.ts  Contains the touch-input API for mobile (setTouchMove/virtual stick, addTouchLook, setTouchFire, queueTouchJump, cycleWeapon, etc.) — synthetic input merges into the same update path as keyboard/mouse.
+    strike-babylon-engine.ts  Contains the touch-input API for mobile (setTouchMove/virtual stick, addTouchLook, setTouchFire, queueTouchJump, cycleWeapon, etc.) — synthetic input merges into the same update path as keyboard/mouse. Also drives door interaction: players look at a registered door interactable, E toggles it (sound + animation), and the HUD prompt fires via `onInteractPrompt`.
+    map/                 3D editor + shared builder; `MapBuilder.interactables` holds `MapDoorInteractable`s (registered by components like door, skipped in editor mode). Runtime per-scene effects (`runtime-effects.ts`: pulseEmissive/cycleHue/swayRotation) run only when `!b.editor`. Animated/collidable meshes must set `checkCollisions = true` directly and must NOT be pushed into `b.colliders` (createKyotoMap freezes colliders at build end).
+    map/components/      ~42 components (incl. door, serverRack, computerDesk, bambooPlant, sakuraBig, oakFence, fallenWood, japanFlag, rock, wall, floor, roof, futon, table, chair, mangaPile), registered in `registry.ts`; params specified in `editor-scene.ts` COMPONENT_PARAM_SPECS.
 src/locales/           en.json + ja.json (keep both in sync when adding keys)
 src/styles/            themes.css, style.css, waifu.css, calendar.css, settings.css, rpg.css, timebudget.css, strike.css, editor.css
 tests/                 setup.ts + components/ + lib/ + server/ test suites

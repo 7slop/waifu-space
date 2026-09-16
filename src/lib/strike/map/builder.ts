@@ -8,7 +8,7 @@ import {
   PointLight,
   ShadowGenerator
 } from '@babylonjs/core';
-import type { MapBuilder, MapMaterials, PointLightOptions } from './types';
+import type { MapBuilder, MapInteractable, MapMaterials, PointLightOptions } from './types';
 import { createMapMaterials } from './materials';
 import { MapRecorder } from './map-format';
 
@@ -39,6 +39,7 @@ export function createMapBuilder(
 ): MapBuilder {
   const colliders: AbstractMesh[] = [];
   const lanternLights: PointLight[] = [];
+  const interactables: MapInteractable[] = [];
   const mats = createMapMaterials(scene);
   const matKeys = buildMaterialKeyIndex(mats);
   const matKey = (mat: StandardMaterial): string => matKeys.get(mat) ?? 'plaster';
@@ -52,8 +53,12 @@ export function createMapBuilder(
     mats,
     colliders,
     lanternLights,
+    interactables,
     editor: opts.editor ?? false,
     recorder,
+    registerInteractable(interactable: MapInteractable): void {
+      interactables.push(interactable);
+    },
     beginComponent(
       kind: string,
       name: string,

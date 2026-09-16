@@ -1,4 +1,5 @@
 import { WeaponDef, WeaponId } from './strike-types';
+import doorSoundUrl from '../../sounds/V00241.m4a';
 
 export const WEAPON_CATALOG: Record<WeaponId, WeaponDef> = {
   rifle: {
@@ -137,6 +138,8 @@ class ProceduralAudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private volume: number = 0.5;
+  private doorBuffer: AudioBuffer | null = null;
+  private doorLoading: boolean = false;
 
   private getContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -147,12 +150,38 @@ class ProceduralAudioEngine {
         this.masterGain = this.ctx.createGain();
         this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
         this.masterGain.connect(this.ctx.destination);
+        this.loadDoorSound();
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  private loadDoorSound() {
+    if (!this.ctx || this.doorLoading || this.doorBuffer) return;
+    this.doorLoading = true;
+    fetch(doorSoundUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error(`door sound fetch failed: ${res.status}`);
+        return res.arrayBuffer();
+      })
+      .then((data) => {
+        if (!this.ctx) return undefined;
+        return new Promise<AudioBuffer>((resolve, reject) => {
+          this.ctx!.decodeAudioData(data, resolve, reject);
+        });
+      })
+      .then((buffer) => {
+        this.doorBuffer = buffer || null;
+      })
+      .catch(() => {
+        this.doorBuffer = null;
+      })
+      .finally(() => {
+        this.doorLoading = false;
+      });
   }
 
   public setVolume(vol: number) {
@@ -255,6 +284,72 @@ class ProceduralAudioEngine {
     oscGain.connect(dest.input);
     osc.start(t);
     osc.stop(t + 0.05);
+  }
+
+  public playDoor(open: boolean, spatial?: SpatialAudioParams) {
+    const ctx = this.getContext();
+    if (!ctx || !this.masterGain) return;
+
+    const t = ctx.currentTime;
+    const dest = this.createSpatialNode(ctx, spatial);
+
+    // Door sound file (V00241.m4a)
+    if (this.doorBuffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = this.doorBuffer;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(open ? 1 : 0.85, t);
+      src.connect(gain);
+      gain.connect(dest.input);
+      src.start(t);
+      return;
+    }
+
+    if (typeof ctx.createBuffer !== 'function') return;
+
+    // Wooden hinge creak: band-passed noise whose cutoff sweeps while opening/closing
+    const creakMs = open ? 0.55 : 0.5;
+    const bufferSize = Math.floor(ctx.sampleRate * creakMs);
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const out = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      // Low-frequency rasp so it reads as wood, not white noise
+      out[i] = (Math.random() * 2 - 1) * (0.6 + 0.4 * Math.sin((i / bufferSize) * Math.PI * 9));
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    const creak = ctx.createBiquadFilter();
+    creak.type = 'bandpass';
+    creak.Q.value = 1.6;
+    creak.frequency.setValueAtTime(open ? 140 : 320, t);
+    creak.frequency.exponentialRampToValueAtTime(open ? 520 : 130, t + creakMs);
+
+    const creakGain = ctx.createGain();
+    creakGain.gain.setValueAtTime(0.0001, t);
+    creakGain.gain.exponentialRampToValueAtTime(0.16, t + 0.12);
+    creakGain.gain.exponentialRampToValueAtTime(0.001, t + creakMs);
+
+    noiseSource.connect(creak);
+    creak.connect(creakGain);
+    creakGain.connect(dest.input);
+    noiseSource.start(t);
+    noiseSource.stop(t + creakMs);
+
+    // Latched timber clunk at the end of the swing
+    const clunkAt = t + creakMs - 0.04;
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(90, clunkAt);
+    osc.frequency.exponentialRampToValueAtTime(40, clunkAt + 0.06);
+    oscGain.gain.setValueAtTime(0.0001, clunkAt);
+    oscGain.gain.exponentialRampToValueAtTime(0.2, clunkAt + 0.012);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, clunkAt + 0.06);
+    osc.connect(oscGain);
+    oscGain.connect(dest.input);
+    osc.start(clunkAt);
+    osc.stop(clunkAt + 0.06);
   }
 
   public playGunfire(weaponId: WeaponId, spatial?: SpatialAudioParams, isHeavy = false) {

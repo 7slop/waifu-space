@@ -1,6 +1,123 @@
 import { MeshBuilder, Vector3, AbstractMesh } from '@babylonjs/core';
 import type { MapBuilder } from '../types';
 
+/**
+ * Configurable natural rock, 10 variants. The `variant` param selects the
+ * silhouette: round, tall, split, slab, pyramid, cluster, egg, spire, mossy, block.
+ * Each stone is a flat-shaded faceted polyhedron with a deterministic per-stone
+ * yaw + tilt + stretch so neighbouring rocks never look identical.
+ */
+const stoneHash = (seed: string): number => {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return h;
+};
+
+export function createRock(
+  b: MapBuilder,
+  prefix: string,
+  pos: Vector3,
+  variant = 0,
+  scale = 1.0
+): AbstractMesh[] {
+  const { mats, scene } = b;
+  const meshes: AbstractMesh[] = [];
+  const v = ((Math.round(variant) % 10) + 10) % 10;
+  const s = Math.max(0.4, Math.min(3.0, scale));
+  b.beginComponent('rock', prefix, pos, { variant: v, scale: s });
+
+  const addStone = (
+    name: string,
+    height: number,
+    topD: number,
+    botD: number,
+    ox: number,
+    oy: number,
+    oz: number,
+    _tess?: number,
+    rotation?: Vector3
+  ): AbstractMesh => {
+    const h = stoneHash(name);
+    const maxD = Math.max(topD, botD);
+    const rx = (((h >> 3) % 37) - 18) * 0.014;
+    const ry = (h >> 6) % 360;
+    const rz = (((h >> 9) % 37) - 18) * 0.014;
+    const sqX = 1 + ((((h >> 2) % 31) - 15) / 100);
+    const sqY = 1 + ((((h >> 5) % 31) - 15) / 100);
+    const sqZ = 1 + ((((h >> 8) % 31) - 15) / 100);
+    const m = MeshBuilder.CreatePolyhedron(
+      name,
+      {
+        type: 4,
+        size: 1,
+        sizeX: (maxD / 2.0) * sqX,
+        sizeY: (height / 2.0) * sqY,
+        sizeZ: (maxD / 2.0) * sqZ,
+        flat: true
+      },
+      scene
+    );
+    m.position = new Vector3(pos.x + ox * s, pos.y + (height * s) / 2 + oy * s, pos.z + oz * s);
+    m.rotation = new Vector3(rx, ((rotation?.y ?? 0) + ry) * (Math.PI / 180), rz);
+    m.material = mats.stone;
+    m.checkCollisions = true;
+    m.receiveShadows = true;
+    b.colliders.push(m);
+    b.addShadowCaster(m);
+    meshes.push(m);
+    return m;
+  };
+
+  switch (v) {
+    case 0: // round boulder
+      addStone(`${prefix}_B`, 1.2, 1.5, 1.8, 0, 0, 0);
+      break;
+    case 1: // tall standing stone
+      addStone(`${prefix}_T`, 2.2, 0.5, 0.9, 0, 0, 0.15);
+      break;
+    case 2: // split rock — two angular chunks
+      addStone(`${prefix}_S1`, 0.9, 0.9, 1.1, -0.2, 0, -0.1);
+      addStone(`${prefix}_S2`, 0.7, 0.7, 0.9, 0.35, 0, 0.25);
+      break;
+    case 3: // flat slab
+      addStone(`${prefix}_Sl`, 0.35, 1.5, 1.55, 0, 0, 0.1);
+      break;
+    case 4: // pyramid-ish monolith
+      addStone(`${prefix}_Py`, 1.6, 0.35, 1.3, 0, 0, -0.05);
+      break;
+    case 5: // cluster of three small stones
+      addStone(`${prefix}_C1`, 0.55, 0.5, 0.75, -0.3, 0, 0.1);
+      addStone(`${prefix}_C2`, 0.4, 0.4, 0.6, 0.25, 0, 0.2);
+      addStone(`${prefix}_C3`, 0.3, 0.3, 0.45, 0.05, 0, -0.3);
+      break;
+    case 6: // elongated egg
+      addStone(`${prefix}_E`, 1.3, 0.8, 0.9, 0, 0, 0);
+      meshes[meshes.length - 1].scaling.set(0.85, 1, 1.25);
+      break;
+    case 7: // jagged spire
+      addStone(`${prefix}_Sp`, 2.6, 0.08, 0.7, 0, 0.05, 0);
+      break;
+    case 8: // mossy boulder
+      addStone(`${prefix}_Mb`, 1.0, 1.2, 1.4, 0, 0, 0);
+      for (let i = 0; i < 3; i++) {
+        const mx = (i - 1) * 0.35;
+        const mz = i % 2 === 0 ? 0.3 : -0.3;
+        const moss = MeshBuilder.CreateCylinder(`${prefix}_Ms${i}`, { height: 0.12 * s, diameterTop: 0.45 * s, diameterBottom: 0.45 * s, tessellation: 6 }, scene);
+        moss.position = new Vector3(pos.x + mx * s, pos.y + 0.55 * s, pos.z + mz * s);
+        moss.material = mats.moss;
+        moss.isPickable = false;
+        meshes.push(moss);
+      }
+      break;
+    case 9: // blocky step stone with flat top
+      addStone(`${prefix}_Bl`, 0.8, 1.05, 1.1, 0, 0, 0.05);
+      break;
+  }
+
+  b.endComponent();
+  return meshes;
+}
+
 /** Multi-tiered circular fountain with water basin and central spout */
 export function createFountain(b: MapBuilder, prefix: string, pos: Vector3, tiers = 3): AbstractMesh[] {
   const { mats, scene } = b;
@@ -186,6 +303,7 @@ export function createRockGarden(b: MapBuilder, prefix: string, pos: Vector3, sc
 
   // Sand base
   const sand = b.addBox(`${prefix}_Sand`, 3.5 * s, 0.12, 3.0 * s, new Vector3(pos.x, pos.y + 0.06, pos.z), mats.zenSand, false, true);
+  meshes.push(sand);
 
   // Arrangement of rocks
   const rocks = [

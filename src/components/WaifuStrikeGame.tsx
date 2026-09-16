@@ -44,7 +44,8 @@ const ACTION_LABELS: Record<keyof StrikeKeybindings, string> = {
   grenade: 'Arm Grenade',
   loadout: 'Loadout Menu',
   scoreboard: 'Hold Scoreboard',
-  fullscreen: 'Fullscreen'
+  fullscreen: 'Fullscreen',
+  interact: 'Use / Interact'
 };
 
 function formatKeyName(code: string): string {
@@ -88,6 +89,7 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
   const [showScoreboard, setShowScoreboard] = createSignal(false);
   const [showSummaryModal, setShowSummaryModal] = createSignal(false);
   const [isFullscreen, setIsFullscreen] = createSignal(false);
+  const [interactPrompt, setInteractPrompt] = createSignal<string | null>(null);
 
   // ESC Pause Menu Tabs & Key Rebinding (no auto-selected tab on open)
   const [escTab, setEscTab] = createSignal<'controls' | 'graphics' | null>(null);
@@ -372,6 +374,9 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
       },
       onGrenadeEmptyFeedback: () => {
         triggerEmptyGrenadeNudge();
+      },
+      onInteractPrompt: (label) => {
+        setInteractPrompt(label);
       }
     });
 
@@ -780,6 +785,13 @@ export function WaifuStrikeGame(props: WaifuStrikeGameProps) {
           <div class="hitmarker-line hm-2" />
           <div class="hitmarker-line hm-3" />
           <div class="hitmarker-line hm-4" />
+        </div>
+      </Show>
+
+      {/* Interact prompt (doors) */}
+      <Show when={interactPrompt()}>
+        <div class="strike-interact-prompt">
+          {interactPrompt()}
         </div>
       </Show>
 
