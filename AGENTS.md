@@ -109,6 +109,7 @@ src/lib/               Shared + client logic
   store.ts              Central reactive Solid store (~2600 lines) + all cloud sync + localStorage persistence (waifu_space_data_v1_acct_<userId>)
   personality.ts        5 archetypes + dialogue engine (Tsundere/Kuudere/Yandere/Deredere/Dandere)
   i18n.ts, timebudget.ts, ical.ts, calendar-*.ts
+  calendar-swipe.ts     Pure swipe-gesture resolver for the calendar's mobile sidebar drawer (open/close)
   cloudcrypt.ts         AES-256-GCM E2E encryption for time-budget/calendar sync
   economy.ts            Shared reward curves (lootbox, defense, sweeper, birds, bond)
   minigame-stats.ts     Client-side best-score stats for WaifuSweeper/WaifuBirds (localStorage, per-account)

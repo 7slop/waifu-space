@@ -1480,7 +1480,8 @@ body.is-resizing-event {
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  max-height: 60vh;
+  max-height: 74vh;
+  overflow-y: auto;
 }
 
 .holiday-modal-subtitle {
@@ -1547,6 +1548,7 @@ body.is-resizing-event {
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
+  max-height: min(58vh, 520px);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm, 8px);
   padding: 6px;
@@ -1651,7 +1653,7 @@ body.is-resizing-event {
   border-radius: 12px;
   padding: 0 0 6px;
   min-height: 120px;
-  flex: 1 1 0;
+  flex: 0 0 auto;
 }
 
 .schedule-day-group.today {
@@ -1808,6 +1810,7 @@ body.is-resizing-event {
   color: var(--text-muted);
   padding: 14px 16px;
   margin: 0;
+}
 
 /* Defaults for mobile drawer helpers (hidden on desktop) */
 .gcal-sidebar-toggle-btn,

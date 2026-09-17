@@ -6,7 +6,6 @@ import {
   loadState,
   loadCloudProgress,
   showToast,
-  triggerWaifuResponse,
   setUserAccount,
   isLeaderboardOpen,
   closeLeaderboard
@@ -15,7 +14,7 @@ import { defenseGameActive, setDefenseGameActive } from './lib/defense-bridge';
 import { t } from './lib/i18n';
 import { configureDmRuntime, initDm, disconnectDm, dmState } from './lib/dm/store';
 import { startPresenceAutoDetect } from './lib/dm/presence-auto';
-import { startNotificationScheduler, stopNotificationScheduler, sendNotification } from './lib/notifications';
+import { startNotificationScheduler, stopNotificationScheduler } from './lib/notifications';
 import { SakuraCanvas } from './components/SakuraCanvas';
 import { ToastNotification } from './components/ToastNotification';
 import { AuthModal } from './components/AuthModal';
@@ -113,7 +112,6 @@ function AppLayout(props: { children: any }) {
   const [showAuthModal, setShowAuthModal] = createSignal(false);
   const [isAuthChecking, setIsAuthChecking] = createSignal(true);
   const [pendingNavHref, setPendingNavHref] = createSignal<string | null>(null);
-  let deadlineInterval: any = null;
   let autoDetectStop: (() => void) | null = null;
 
   const handleNavClick = (e: MouseEvent, href: string) => {
@@ -185,31 +183,8 @@ function AppLayout(props: { children: any }) {
     };
     colorSchemeQuery.addEventListener('change', onColorSchemeChange);
 
-    // Impending task deadline alerts
-    deadlineInterval = setInterval(() => {
-      const now = Date.now();
-      const events = state.calendar.events;
-      const upcoming = events.find(e => {
-        if (e.type !== 'task' || e.completed) return false;
-        const diff = new Date(e.start).getTime() - now;
-        return diff > 0 && diff <= 900000; // 15 min
-      });
-
-      if (upcoming && !upcoming._notified) {
-        upcoming._notified = true;
-        const persona = state.waifu.personality;
-        let note = `Reminder: "${upcoming.title}" is due soon!`;
-        if (persona === 'tsundere') note = `Baka! Your task "${upcoming.title}" is starting in less than 15 minutes! Don't slack!`;
-        else if (persona === 'yandere') note = `Darling, finish "${upcoming.title}" quickly so you can focus on me~`;
-
-        triggerWaifuResponse(note, 'pout');
-        sendNotification(note, note);
-      }
-    }, 60000);
-
     onCleanup(() => {
       colorSchemeQuery.removeEventListener('change', onColorSchemeChange);
-      clearInterval(deadlineInterval);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       autoDetectStop?.();
       autoDetectStop = null;

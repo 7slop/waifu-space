@@ -103,6 +103,18 @@ describe('Browser notifications (notifications.ts)', () => {
     expect(captured.length).toBe(0);
   });
 
+  it('fires exactly one reminder for the old 15-minute alert window (no every-minute spam)', () => {
+    // Regression: the legacy app-level deadline interval alerted tasks inside
+    // the last 15 minutes on every tick. The scheduler must only fire once per
+    // window: one "upcoming" for the event, nothing for the task until it starts.
+    addEvent({ title: 'Team sync', start: minutesFromNow(10) });
+    addEvent({ title: 'Study block', type: 'task', start: minutesFromNow(10) });
+    runNotificationCheck();
+    expect(captured.length).toBe(1);
+    expect(captured[0].title).toBe('Team sync');
+    expect(captured[0].body).toContain('30 minutes');
+  });
+
   it('fires a "started" notification for events once their start has passed', () => {
     addEvent({ title: 'Lunch', start: minutesAgo(5) });
     runNotificationCheck();
