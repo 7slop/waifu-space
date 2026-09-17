@@ -1480,7 +1480,7 @@ body.is-resizing-event {
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  max-height: 60vh;
+  max-height: 74vh;
   overflow-y: auto;
 }
 
@@ -1548,7 +1548,7 @@ body.is-resizing-event {
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
-  max-height: min(38vh, 320px);
+  max-height: min(58vh, 520px);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm, 8px);
   padding: 6px;
