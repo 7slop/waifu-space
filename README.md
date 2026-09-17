@@ -4,15 +4,15 @@
 
 ---
 
-## 🎨 100% Human-Crafted (No AI in Development)
+## 🎨 100% AI-Crafted (No Human in Development)
 
-Every line of code, SVG path, CSS animation, dialogue tree, and UI element in **WaifuSpace** was designed and implemented by human hands from scratch.
+Every line of code, SVG path, CSS animation, dialogue tree, and UI element in **WaifuSpace** was designed and implemented by AI from scratch.
 
-* **No AI Code Generation**: Zero code was produced by automated AI code assistants, copilot tools, or LLM scrapers.
-* **Handmade Vector Art**: All SVG character layers, expressions, hairstyles, and outfits in `WaifuAvatar.tsx` are manually calculated and styled.
-* **Bespoke Writing**: Archetype lines and situational triggers are authored directly by human writers.
+* **No Human Code Writing**: Zero code was produced by trained humans, developers, or normal humans.
+* **Robot-made Vector Art**: All SVG character layers, expressions, hairstyles, and outfits in `WaifuAvatar.tsx` are automatically calculated and styled.
+* **Bespoke Writing**: Archetype lines and situational triggers are authored directly by LLM writers.
 
-*(Note: While development is 100% human, the app contains an **optional runtime client hook** in `/settings` if end users choose to plug in their own LLM API key for endless chat variations).*
+*(Note: While development is 100% AI, the app contains an **optional human communication client** in `/` if end users choose to chat with a real human for genuine chat conversations).*
 
 ---
 
@@ -117,56 +117,6 @@ bun run start
 - **Data Backup & Restore**:
   - Full JSON configuration export and restore.
   - One-click factory reset.
-
----
-
-## 📁 Architecture & File Structure
-
-```
-waifu-space/
-├── app.config.ts            # SolidStart configuration
-├── package.json             # Bun dependencies & scripts
-├── tsconfig.json            # TypeScript configuration
-├── src/
-│   ├── app.tsx              # Root shell layout with navigation, live clock & wallpaper
-│   ├── entry-client.tsx     # Client hydration entry
-│   ├── entry-server.tsx     # SSR server entry
-│   ├── routes/
-│   │   ├── index.tsx        # Companion stage route (/)
-│   │   ├── calendar.tsx     # Google Calendar planner route (/calendar)
-│   │   └── settings.tsx     # Settings studio route (/settings)
-│   ├── components/
-│   │   ├── WaifuAvatar.tsx         # Reactive layered SVG avatar
-│   │   ├── ChatStage.tsx           # Interactive chat & suggestion chips
-│   │   ├── CompanionStage.tsx      # Avatar stage layout + affection meter
-│   │   ├── CalendarPlanner.tsx     # Calendar shell + sidebar + toolbar
-│   │   ├── CalendarMonthView.tsx   # Month grid with drag & drop
-│   │   ├── CalendarWeekView.tsx    # Week 24h grid
-│   │   ├── CalendarDayView.tsx     # Day 24h agenda
-│   │   ├── MiniCalendar.tsx        # Mini calendar sidebar widget
-│   │   ├── EventModal.tsx          # Create/edit event modal
-│   │   ├── CalendarPopover.tsx     # Quick event popover
-│   │   ├── SettingsStudio.tsx      # Settings tabs & appearance customizer
-│   │   ├── WallpaperBackground.tsx # Dynamic wallpaper & blur/dim layer
-│   │   ├── SakuraCanvas.tsx        # Cherry blossom particle canvas
-│   │   └── ToastNotification.tsx   # Floating toast notification
-│   ├── lib/
-│   │   ├── store.ts         # Solid reactive state store + LocalStorage sync
-│   │   ├── personality.ts   # Archetypes & dialogue datasets
-│   │   ├── dialogue.ts      # Contextual dialogue engine & schedule checks
-│   │   ├── speech.ts        # Web Speech API engine
-│   │   ├── wallpapers.ts    # Curated aesthetic wallpapers
-│   │   ├── ical.ts          # RFC 5545 iCalendar import/export
-│   │   └── llm.ts           # Optional Gemini / OpenAI / OpenRouter API
-│   └── styles/
-│       ├── themes.css       # Themes, color variables, glassmorphism
-│       ├── style.css        # Base layout, nav, toast, scrollbars
-│       ├── waifu.css        # Avatar stage, animations, chat bubbles
-│       ├── calendar.css     # Google Calendar layout & grid
-│       └── settings.css     # Settings studio styles
-├── LICENSE
-└── README.md
-```
 
 ---
 
