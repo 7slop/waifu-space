@@ -687,6 +687,23 @@ if (typeof window !== 'undefined') {
   // Another tab saved to local storage for this account - make sure our
   // freshest state still reaches the cloud.
   window.addEventListener('storage', syncProgressFromStorageEvent);
+
+  // Changes made on another device only reach this tab on a reload, so pull the
+  // encrypted budget + calendar blob whenever the tab regains visibility. The
+  // merged result is pushed back by applyCloudPrivacyState -> saveState(), which
+  // converges both devices without losing either side's events. Only one pull
+  // per second is scheduled to avoid spamming the endpoint on rapid tab hops.
+  let visibilityBudgetPullQueued = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!state.user?.token || budgetSyncIsLocked()) return;
+    if (visibilityBudgetPullQueued) return;
+    visibilityBudgetPullQueued = true;
+    setTimeout(() => {
+      visibilityBudgetPullQueued = false;
+      void loadBudgetFromCloud();
+    }, 1000);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -813,10 +830,90 @@ async function fetchBudgetBlob(token: string): Promise<EncryptedBudgetBlob | nul
 }
 
 /**
+ * Merges two calendar event lists into one. Events are keyed by id, so events
+ * created on different devices never overwrite each other. The preferred side
+ * wins when both sides carry the same id (per-item last-writer-wins instead of
+ * whole-list). Used symmetrically by pulls (cloud wins) and pushes (local wins):
+ * merging both directions makes every device converge on the union of events
+ * instead of the most recent blob wiping the others.
+ */
+function mergeCalendarEventsById(
+  local: CalendarEventItem[],
+  cloud: CalendarEventItem[],
+  prefer: 'local' | 'cloud'
+): CalendarEventItem[] {
+  const byId = new Map<string, CalendarEventItem>();
+  const seed = prefer === 'local' ? cloud : local;
+  const overlay = prefer === 'local' ? local : cloud;
+  for (const ev of seed) byId.set(ev.id, ev);
+  for (const ev of overlay) byId.set(ev.id, ev);
+  return Array.from(byId.values());
+}
+
+/**
+ * Merges two occurrence-override lists. An occurrence is keyed by
+ * (parentId, dateKey) rather than its synthetic id, so the same occurrence
+ * toggled on two devices collapses into one record instead of duplicating.
+ * When both sides changed the same occurrence the later updatedAt wins; ties go
+ * to the preferred side.
+ */
+function mergeOccurrenceOverrides(
+  local: CalendarOccurrenceOverride[],
+  cloud: CalendarOccurrenceOverride[],
+  prefer: 'local' | 'cloud'
+): CalendarOccurrenceOverride[] {
+  const byOccurrence = new Map<string, CalendarOccurrenceOverride>();
+  const keyOf = (o: CalendarOccurrenceOverride) => `${o.parentId}::${o.dateKey}`;
+  const insert = (list: CalendarOccurrenceOverride[], winTies: boolean) => {
+    for (const o of list) {
+      const k = keyOf(o);
+      const current = byOccurrence.get(k);
+      if (!current) {
+        byOccurrence.set(k, o);
+        continue;
+      }
+      const currentTs = current.updatedAt ? new Date(current.updatedAt).getTime() : 0;
+      const incomingTs = o.updatedAt ? new Date(o.updatedAt).getTime() : 0;
+      if (incomingTs > currentTs || (incomingTs === currentTs && winTies)) {
+        byOccurrence.set(k, o);
+      }
+    }
+  };
+
+  if (prefer === 'local') {
+    insert(cloud, false);
+    insert(local, true);
+  } else {
+    insert(local, false);
+    insert(cloud, true);
+  }
+  return Array.from(byOccurrence.values());
+}
+
+// Canonical form of a value for change detection: sorts object keys so two
+// logically-equal states compare equal regardless of key insertion order.
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+      out[k] = (value as Record<string, unknown>)[k];
+    }
+    return JSON.stringify(out);
+  }
+  return JSON.stringify(value);
+}
+
+/**
  * Applies a decrypted privacy payload ({ timebudget, calendar }) onto local
- * state. The cloud copy is authoritative once a blob exists, because a blob is
- * only created by a successful push - mirroring the old calendar_synced_at
- * semantics for the encrypted channel.
+ * state. The cloud calendar is merged item-by-item (keyed by event id /
+ * occurrence parent) instead of replacing the local list wholesale, so events
+ * that only exist locally (e.g. edited while offline) are preserved and events
+ * added on another device are picked up. On conflicting ids the cloud copy
+ * wins; the merged union is pushed back on the next saveState, which is what
+ * lets the two devices converge. saveState (and the debounced re-push it
+ * schedules) only runs when the merge actually changed something, so a passive
+ * boot/visibility pull never churns the cloud copy needlessly.
  */
 function applyCloudPrivacyState(plain: unknown): void {
   const data =
@@ -824,11 +921,14 @@ function applyCloudPrivacyState(plain: unknown): void {
       ? (plain as Record<string, unknown>)
       : {};
 
+  let changed = false;
+
   const tb = sanitizeTimeBudget(data.timebudget ?? {});
   // Guard against the empty-clobber case: an older bug could push an empty
   // snapshot as the first blob. Never hollow out a device that has real data -
   // it will repair the cloud copy on the next push instead.
   if (tb.activities.length > 0 || state.timebudget.activities.length === 0) {
+    if (stableSerialize(tb) !== stableSerialize(state.timebudget)) changed = true;
     setState('timebudget', tb);
   }
 
@@ -839,21 +939,25 @@ function applyCloudPrivacyState(plain: unknown): void {
       const sanitized = (c.events as unknown[])
         .map(sanitizeEvent)
         .filter((e): e is CalendarEventItem => e !== null);
-      if (sanitized.length > 0 || state.calendar.events.length === 0) {
-        setState('calendar', 'events', sanitized);
+      const merged = mergeCalendarEventsById(state.calendar.events, sanitized, 'cloud');
+      if (stableSerialize(state.calendar.events) !== stableSerialize(merged)) {
+        setState('calendar', 'events', merged);
+        changed = true;
       }
     }
     if (Array.isArray(c.occurrenceOverrides)) {
       const sanitizedOverrides = (c.occurrenceOverrides as unknown[])
         .map(sanitizeOccurrenceOverride)
         .filter((o): o is CalendarOccurrenceOverride => o !== null && o.parentId !== '');
-      if (sanitizedOverrides.length > 0 || state.calendar.occurrenceOverrides.length === 0) {
-        setState('calendar', 'occurrenceOverrides', sanitizedOverrides);
+      const merged = mergeOccurrenceOverrides(state.calendar.occurrenceOverrides, sanitizedOverrides, 'cloud');
+      if (stableSerialize(state.calendar.occurrenceOverrides) !== stableSerialize(merged)) {
+        setState('calendar', 'occurrenceOverrides', merged);
+        changed = true;
       }
     }
   }
 
-  saveState();
+  if (changed) saveState();
 }
 
 /**
@@ -1091,13 +1195,79 @@ export function pushBudgetToCloud(): Promise<boolean> {
 
   const attempt = async (): Promise<boolean> => {
     try {
+      let events = state.calendar.events;
+      let occurrenceOverrides = state.calendar.occurrenceOverrides;
+
+      // Merge-before-push: pull the current cloud blob and fold its calendar
+      // into ours (local wins on the same event id). Without this a device that
+      // last synced days ago would upload its stale snapshot and silently
+      // delete every event another device added in the meantime. If the cloud
+      // copy cannot be fetched or decrypted we abort instead of clobbering it
+      // blind - that is the same rule as the locked path.
+      let cloudFetchFailed = false;
+      try {
+        const res = await fetch('/api/timebudget/sync', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.status === 401) {
+          setUserAccount(null);
+          setBudgetCloudStatus('error');
+          return false;
+        }
+        if (!res.ok) {
+          cloudFetchFailed = true;
+        } else {
+          const data = await res.json();
+          if (data?.success && isEncryptedBudgetBlob(data.blob)) {
+            const plain = await decryptBudgetState(data.blob, budgetKey!);
+            if (plain === null) {
+              // The cloud copy exists but this device's key cannot read it.
+              // Never overwrite what we cannot see.
+              budgetPushBlocked = true;
+              setBudgetCloudStatus('locked');
+              return false;
+            }
+            budgetCloudSnapshotLoaded = true;
+            const cal =
+              plain && typeof plain === 'object' && !Array.isArray(plain)
+                ? (plain as Record<string, unknown>).calendar
+                : undefined;
+            if (cal && typeof cal === 'object' && !Array.isArray(cal)) {
+              const c = cal as Record<string, unknown>;
+              if (Array.isArray(c.events)) {
+                const cloudEvents = (c.events as unknown[])
+                  .map(sanitizeEvent)
+                  .filter((e): e is CalendarEventItem => e !== null);
+                events = mergeCalendarEventsById(events, cloudEvents, 'local');
+              }
+              if (Array.isArray(c.occurrenceOverrides)) {
+                const cloudOverrides = (c.occurrenceOverrides as unknown[])
+                  .map(sanitizeOccurrenceOverride)
+                  .filter((o): o is CalendarOccurrenceOverride => o !== null && o.parentId !== '');
+                occurrenceOverrides = mergeOccurrenceOverrides(occurrenceOverrides, cloudOverrides, 'local');
+              }
+            }
+          } else if (data && !data.success) {
+            cloudFetchFailed = true;
+          }
+        }
+      } catch {
+        cloudFetchFailed = true;
+      }
+
+      if (cloudFetchFailed) {
+        // Without the freshest cloud copy a merge is impossible, so pushing the
+        // local snapshot could erase another device's changes. Queue and retry
+        // once the connection is stable instead.
+        setBudgetCloudStatus(isOnline() ? 'error' : 'offline');
+        queuePendingBudget();
+        return false;
+      }
+
       const blob = await encryptBudgetState(
         {
           timebudget: state.timebudget,
-          calendar: {
-            events: state.calendar.events,
-            occurrenceOverrides: state.calendar.occurrenceOverrides
-          }
+          calendar: { events, occurrenceOverrides }
         },
         budgetKey!,
         budgetSalt,
