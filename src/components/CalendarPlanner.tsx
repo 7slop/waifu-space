@@ -30,6 +30,7 @@ import { CalendarDayView } from './CalendarDayView';
 import { CalendarScheduleView } from './CalendarScheduleView';
 import { t, getLocale, formatDate } from '../lib/i18n';
 import { startOfWeek } from '../lib/store';
+import { resolveCalendarSwipe, CalendarSwipe } from '../lib/calendar-swipe';
 import { onActivateKey } from '../lib/accessibility';
 import {
   PhPlus,
@@ -54,6 +55,32 @@ export function CalendarPlanner() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
   const [createMenuOpen, setCreateMenuOpen] = createSignal(false);
   let createMenuRef: HTMLDivElement | undefined;
+
+  // Origin of the active touch so a swipe can be resolved at touchend.
+  const [touchOrigin, setTouchOrigin] = createSignal<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: TouchEvent) => {
+    const touch = e.touches[0];
+    if (touch) setTouchOrigin({ x: touch.clientX, y: touch.clientY });
+  };
+
+  const handleTouchEnd = (e: TouchEvent) => {
+    const origin = touchOrigin();
+    setTouchOrigin(null);
+    const touch = e.changedTouches[0];
+    if (!origin || !touch) return;
+    const action = resolveCalendarSwipe(
+      {
+        deltaX: touch.clientX - origin.x,
+        deltaY: touch.clientY - origin.y,
+        startX: origin.x
+      } satisfies CalendarSwipe,
+      mobileSidebarOpen(),
+      typeof window !== 'undefined' ? window.innerWidth : 1024
+    );
+    if (action === 'open') setMobileSidebarOpen(true);
+    else if (action === 'close') setMobileSidebarOpen(false);
+  };
 
   const [isModalOpen, setIsModalOpen] = createSignal(false);
   const [modalEvent, setModalEvent] = createSignal<CalendarEventItem | null>(null);
@@ -411,7 +438,7 @@ const sidebarTasks = createMemo(() => {
   });
 
   return (
-    <div class="gcal-wrapper">
+    <div class="gcal-wrapper" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       {/* TOP TOOLBAR */}
       <header class="gcal-toolbar">
         <div class="gcal-toolbar-left">

@@ -219,6 +219,35 @@ describe('CalendarPlanner Component & SSR Safety (Issue #11)', () => {
     expect(screen.queryByTitle('Close')).not.toBeInTheDocument();
   });
 
+  it('opens and closes the mobile sidebar drawer from its toggle button', () => {
+    const { container } = render(() => <CalendarPlanner />);
+    const toggle = screen.getByRole('button', { name: 'Toggle calendar sidebar' });
+    const sidebar = container.querySelector('.gcal-sidebar') as HTMLElement;
+    expect(sidebar.classList.contains('mobile-open')).toBe(false);
+
+    fireEvent.click(toggle);
+    expect(sidebar.classList.contains('mobile-open')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close sidebar' }));
+    expect(sidebar.classList.contains('mobile-open')).toBe(false);
+  });
+
+  it('opens the mobile sidebar with an edge swipe and closes it with a left swipe', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 400 });
+    const { container } = render(() => <CalendarPlanner />);
+    const wrapper = container.querySelector('.gcal-wrapper') as HTMLElement;
+    const sidebar = container.querySelector('.gcal-sidebar') as HTMLElement;
+    expect(sidebar.classList.contains('mobile-open')).toBe(false);
+
+    fireEvent.touchStart(wrapper, { touches: [{ clientX: 8, clientY: 200 }] });
+    fireEvent.touchEnd(wrapper, { changedTouches: [{ clientX: 160, clientY: 200 }] });
+    expect(sidebar.classList.contains('mobile-open')).toBe(true);
+
+    fireEvent.touchStart(wrapper, { touches: [{ clientX: 300, clientY: 200 }] });
+    fireEvent.touchEnd(wrapper, { changedTouches: [{ clientX: 120, clientY: 200 }] });
+    expect(sidebar.classList.contains('mobile-open')).toBe(false);
+  });
+
   it('strictly runs cleanNode disposal when window is undefined without ReferenceError', () => {
     const originalWindow = globalThis.window;
     try {
