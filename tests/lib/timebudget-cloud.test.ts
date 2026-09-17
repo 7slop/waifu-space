@@ -12,7 +12,14 @@ import {
   budgetKeyReady,
   budgetCloudStatus
 } from '../../src/lib/store';
-import { generateBudgetSalt, deriveBudgetKey, encryptBudgetState, exportBudgetKey } from '../../src/lib/cloudcrypt';
+import {
+  generateBudgetSalt,
+  deriveBudgetSalt,
+  deriveBudgetKey,
+  encryptBudgetState,
+  decryptBudgetState,
+  exportBudgetKey
+} from '../../src/lib/cloudcrypt';
 
 const CLOUD_PRIVACY = {
   timebudget: {
@@ -334,5 +341,179 @@ describe('Time Budget encrypted cloud sync (store wiring)', () => {
     expect(budgetCloudStatus()).toBe('synced');
     expect(state.timebudget.activities.map(a => a.name)).toEqual(['C++']);
     expect(localStorage.getItem('waifu_space_budget_key_v1_u9')).not.toBeNull();
+  });
+
+  it('pull merges cloud events into local ones instead of replacing them', async () => {
+    const localEvent = {
+      id: 'local-1',
+      title: 'Offline Note',
+      start: '2026-09-12T09:00:00Z',
+      end: '2026-09-12T10:00:00Z',
+      allDay: false,
+      type: 'task',
+      completed: false,
+      color: '#ff6584',
+      recurrence: 'none'
+    };
+    const cloudCalendar = {
+      events: [
+        { id: 'cloud-1', title: 'Home Event', start: '2026-09-12T19:00:00Z', end: '2026-09-12T20:00:00Z', allDay: false, type: 'event', completed: false, color: '#6c5ce7', recurrence: 'none' },
+        { id: 'cloud-2', title: 'Home Event 2', start: '2026-09-12T18:00:00Z', end: '2026-09-12T18:30:00Z', allDay: false, type: 'task', completed: true, color: '#ff6584', recurrence: 'daily' }
+      ],
+      occurrenceOverrides: []
+    };
+    const { blob } = await buildCloudBlob('pw-merge-pull', {
+      timebudget: { activities: [], settings: { resetDay: 1, resetHour: 0, notifications: true, catchUpReminders: true } },
+      calendar: cloudCalendar
+    });
+    stubFetch(() => fakeResponse({ success: true, blob }));
+    setState('user', { id: 'u10', username: 'MergePull', token: 'tok-10' });
+    setState('calendar', 'events', [localEvent]);
+
+    await unlockBudgetKey('pw-merge-pull');
+    expect(budgetCloudStatus()).toBe('synced');
+    const ids = state.calendar.events.map(e => e.id);
+    expect(ids).toContain('local-1');
+    expect(ids).toContain('cloud-1');
+    expect(ids).toContain('cloud-2');
+  });
+
+  it('push merges the freshest cloud copy so a stale device cannot delete another device\'s events', async () => {
+    let cloud: any = null;
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') {
+        cloud = JSON.parse(init.body as string).blob;
+        return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      }
+      return fakeResponse({ success: true, blob: cloud });
+    });
+    setState('user', { id: 'u11', username: 'MergePush', token: 'tok-11' });
+    setState('calendar', 'events', [
+      { id: 'work-1', title: 'Work Event', start: '2026-09-13T10:00:00Z', end: '2026-09-13T11:00:00Z', allDay: false, type: 'event', completed: false, color: '#ff6584', recurrence: 'none' }
+    ]);
+
+    // This device first unlocked when there was no cloud copy (deterministic salt).
+    await unlockBudgetKey('shared-merge-pw');
+    expect(await pushBudgetToCloud()).toBe(true);
+
+    // Meanwhile another device pushed its own events with the same password.
+    const salt = await deriveBudgetSalt('u11', 'shared-merge-pw');
+    const key = await deriveBudgetKey('shared-merge-pw', salt);
+    cloud = await encryptBudgetState(
+      {
+        timebudget: { activities: [], settings: { resetDay: 1, resetHour: 0, notifications: true, catchUpReminders: true } },
+        calendar: {
+          events: [
+            { id: 'home-1', title: 'Home Event', start: '2026-09-13T19:00:00Z', end: '2026-09-13T20:00:00Z', allDay: false, type: 'event', completed: false, color: '#6c5ce7', recurrence: 'none' },
+            { id: 'home-2', title: 'Home Task', start: '2026-09-13T18:00:00Z', end: '2026-09-13T18:30:00Z', allDay: false, type: 'task', completed: false, color: '#ff6584', recurrence: 'none' }
+          ],
+          occurrenceOverrides: []
+        }
+      },
+      key,
+      salt,
+      new Date().toISOString()
+    );
+
+    // This device is stale: it never pulled before editing. The old code would
+    // have uploaded ONLY [work-1] and wiped home-1/home-2 in the cloud.
+    expect(await pushBudgetToCloud()).toBe(true);
+    const posts = vi.mocked(fetch).mock.calls.filter(c => (c[1] as RequestInit | undefined)?.method === 'POST');
+    const body = JSON.parse((posts[posts.length - 1][1] as RequestInit).body as string);
+    const plain = await decryptBudgetState(body.blob, key);
+    const ids = ((plain as any).calendar.events as { id: string }[]).map(e => e.id).sort();
+    expect(ids).toEqual(['home-1', 'home-2', 'work-1']);
+  });
+
+  it('push aborts (never clobbers) when the freshest cloud copy cannot be fetched', async () => {
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      return fakeResponse({ error: 'boom' }, 500);
+    });
+    setState('user', { id: 'u12', username: 'FetchFail', token: 'tok-12' });
+    setState('calendar', 'events', [
+      { id: 'keep-1', title: 'Locally Saved', start: '2026-09-14T10:00:00Z', end: '2026-09-14T11:00:00Z', allDay: false, type: 'event', completed: false, color: '#ff6584', recurrence: 'none' }
+    ]);
+    await unlockBudgetKey('pw-fail');
+
+    expect(await pushBudgetToCloud()).toBe(false);
+    const posts = vi.mocked(fetch).mock.calls.filter(c => (c[1] as RequestInit | undefined)?.method === 'POST');
+    expect(posts.length).toBe(0);
+    expect(state.calendar.events.map(e => e.id)).toEqual(['keep-1']);
+  });
+
+  it('push aborts instead of overwriting a cloud copy it cannot decrypt', async () => {
+    let cloud: any = null;
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') {
+        cloud = JSON.parse(init.body as string).blob;
+        return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      }
+      return fakeResponse({ success: true, blob: cloud });
+    });
+    setState('user', { id: 'u13', username: 'Undecryptable', token: 'tok-13' });
+    setState('calendar', 'events', [
+      { id: 'mine', title: 'Mine', start: '2026-09-14T10:00:00Z', end: '2026-09-14T11:00:00Z', allDay: false, type: 'event', completed: false, color: '#ff6584', recurrence: 'none' }
+    ]);
+    await unlockBudgetKey('pw-a');
+    expect(await pushBudgetToCloud()).toBe(true);
+    expect(cloud).toBeTruthy();
+
+    // Another device (different password => drifting salt) pushed next; this
+    // device cannot read it and must NOT clobber it with its own local state.
+    const { blob } = await buildCloudBlob('different-password', {
+      timebudget: { activities: [], settings: { resetDay: 1, resetHour: 0, notifications: true, catchUpReminders: true } },
+      calendar: { events: [], occurrenceOverrides: [] }
+    });
+    cloud = blob;
+
+    const before = state.calendar.events.length;
+    expect(await pushBudgetToCloud()).toBe(false);
+    expect(budgetCloudStatus()).toBe('locked');
+    expect(state.calendar.events.length).toBe(before);
+  });
+
+  it('merging occurrence overrides collapses duplicate occurrences from two devices (newer wins)', async () => {
+    let cloud: any = null;
+    stubFetch((_url, init) => {
+      if (init?.method === 'POST') {
+        cloud = JSON.parse(init.body as string).blob;
+        return fakeResponse({ success: true, syncedAt: new Date().toISOString() });
+      }
+      return fakeResponse({ success: true, blob: cloud });
+    });
+    setState('user', { id: 'u14', username: 'OccMerge', token: 'tok-14' });
+    const baseEvent = { id: 'daily-1', title: 'Kata', start: '2026-09-15T07:00:00Z', end: '2026-09-15T08:00:00Z', allDay: false, type: 'event', completed: false, color: '#ff6584', recurrence: 'daily' };
+    setState('calendar', 'events', [baseEvent]);
+    setState('calendar', 'occurrenceOverrides', [
+      { id: 'occ-local', parentId: 'daily-1', dateKey: '2026-09-15', completed: true, updatedAt: '2026-09-16T00:00:00Z' }
+    ]);
+
+    await unlockBudgetKey('pw-occ');
+    const salt = await deriveBudgetSalt('u14', 'pw-occ');
+    const key = await deriveBudgetKey('pw-occ', salt);
+    cloud = await encryptBudgetState(
+      {
+        timebudget: { activities: [], settings: { resetDay: 1, resetHour: 0, notifications: true, catchUpReminders: true } },
+        calendar: {
+          events: [baseEvent],
+          occurrenceOverrides: [
+            { id: 'occ-cloud', parentId: 'daily-1', dateKey: '2026-09-15', completed: false, updatedAt: '2026-09-15T00:00:00Z' }
+          ]
+        }
+      },
+      key,
+      salt,
+      new Date().toISOString()
+    );
+
+    expect(await pushBudgetToCloud()).toBe(true);
+    const post = vi.mocked(fetch).mock.calls.find(c => (c[1] as RequestInit | undefined)?.method === 'POST')!;
+    const body = JSON.parse((post[1] as RequestInit).body as string);
+    const plain = await decryptBudgetState(body.blob, key);
+    const overrides = (plain as any).calendar.occurrenceOverrides;
+    expect(overrides).toHaveLength(1);
+    expect(overrides[0].parentId).toBe('daily-1');
+    expect(overrides[0].completed).toBe(true); // the newer local edit won
   });
 });
