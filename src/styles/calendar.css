@@ -1808,6 +1808,7 @@ body.is-resizing-event {
   color: var(--text-muted);
   padding: 14px 16px;
   margin: 0;
+}
 
 /* Defaults for mobile drawer helpers (hidden on desktop) */
 .gcal-sidebar-toggle-btn,
